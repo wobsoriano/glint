@@ -20,8 +20,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// Models offered in Studio, fastest first. Small is left out: on a CPU it takes minutes
-/// per minute of speech.
+/// Models offered in Studio, fastest first. Small is left out: it is several times slower
+/// than Base on a CPU.
 const MODELS: [(Model, &str); 3] = [(Model::TinyEn, "Fast"), (Model::BaseEn, "Accurate"), (Model::Base, "Multilingual")];
 const SILENCE_CHOICES: [(u64, &str); 3] = [(500, "0.5 s"), (1_000, "1 s"), (2_000, "2 s")];
 /// Quiet kept on each side of a trimmed silence so the narration still breathes.
