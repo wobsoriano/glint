@@ -2547,8 +2547,11 @@ name = "glint-studio"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "color_quant",
+ "gif",
  "glint-media",
  "glint-render",
+ "glint-transcribe",
  "image",
  "serde",
  "serde_json",
