@@ -357,6 +357,9 @@ impl SampleAllocator {
                 Err(e) => return Err(e).context("AllocateSample"),
             };
             let buffer = sample.GetBufferByIndex(0)?;
+            // Pooled samples come back with a zero length, which the sink writer rejects.
+            let len = buffer.cast::<IMF2DBuffer>()?.GetContiguousLength()?;
+            buffer.SetCurrentLength(len)?;
             let dxgi: IMFDXGIBuffer = buffer.cast()?;
             let mut raw = std::ptr::null_mut();
             dxgi.GetResource(&ID3D11Texture2D::IID, &mut raw)?;

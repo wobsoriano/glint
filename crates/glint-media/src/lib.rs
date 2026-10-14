@@ -11,12 +11,15 @@ mod encoder;
 pub mod input;
 mod mf;
 pub mod reader;
+pub mod recorder;
+mod screen;
 pub mod wav;
 pub mod writer;
 
 pub use audio::{LevelMeter, MicMonitor};
 pub use clock::MediaClock;
 pub use devices::{cameras, displays, microphones, AudioDevice, CameraDevice, DeviceId, DisplayInfo, Rect};
+pub use recorder::{CaptureSource, Fps, RecordOptions, RecordSummary, Recorder};
 pub use reader::{read_mp4_audio, VideoFrame, VideoReader};
 pub use wav::{read_wav, WavData};
 pub use writer::{

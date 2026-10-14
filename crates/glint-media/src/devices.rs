@@ -18,8 +18,29 @@ use windows::Win32::Media::MediaFoundation::{
     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_ALL, STGM_READ};
-use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::HiDpi::{
+    GetDpiForMonitor, SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    MDT_EFFECTIVE_DPI,
+};
 use windows::Win32::UI::WindowsAndMessaging::MONITORINFOF_PRIMARY;
+
+/// Makes the calling thread per-monitor DPI aware until dropped, so monitor and window
+/// rectangles come back in physical pixels whatever the process manifest says.
+pub(crate) struct PhysicalPixels(DPI_AWARENESS_CONTEXT);
+
+impl PhysicalPixels {
+    pub fn enter() -> Self {
+        Self(unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) })
+    }
+}
+
+impl Drop for PhysicalPixels {
+    fn drop(&mut self) {
+        if !self.0.0.is_null() {
+            unsafe { SetThreadDpiAwarenessContext(self.0) };
+        }
+    }
+}
 
 /// A rectangle in physical (DPI-unscaled) pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -78,6 +99,7 @@ pub struct CameraDevice {
 
 /// All active displays, primary first, then in enumeration order.
 pub fn displays() -> anyhow::Result<Vec<DisplayInfo>> {
+    let _physical = PhysicalPixels::enter();
     let mut handles: Vec<HMONITOR> = Vec::new();
     unsafe extern "system" fn collect(h: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> windows::core::BOOL {
         unsafe { (*(data.0 as *mut Vec<HMONITOR>)).push(h) };

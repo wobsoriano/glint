@@ -44,7 +44,8 @@ impl D3dDevice {
         let context = context.context("D3D11CreateDevice returned no context")?;
         // Media Foundation calls into the device from its own threads.
         let mt: ID3D11Multithread = context.cast().context("ID3D11Multithread")?;
-        unsafe { mt.SetMultithreadProtected(true).ok().context("SetMultithreadProtected")? };
+        // Returns the previous setting, not a status.
+        let _ = unsafe { mt.SetMultithreadProtected(true) };
         let mut token = 0u32;
         let mut manager = None;
         unsafe { MFCreateDXGIDeviceManager(&mut token, &mut manager).context("MFCreateDXGIDeviceManager")? };
