@@ -4,10 +4,10 @@
 use super::{Notice, Studio};
 use crate::settings::{self, Settings};
 use crate::shell;
-use crate::ui::{self, BORDER, HOVER, MUTED, PANEL};
+use crate::ui;
 use glint_studio::{Codec, ExportOptions, Format, Fps, Quality, Resolution};
 use gpui::prelude::*;
-use gpui::{div, px, relative, rgb, rgba, Context, KeyDownEvent, SharedString};
+use gpui::{div, px, relative, rgba, Context, KeyDownEvent, SharedString};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
@@ -166,7 +166,7 @@ impl Studio {
                             .h(px(6.))
                             .w_full()
                             .rounded_full()
-                            .bg(rgb(HOVER))
+                            .bg(ui::theme().control_hover)
                             .child(div().h_full().w(relative(p)).rounded_full().bg(ui::accent())),
                     )
                     .child(
@@ -174,7 +174,7 @@ impl Studio {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_sm().text_color(rgb(MUTED)).child(format!("{:.0}%", p * 100.0)))
+                            .child(div().text_sm().text_color(ui::theme().muted).child(format!("{:.0}%", p * 100.0)))
                             .child(ui::button("export-cancel", "Cancel", None, false, cx.listener(|s, _, _, cx| s.cancel_export(cx)))),
                     )
             }
@@ -194,9 +194,9 @@ impl Studio {
                         .w(px(440.))
                         .p_5()
                         .rounded(px(ui::RADIUS_WINDOW))
-                        .bg(rgb(PANEL))
+                        .bg(ui::theme().layer)
                         .border_1()
-                        .border_color(rgb(BORDER))
+                        .border_color(ui::theme().border)
                         .shadow_lg()
                         .child(card),
                 ),
@@ -210,7 +210,7 @@ impl Studio {
         let (w, h) = probe.output_size(self.session.source_size);
         let has_audio = self.session.tracks.mic.is_some() || self.session.tracks.system.is_some();
         let row = |label: &'static str| {
-            div().flex().items_center().gap_2().child(div().w(px(96.)).flex_none().text_sm().text_color(rgb(MUTED)).child(label))
+            div().flex().items_center().gap_2().child(div().w(px(96.)).flex_none().text_sm().text_color(ui::theme().muted).child(label))
         };
         let chips = || div().flex().flex_wrap().gap_1();
         let chip = |id: SharedString, label: &'static str, on: bool, f: Box<dyn Fn(&mut ExportOptions, &mut bool)>| {
@@ -237,7 +237,7 @@ impl Studio {
                 let r = *r;
                 chip(format!("res-{l}").into(), l, opts.resolution == r, Box::new(move |o, _| o.resolution = r))
             }))))
-            .child(row("").child(div().text_xs().text_color(rgb(MUTED)).child(if gif {
+            .child(row("").child(div().text_xs().text_color(ui::theme().muted).child(if gif {
                 "GIFs are 15 fps, at most 480 px on the short side".to_string()
             } else {
                 format!("{w} \u{00d7} {h}")
@@ -261,7 +261,7 @@ impl Studio {
                     .child(ui::button("export-close", "Cancel", None, false, cx.listener(|s, _, _, cx| s.cancel_export(cx))))
                     .child(ui::button("export-go", "Export", Some("save"), true, cx.listener(|s, _, _, cx| s.run_job(Job::Export, cx)))),
             )
-            .child(div().text_xs().text_color(rgb(MUTED)).child(format!("Saves to {}", cx.global::<Settings>().save_dir.display())))
+            .child(div().text_xs().text_color(ui::theme().muted).child(format!("Saves to {}", cx.global::<Settings>().save_dir.display())))
     }
 }
 

@@ -3,11 +3,11 @@
 
 use super::{Mode, Selection, Studio, Tab, TABS};
 use crate::style::{Background, Color, Gradient, GRADIENTS, SOLIDS};
-use crate::ui::{self, OnValue, ToRgba, BORDER, MUTED, PANEL, TEXT};
+use crate::ui::{self, OnValue, ToRgba};
 use crate::win;
 use glint_studio::{AspectMode, AspectPreset, CropRect, KeystrokePosition, Project, ZoomFocus};
 use gpui::prelude::*;
-use gpui::{div, px, rgb, Context, ElementId, PathPromptOptions, SharedString, WeakEntity};
+use gpui::{div, px, Context, ElementId, PathPromptOptions, SharedString, WeakEntity};
 use std::rc::Rc;
 
 pub(super) fn eid(prefix: &str, i: usize) -> ElementId {
@@ -23,7 +23,7 @@ fn value(weak: &WeakEntity<Studio>, group: &'static str, f: impl Fn(&mut Project
 }
 
 fn hint(text: impl Into<SharedString>) -> gpui::Div {
-    div().text_xs().text_color(rgb(MUTED)).child(text.into())
+    div().text_xs().text_color(ui::theme().muted).child(text.into())
 }
 
 fn percent(v: f32) -> String {
@@ -66,10 +66,10 @@ impl Studio {
             .h_full()
             .flex()
             .flex_col()
-            .bg(rgb(PANEL))
+            .bg(ui::theme().layer)
             .border_l_1()
-            .border_color(rgb(BORDER))
-            .child(div().p_2().border_b_1().border_color(rgb(BORDER)).child(tabs))
+            .border_color(ui::theme().border)
+            .child(div().p_2().border_b_1().border_color(ui::theme().border).child(tabs))
             .child(
                 div()
                     .id("sidebar-body")
@@ -80,7 +80,7 @@ impl Studio {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .text_color(rgb(TEXT))
+                    .text_color(ui::theme().text)
                     .child(div().text_base().font_weight(gpui::FontWeight::SEMIBOLD).child(title))
                     .child(body),
             )

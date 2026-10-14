@@ -113,18 +113,6 @@ pub fn copy_text(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn file_name(created: &chrono::DateTime<chrono::Local>) -> String {
-    format!("Glint {}.png", created.format("%Y-%m-%d at %H.%M.%S"))
-}
-
-pub fn save_png(img: &image::RgbaImage, path: &std::path::Path) -> anyhow::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    img.save_with_format(path, image::ImageFormat::Png)?;
-    Ok(())
-}
-
 /// Converts straight RGBA into the BGRA frame GPUI expects.
 pub fn render_image(img: &image::RgbaImage) -> std::sync::Arc<gpui::RenderImage> {
     let mut bgra = img.clone();
@@ -132,14 +120,4 @@ pub fn render_image(img: &image::RgbaImage) -> std::sync::Arc<gpui::RenderImage>
         px.swap(0, 2);
     }
     std::sync::Arc::new(gpui::RenderImage::new(smallvec::smallvec![image::Frame::new(bgra)]))
-}
-
-pub fn render_image_from_pixmap(pm: &tiny_skia::Pixmap) -> std::sync::Arc<gpui::RenderImage> {
-    let mut out = Vec::with_capacity(pm.data().len());
-    for p in pm.pixels() {
-        let c = p.demultiply();
-        out.extend_from_slice(&[c.blue(), c.green(), c.red(), c.alpha()]);
-    }
-    let buf = image::RgbaImage::from_raw(pm.width(), pm.height(), out).unwrap();
-    std::sync::Arc::new(gpui::RenderImage::new(smallvec::smallvec![image::Frame::new(buf)]))
 }

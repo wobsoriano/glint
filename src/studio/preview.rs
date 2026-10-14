@@ -4,7 +4,7 @@
 use super::geometry::{bubble_rect, card_rect, crop_for_ratio, crop_from_drag, CropRatio, Rect};
 use super::{Drag, Mode, Notice, Studio, Tab};
 use crate::shell;
-use crate::ui::{self, BORDER, MUTED, TEXT};
+use crate::ui;
 use glint_studio::{CropRect, ZoomFocus};
 use gpui::prelude::*;
 use gpui::{
@@ -202,7 +202,7 @@ impl Studio {
             .w(px(lw))
             .h(px(lh))
             .flex_none()
-            .bg(rgb(0x0A0A0C))
+            .bg(ui::theme().canvas)
             .rounded(px(4.))
             .overflow_hidden()
             .shadow_lg()
@@ -237,7 +237,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().text_xs().text_color(rgb(MUTED)).child("Drag the frame to where the zoom should look"))
+                    .child(div().text_xs().text_color(ui::theme().muted).child("Drag the frame to where the zoom should look"))
                     .child(ui::button("focus-done", "Done", Some("check"), true, cx.listener(|s, _, _, cx| s.set_mode(Mode::Normal, cx)))),
             ),
             Mode::Normal => None,
@@ -276,13 +276,13 @@ impl Studio {
             .when_some(toolbar, |d, t| {
                 d.child(
                     div().absolute().top(px(10.)).left_0().w_full().flex().justify_center().child(
-                        t.px_2().py_1p5().rounded(px(ui::RADIUS_WINDOW)).bg(rgba(0x1C1C1FF0)).border_1().border_color(rgb(BORDER)).shadow_lg(),
+                        t.px_2().py_1p5().rounded(px(ui::RADIUS_WINDOW)).bg(ui::theme().flyout).border_1().border_color(ui::theme().border).shadow_lg(),
                     ),
                 )
             })
             .children(self.notice_view(cx))
             .children(self.player.error().map(|e| {
-                div().absolute().top(px(10.)).right(px(12.)).max_w(px(360.)).text_xs().text_color(rgb(0xF0A0A0)).child(e)
+                div().absolute().top(px(10.)).right(px(12.)).max_w(px(360.)).text_xs().text_color(rgb(0xD13438)).child(e)
             }))
     }
 
@@ -380,13 +380,13 @@ impl Studio {
                     .pr_2()
                     .py_1p5()
                     .rounded_full()
-                    .bg(rgba(0x1C1C1FF2))
+                    .bg(ui::theme().flyout)
                     .border_1()
-                    .border_color(rgba(0xFFFFFF1F))
+                    .border_color(ui::theme().border)
                     .shadow_lg()
                     .text_sm()
-                    .text_color(rgb(TEXT))
-                    .child(ui::icon(if *error { "close" } else { "check" }, 15., if *error { rgb(0xF07070) } else { ui::accent() }))
+                    .text_color(ui::theme().text)
+                    .child(ui::icon(if *error { "close" } else { "check" }, 15., if *error { rgb(0xD13438) } else { ui::accent() }))
                     .child(text.clone())
                     .when_some(file, |d, path| {
                         let p2 = path.clone();

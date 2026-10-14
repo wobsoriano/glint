@@ -33,7 +33,8 @@ pub enum CaptureCmd {
 pub enum Request {
     Capture(CaptureCmd),
     Library,
-    /// An image to import into the Library and open in the editor. Always absolute.
+    /// An image to open in the editor: a Library capture as it is, any other file imported
+    /// as a copy first. Always absolute.
     Open(PathBuf),
     /// A recording session directory to open in Studio. Always absolute.
     Studio(PathBuf),
@@ -45,7 +46,7 @@ pub struct Launch {
     pub requests: Vec<Request>,
 }
 
-pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--capture area|window|screen|text|previous] [--studio <session dir>] [image...]";
+pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--capture area|window|screen|text|previous] [--studio <session dir>] [image or Library capture...]";
 
 pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
     let mut launch = Launch { background: false, requests: Vec::new() };

@@ -9,7 +9,7 @@ mod sidebar;
 mod timeline;
 
 use crate::settings;
-use crate::ui::{self, BG, BORDER, FONT, MUTED, PANEL, TEXT};
+use crate::ui::{self, FONT};
 use crate::{library, toast, win};
 use geometry::CropRatio;
 use glint_studio::{CropRect, History, Player, Preset, PresetStore, Project, Session};
@@ -685,16 +685,16 @@ impl Render for Studio {
             .items_center()
             .gap_1()
             .px_3()
-            .bg(rgb(PANEL))
+            .bg(ui::theme().layer)
             .border_b_1()
-            .border_color(rgb(BORDER))
-            .child(ui::icon("film", 16., rgb(MUTED)))
+            .border_color(ui::theme().border)
+            .child(ui::icon("film", 16., ui::theme().muted))
             .child(div().ml_1().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).truncate().child(self.title.clone()))
-            .when(self.dirty, |d| d.child(div().text_xs().text_color(rgb(MUTED)).child("Saving\u{2026}")))
+            .when(self.dirty, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Saving\u{2026}")))
             .child(div().flex_1())
             .child(div().child(ui::icon_button("undo", "undo", false, "Undo (Ctrl+Z)", cx.listener(|s, _, _, cx| s.undo(cx)))).when(!undo, |d| d.opacity(0.4)))
             .child(div().child(ui::icon_button("redo", "redo", false, "Redo (Ctrl+Y)", cx.listener(|s, _, _, cx| s.redo(cx)))).when(!redo, |d| d.opacity(0.4)))
-            .child(div().w(px(1.)).h(px(20.)).mx_1().bg(rgb(BORDER)))
+            .child(div().w(px(1.)).h(px(20.)).mx_1().bg(ui::theme().border))
             .child(ui::button("copy", "Copy", Some("copy"), false, cx.listener(|s, _, _, cx| s.run_job(export::Job::Copy, cx))))
             .child(ui::button("save", "Save", Some("save"), false, cx.listener(|s, _, _, cx| s.run_job(export::Job::Save, cx))))
             .child(ui::button("export", "Export\u{2026}", Some("film"), true, cx.listener(|s, _, _, cx| s.open_export(cx))));
@@ -728,9 +728,9 @@ impl Render for Studio {
                 .gap_2()
                 .px_3()
                 .py_2()
-                .bg(rgba(0x5A1D1DFF))
+                .bg(rgba(0xD1343833))
                 .border_b_1()
-                .border_color(rgb(0x8A2C2C))
+                .border_color(rgb(0xD13438))
                 .text_sm()
                 .child(div().flex_1().truncate().child(format!("Couldn't save the project: {err}")))
                 .child(ui::button("retry-save", "Retry", None, false, cx.listener(|s, _, _, cx| {
@@ -745,9 +745,9 @@ impl Render for Studio {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(BG))
+            .bg(ui::theme().base)
             .font_family(FONT)
-            .text_color(rgb(TEXT))
+            .text_color(ui::theme().text)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .child(header)

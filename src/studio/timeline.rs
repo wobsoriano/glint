@@ -4,7 +4,7 @@
 
 use super::geometry::{format_time, zoom_around, TimeScale};
 use super::{Drag, Selection, Studio, ZoomPart};
-use crate::ui::{self, BORDER, ELEV, HOVER, MUTED, PANEL, TEXT};
+use crate::ui;
 use crate::win;
 use glint_studio::timeline::MIN_ZOOM_MS;
 use gpui::prelude::*;
@@ -189,7 +189,7 @@ impl Studio {
             Some(Selection::Clip(i)) => Some(i),
             _ => None,
         };
-        let sep = || div().w(px(1.)).h(px(20.)).mx_1().bg(rgb(BORDER));
+        let sep = || div().w(px(1.)).h(px(20.)).mx_1().bg(ui::theme().border);
 
         let speed_menu = clip_sel.map(|i| {
             let current = self.project().clips[i].speed;
@@ -212,9 +212,9 @@ impl Studio {
                             .flex()
                             .flex_col()
                             .rounded(px(ui::RADIUS_WINDOW))
-                            .bg(rgb(ELEV))
+                            .bg(ui::theme().control)
                             .border_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(ui::theme().border)
                             .shadow_lg()
                             .children(SPEEDS.iter().enumerate().map(|(k, sp)| {
                                 let sp = *sp;
@@ -225,7 +225,7 @@ impl Studio {
                                     .rounded(px(ui::RADIUS_CONTROL))
                                     .text_sm()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(rgb(HOVER)))
+                                    .hover(|s| s.bg(ui::theme().control_hover))
                                     .when((sp - current).abs() < 1e-6, |d| d.text_color(ui::accent()))
                                     .child(speed_label(sp))
                                     .on_click(cx.listener(move |s, _, _, cx| s.set_speed(sp, cx)))
@@ -247,7 +247,7 @@ impl Studio {
                     .w(px(130.))
                     .text_sm()
                     .child(format_time(pos))
-                    .child(div().text_color(rgb(MUTED)).text_xs().child(format!("of {}", format_time(dur)))),
+                    .child(div().text_color(ui::theme().muted).text_xs().child(format!("of {}", format_time(dur)))),
             )
             .child(sep())
             .child(ui::icon_button("split", "scissors", false, "Split at playhead (S)", cx.listener(|s, _, _, cx| s.split(cx))))
@@ -256,7 +256,7 @@ impl Studio {
             .child(sep())
             .child(ui::button("add-zoom", "Add zoom", Some("zoom"), false, cx.listener(|s, _, _, cx| s.add_zoom(cx))))
             .child(div().flex_1())
-            .child(div().text_xs().text_color(rgb(MUTED)).child("Ctrl+scroll to zoom"))
+            .child(div().text_xs().text_color(ui::theme().muted).child("Ctrl+scroll to zoom"))
             .child(ui::icon_button("tl-out", "minus", false, "Zoom timeline out", cx.listener(|s, _, _, cx| {
                 let mid = s.tracks_width() / 2.0;
                 s.set_timeline_zoom(s.tl_zoom / 1.5, mid, cx)
@@ -300,8 +300,8 @@ impl Studio {
                 .absolute()
                 .size_full(),
             )
-            .child(div().absolute().left_0().top(px(CLIP_TOP)).w_full().h(px(CLIP_H)).rounded(px(6.)).bg(rgb(0x101012)))
-            .child(div().absolute().left_0().top(px(ZOOM_TOP)).w_full().h(px(ZOOM_H)).rounded(px(6.)).bg(rgb(0x101012)));
+            .child(div().absolute().left_0().top(px(CLIP_TOP)).w_full().h(px(CLIP_H)).rounded(px(6.)).bg(ui::theme().canvas))
+            .child(div().absolute().left_0().top(px(ZOOM_TOP)).w_full().h(px(ZOOM_H)).rounded(px(6.)).bg(ui::theme().canvas));
         if measured {
             tracks = tracks.children(self.ruler(scale, width)).children(self.clip_blocks(scale, width, cx)).children(self.zoom_blocks(scale, width, cx));
             let x = scale.x(pos);
@@ -312,8 +312,8 @@ impl Studio {
                     .top_0()
                     .w(px(2.))
                     .h_full()
-                    .bg(rgb(0xFFFFFF))
-                    .child(div().absolute().top_0().left(px(-5.)).size(px(12.)).rounded_full().bg(rgb(0xFFFFFF))),
+                    .bg(ui::theme().text)
+                    .child(div().absolute().top_0().left(px(-5.)).size(px(12.)).rounded_full().bg(ui::theme().text)),
             );
         }
 
@@ -321,9 +321,9 @@ impl Studio {
             .flex_none()
             .flex()
             .flex_col()
-            .bg(rgb(PANEL))
+            .bg(ui::theme().layer)
             .border_t_1()
-            .border_color(rgb(BORDER))
+            .border_color(ui::theme().border)
             .child(toolbar)
             .child(tracks)
     }
@@ -342,10 +342,10 @@ impl Studio {
                     .top_0()
                     .h(px(RULER_H))
                     .border_l_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(ui::theme().border)
                     .pl_1()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(ui::theme().muted)
                     .child(format_time(t))
             })
             .collect()
@@ -409,9 +409,9 @@ impl Studio {
                     .h(px(CLIP_H))
                     .rounded(px(6.))
                     .overflow_hidden()
-                    .bg(rgb(0x2A2A30))
+                    .bg(ui::theme().control)
                     .border_2()
-                    .border_color(if selected { ui::accent() } else { rgba(0xFFFFFF26) })
+                    .border_color(if selected { ui::accent() } else { ui::theme().border })
                     .cursor(CursorStyle::PointingHand)
                     .on_mouse_down(MouseButton::Left, cx.listener(move |s, e, _, cx| s.clip_mouse_down(i, None, e, cx)))
                     .children(tiles)
@@ -465,7 +465,7 @@ impl Studio {
                         .when(part == ZoomPart::End, |d| d.right_0())
                         .when(part == ZoomPart::Start, |d| d.left_0())
                         .cursor(CursorStyle::ResizeLeftRight)
-                        .hover(|s| s.bg(rgba(0xFFFFFF55)))
+                        .hover(|s| s.bg(ui::theme().control_hover))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |s, e, _, cx| s.zoom_mouse_down(i, part, e, cx)))
                 };
                 blocks.push(
@@ -483,14 +483,14 @@ impl Studio {
                         .px(px(EDGE + 2.))
                         .gap_1()
                         .when(z.enabled, |d| d.bg(ui::accent_alpha(0x55)))
-                        .when(!z.enabled, |d| d.bg(rgb(ELEV)).text_color(rgb(MUTED)))
+                        .when(!z.enabled, |d| d.bg(ui::theme().control).text_color(ui::theme().muted))
                         .border_2()
-                        .border_color(if selected { rgb(0xFFFFFF).into() } else if z.enabled { ui::accent() } else { rgb(BORDER) })
+                        .border_color(if selected { ui::theme().text } else if z.enabled { ui::accent() } else { ui::theme().border })
                         .cursor(CursorStyle::OpenHand)
                         .text_xs()
-                        .text_color(rgb(TEXT))
+                        .text_color(ui::theme().text)
                         .on_mouse_down(MouseButton::Left, cx.listener(move |s, e, _, cx| s.zoom_mouse_down(i, ZoomPart::Body, e, cx)))
-                        .child(ui::icon("zoom", 12., rgb(TEXT)))
+                        .child(ui::icon("zoom", 12., ui::theme().text))
                         .child(div().whitespace_nowrap().child(label))
                         .when(k == 0, |d| d.child(handle(ZoomPart::Start)))
                         .when(k + 1 == n, |d| d.child(handle(ZoomPart::End))),
