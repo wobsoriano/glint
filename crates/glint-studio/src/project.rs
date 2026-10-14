@@ -138,7 +138,7 @@ pub struct CursorSettings {
 
 impl Default for CursorSettings {
     fn default() -> Self {
-        Self { visible: true, size: 1.5, smoothing: 0.5 }
+        Self { visible: true, size: 1.0, smoothing: 0.5 }
     }
 }
 
