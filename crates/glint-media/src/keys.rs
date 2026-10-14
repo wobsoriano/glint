@@ -13,11 +13,18 @@ pub(crate) struct Mods {
     pub altgr: bool,
 }
 
+/// Windows delivers AltGr to a low-level hook as a Left Ctrl it synthesizes, then Right Alt,
+/// sharing one timestamp. The synthesized Left Ctrl carries this scan-code bit; a physical
+/// Left Ctrl does not.
+const SC_SYNTHETIC: u32 = 0x200;
+
 impl Mods {
     /// Applies a modifier key going down or up. Returns false for non-modifier keys.
     /// `scan` is the hook's scan code, which tells AltGr apart from a real Left Ctrl.
-    pub fn apply(&mut self, vk: u32, _scan: u32, down: bool) -> bool {
+    pub fn apply(&mut self, vk: u32, scan: u32, down: bool) -> bool {
         let slot = match VIRTUAL_KEY(vk as u16) {
+            VK_LCONTROL if scan & SC_SYNTHETIC != 0 => &mut self.altgr,
+            VK_RMENU if self.altgr => return true,
             VK_CONTROL | VK_LCONTROL | VK_RCONTROL => &mut self.ctrl,
             VK_SHIFT | VK_LSHIFT | VK_RSHIFT => &mut self.shift,
             VK_MENU | VK_LMENU | VK_RMENU => &mut self.alt,
@@ -32,7 +39,8 @@ impl Mods {
 /// The label for a key press, or `None` when it is plain typing that is not recorded.
 ///
 /// Recorded: anything with Ctrl, Alt or Win held, and navigation/function keys on their own
-/// or with Shift. Not recorded: letters, digits, punctuation and Space without Ctrl/Alt/Win.
+/// or with Shift or AltGr. Not recorded: letters, digits, punctuation and Space without
+/// Ctrl/Alt/Win, which includes AltGr characters.
 pub(crate) fn shortcut_label(vk: u32, mods: Mods) -> Option<String> {
     let key = key_name(vk)?;
     let special = is_special(vk);
