@@ -69,7 +69,7 @@ pub fn set_launch_at_login(enabled: bool) {
     unsafe {
         if enabled {
             let Ok(exe) = std::env::current_exe() else { return };
-            let value: Vec<u16> = format!("\"{}\"", exe.display())
+            let value: Vec<u16> = format!("\"{}\" --background", exe.display())
                 .encode_utf16()
                 .chain(Some(0))
                 .collect();

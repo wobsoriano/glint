@@ -364,6 +364,76 @@ pub fn kbd(text: &str) -> impl IntoElement {
         }))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edit {
+    Changed,
+    Submit,
+    Cancel,
+    Ignored,
+}
+
+/// Applies one key press to a single-line text value (type, Backspace, Ctrl+Backspace,
+/// Ctrl+V, Enter, Esc). The caret is always at the end.
+pub fn edit_text(text: &mut String, e: &gpui::KeyDownEvent) -> Edit {
+    let k = &e.keystroke;
+    let ctrl = k.modifiers.control;
+    match k.key.as_str() {
+        "enter" => Edit::Submit,
+        "escape" => Edit::Cancel,
+        "backspace" if ctrl => {
+            let trimmed = text.trim_end().len();
+            let cut = text[..trimmed].rfind(char::is_whitespace).map(|i| i + 1).unwrap_or(0);
+            text.truncate(cut);
+            Edit::Changed
+        }
+        "backspace" => {
+            text.pop();
+            Edit::Changed
+        }
+        "v" if ctrl => match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+            Ok(t) => {
+                text.push_str(t.lines().next().unwrap_or_default());
+                Edit::Changed
+            }
+            Err(_) => Edit::Ignored,
+        },
+        _ if ctrl || k.modifiers.alt => Edit::Ignored,
+        _ => match &k.key_char {
+            Some(c) if !c.chars().any(char::is_control) => {
+                text.push_str(c);
+                Edit::Changed
+            }
+            _ => Edit::Ignored,
+        },
+    }
+}
+
+/// A single-line text box drawn for a value edited with [`edit_text`].
+pub fn text_box(value: &str, placeholder: &str, focused: bool) -> gpui::Div {
+    div()
+        .h(px(28.))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap_1p5()
+        .rounded_md()
+        .bg(rgb(0x101012))
+        .border_1()
+        .border_color(rgb(if focused { ACCENT } else { BORDER }))
+        .text_sm()
+        .overflow_hidden()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .min_w_0()
+                .whitespace_nowrap()
+                .when(value.is_empty() && !focused, |d| d.text_color(rgb(MUTED)).child(placeholder.to_string()))
+                .when(!value.is_empty(), |d| d.text_color(rgb(TEXT)).child(value.to_string()))
+                .when(focused, |d| d.child(div().w(px(1.5)).h(px(16.)).bg(rgb(ACCENT)))),
+        )
+}
+
 pub trait ToRgba {
     fn rgba(self) -> gpui::Rgba;
 }

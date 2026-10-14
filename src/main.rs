@@ -1,85 +1,259 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod actions;
 mod assets;
 mod capture;
+mod cards;
 mod editor;
 mod flow;
-mod home;
+mod hotkeys;
+mod ipc;
+mod library;
+mod library_window;
 mod ocr;
 mod overlay;
 mod pin;
-mod quick;
+mod prefs;
+mod quicklook;
 mod redact;
 mod settings;
+mod shell;
+mod stack;
+mod store;
+mod toast;
 mod ui;
 mod win;
 
 pub use glint_render::{annotate, render, style};
 
-use global_hotkey::hotkey::HotKey;
-use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
+use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use gpui::prelude::*;
 use gpui::{div, px, size, App, Application, Bounds, Global, WindowBounds, WindowKind, WindowOptions};
-use settings::Settings;
+use ipc::{CaptureCmd, Request};
+use settings::{HotkeyAction, Settings};
 use std::time::Duration;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
-    CaptureArea,
-    CaptureFullscreen,
-    CaptureWindow,
-    CapturePrevious,
-    CaptureText,
+    Capture(CaptureCmd),
     CaptureTimer,
+    Recording,
+    Library,
+    Settings,
     OpenLast,
-    ShowHome,
     Quit,
 }
 
-/// Registered global shortcuts and the tray icon; kept alive for the whole session.
-pub struct Shortcuts {
-    manager: Option<GlobalHotKeyManager>,
-    bindings: Vec<(HotKey, Command)>,
-    pub status: Vec<(Command, String, Option<String>)>,
-    _tray: Option<TrayIcon>,
-    menu_ids: Vec<(tray_icon::menu::MenuId, Command)>,
-}
-
-impl Global for Shortcuts {}
-
-impl Shortcuts {
-    pub fn register(&mut self, settings: &Settings) {
-        let Some(manager) = &self.manager else { return };
-        for (hk, _) in self.bindings.drain(..) {
-            let _ = manager.unregister(hk);
-        }
-        self.status.clear();
-        let h = &settings.hotkeys;
-        for (cmd, accel) in [
-            (Command::CaptureArea, &h.area),
-            (Command::CaptureFullscreen, &h.fullscreen),
-            (Command::CaptureWindow, &h.window),
-            (Command::CapturePrevious, &h.previous_area),
-            (Command::CaptureText, &h.text),
-        ] {
-            let result = accel
-                .parse::<HotKey>()
-                .map_err(|e| e.to_string())
-                .and_then(|hk| {
-                    manager.register(hk).map_err(|e| e.to_string())?;
-                    Ok(hk)
-                });
-            match result {
-                Ok(hk) => {
-                    self.bindings.push((hk, cmd));
-                    self.status.push((cmd, accel.clone(), None));
-                }
-                Err(e) => self.status.push((cmd, accel.clone(), Some(e))),
-            }
+impl From<HotkeyAction> for Command {
+    fn from(a: HotkeyAction) -> Self {
+        match a {
+            HotkeyAction::Area => Command::Capture(CaptureCmd::Area),
+            HotkeyAction::Fullscreen => Command::Capture(CaptureCmd::Screen),
+            HotkeyAction::Window => Command::Capture(CaptureCmd::Window),
+            HotkeyAction::PreviousArea => Command::Capture(CaptureCmd::Previous),
+            HotkeyAction::Text => Command::Capture(CaptureCmd::Text),
+            HotkeyAction::Recording => Command::Recording,
+            HotkeyAction::Library => Command::Library,
         }
     }
+}
+
+pub fn run_command(cmd: Command, cx: &mut App) {
+    match cmd {
+        Command::Capture(CaptureCmd::Area) => flow::start_area(overlay::Mode::Image, cx),
+        Command::Capture(CaptureCmd::Text) => flow::start_area(overlay::Mode::Text, cx),
+        Command::Capture(CaptureCmd::Screen) => flow::capture_fullscreen(cx),
+        Command::Capture(CaptureCmd::Window) => flow::capture_window(cx),
+        Command::Capture(CaptureCmd::Previous) => flow::capture_previous(cx),
+        Command::CaptureTimer => flow::capture_after_timer(cx),
+        Command::Recording => toast::show("Screen recording is not installed in this build", cx),
+        Command::Library => library_window::show(cx),
+        Command::Settings => prefs::show(cx),
+        Command::OpenLast => flow::open_last(cx),
+        Command::Quit => cx.quit(),
+    }
+}
+
+fn handle_requests(requests: Vec<Request>, cx: &mut App) {
+    let mut images = Vec::new();
+    for r in requests {
+        match r {
+            Request::Capture(c) => run_command(Command::Capture(c), cx),
+            Request::Library => library_window::show(cx),
+            Request::Open(path) => images.push(path),
+        }
+    }
+    if !images.is_empty() {
+        flow::open_images(images, cx);
+    }
+}
+
+/// The tray icon and the commands behind its menu items.
+struct Tray {
+    icon: Option<TrayIcon>,
+    ids: Vec<(MenuId, Command)>,
+}
+
+impl Global for Tray {}
+
+fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
+    let menu = Menu::new();
+    let mut ids = Vec::new();
+    let h = &s.hotkeys;
+    let display = |a: HotkeyAction| Some(hotkeys::display(h.get(a)));
+    let items = [
+        ("Capture Area", display(HotkeyAction::Area), Command::Capture(CaptureCmd::Area)),
+        ("Capture Window", display(HotkeyAction::Window), Command::Capture(CaptureCmd::Window)),
+        ("Capture Full Screen", display(HotkeyAction::Fullscreen), Command::Capture(CaptureCmd::Screen)),
+        ("Capture Previous Area", display(HotkeyAction::PreviousArea), Command::Capture(CaptureCmd::Previous)),
+        ("Capture Text", display(HotkeyAction::Text), Command::Capture(CaptureCmd::Text)),
+        ("Self-Timer", Some(format!("{} s", s.timer_seconds)), Command::CaptureTimer),
+    ];
+    let mut add = |label: String, cmd: Command| {
+        let item = MenuItem::new(label, true, None);
+        ids.push((item.id().clone(), cmd));
+        let _ = menu.append(&item);
+    };
+    for (label, accel, cmd) in items {
+        add(accel.map(|a| format!("{label}\t{a}")).unwrap_or(label.to_string()), cmd);
+    }
+    let _ = menu.append(&PredefinedMenuItem::separator());
+    add(format!("Open Library\t{}", hotkeys::display(&h.library)), Command::Library);
+    add("Edit Last Capture".into(), Command::OpenLast);
+    add("Settings…".into(), Command::Settings);
+    let _ = menu.append(&PredefinedMenuItem::separator());
+    add("Quit Glint".into(), Command::Quit);
+    (menu, ids)
+}
+
+/// Rebuilds the tray menu so its shortcut labels follow the settings.
+pub fn refresh_tray(cx: &mut App) {
+    let (menu, ids) = tray_menu(cx.global::<Settings>());
+    let tray = cx.global_mut::<Tray>();
+    if let Some(icon) = &tray.icon {
+        icon.set_menu(Some(Box::new(menu)));
+    }
+    tray.ids = ids;
+}
+
+fn build_tray(s: &Settings) -> Tray {
+    let (menu, ids) = tray_menu(s);
+    let icon = TrayIconBuilder::new()
+        .with_tooltip("Glint")
+        .with_icon(tray_icon_image())
+        .with_menu(Box::new(menu))
+        .build()
+        .ok();
+    Tray { icon, ids }
+}
+
+/// GPUI quits when the last window closes; this invisible window keeps us running in the tray.
+struct KeepAlive;
+
+impl Render for KeepAlive {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let launch = match ipc::parse(&args, &cwd) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+    };
+    if !win::single_instance() {
+        if launch.requests.is_empty() && launch.background {
+            return;
+        }
+        let requests = if launch.requests.is_empty() { vec![Request::Library] } else { launch.requests };
+        if let Err(e) = ipc::forward(&requests) {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    ipc::listen();
+    if let Err(e) = shell::register_open_with() {
+        eprintln!("Open with Glint is not registered: {e:#}");
+    }
+
+    Application::new().with_assets(assets::Assets).run(move |cx: &mut App| {
+        let settings = Settings::load();
+        cx.set_global(flow::AppState::default());
+        store::init(cx);
+        let mut keys = hotkeys::Hotkeys::new();
+        keys.register_all(&settings);
+        cx.set_global(keys);
+        cx.set_global(build_tray(&settings));
+        shell::exclude_own_windows_from_capture(settings.include_own_windows);
+        cx.set_global(settings);
+
+        let _ = cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds { origin: gpui::point(px(-10000.), px(-10000.)), size: size(px(1.), px(1.)) })),
+                show: false,
+                focus: false,
+                kind: WindowKind::PopUp,
+                titlebar: None,
+                ..Default::default()
+            },
+            |_, cx| cx.new(|_| KeepAlive),
+        );
+
+        if launch.requests.is_empty() && !launch.background {
+            library_window::show(cx);
+        }
+        handle_requests(launch.requests, cx);
+
+        // Poll global hotkeys, tray events and forwarded launches from the main thread.
+        cx.spawn(async move |cx| loop {
+            gpui::Timer::after(Duration::from_millis(30)).await;
+            let mut keys = Vec::new();
+            while let Ok(ev) = GlobalHotKeyEvent::receiver().try_recv() {
+                if ev.state() == HotKeyState::Pressed {
+                    keys.push(ev.id());
+                }
+            }
+            let mut menu = Vec::new();
+            while let Ok(ev) = MenuEvent::receiver().try_recv() {
+                menu.push(ev.id().clone());
+            }
+            let mut tray_clicked = false;
+            while let Ok(ev) = TrayIconEvent::receiver().try_recv() {
+                if let TrayIconEvent::DoubleClick { .. } = ev {
+                    tray_clicked = true;
+                }
+            }
+            let forwarded = ipc::drain();
+            if keys.is_empty() && menu.is_empty() && !tray_clicked && forwarded.is_empty() {
+                continue;
+            }
+            let ok = cx.update(|cx| {
+                let hk = cx.global::<hotkeys::Hotkeys>();
+                let mut todo: Vec<Command> = keys.iter().filter_map(|id| hk.action_for(*id)).map(Command::from).collect();
+                let tray = cx.global::<Tray>();
+                todo.extend(menu.iter().filter_map(|id| tray.ids.iter().find(|(m, _)| m == id).map(|(_, c)| *c)));
+                if tray_clicked {
+                    todo.push(Command::Capture(CaptureCmd::Area));
+                }
+                for c in todo {
+                    run_command(c, cx);
+                }
+                handle_requests(forwarded, cx);
+            });
+            if ok.is_err() {
+                break;
+            }
+        })
+        .detach();
+    });
 }
 
 fn tray_icon_image() -> tray_icon::Icon {
@@ -136,169 +310,6 @@ fn tray_icon_image() -> tray_icon::Icon {
     tray_icon::Icon::from_rgba(rgba.into_raw(), n, n).unwrap()
 }
 
-fn build_tray() -> (Option<TrayIcon>, Vec<(tray_icon::menu::MenuId, Command)>) {
-    let menu = Menu::new();
-    let mut ids = Vec::new();
-    let s = Settings::load();
-    let items = [
-        ("Capture Area", Some(s.hotkeys.area.clone()), Command::CaptureArea),
-        ("Capture Fullscreen", Some(s.hotkeys.fullscreen.clone()), Command::CaptureFullscreen),
-        ("Capture Window", Some(s.hotkeys.window.clone()), Command::CaptureWindow),
-        ("Capture Previous Area", Some(s.hotkeys.previous_area.clone()), Command::CapturePrevious),
-        ("Capture Text (OCR)", Some(s.hotkeys.text.clone()), Command::CaptureText),
-        ("Fullscreen in 3 Seconds", None, Command::CaptureTimer),
-    ];
-    for (label, accel, cmd) in items {
-        let text = match accel {
-            Some(a) => format!("{label}\t{a}"),
-            None => label.to_string(),
-        };
-        let item = MenuItem::new(text, true, None);
-        ids.push((item.id().clone(), cmd));
-        let _ = menu.append(&item);
-    }
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    for (label, cmd) in [
-        ("Open Last Capture", Command::OpenLast),
-        ("Settings…", Command::ShowHome),
-    ] {
-        let item = MenuItem::new(label, true, None);
-        ids.push((item.id().clone(), cmd));
-        let _ = menu.append(&item);
-    }
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    let quit = MenuItem::new("Quit Glint", true, None);
-    ids.push((quit.id().clone(), Command::Quit));
-    let _ = menu.append(&quit);
-
-    let tray = TrayIconBuilder::new()
-        .with_tooltip("Glint")
-        .with_icon(tray_icon_image())
-        .with_menu(Box::new(menu))
-        .build()
-        .ok();
-    (tray, ids)
-}
-
-/// GPUI quits when the last window closes; this invisible window keeps us running in the tray.
-struct KeepAlive;
-
-impl Render for KeepAlive {
-    fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
-    }
-}
-
-pub fn run_command(cmd: Command, cx: &mut App) {
-    match cmd {
-        Command::CaptureArea => flow::start_area(overlay::Mode::Image, cx),
-        Command::CaptureText => flow::start_area(overlay::Mode::Text, cx),
-        Command::CaptureFullscreen => flow::capture_fullscreen(cx),
-        Command::CaptureWindow => flow::capture_window(cx),
-        Command::CapturePrevious => flow::capture_previous(cx),
-        Command::CaptureTimer => {
-            quick::show_toast("Capturing in 3 seconds…", cx);
-            cx.spawn(async move |cx| {
-                gpui::Timer::after(Duration::from_secs(3)).await;
-                let _ = cx.update(flow::capture_fullscreen);
-            })
-            .detach();
-        }
-        Command::OpenLast => flow::open_last(cx),
-        Command::ShowHome => home::show(cx),
-        Command::Quit => cx.quit(),
-    }
-}
-
-fn main() {
-    if !win::single_instance() {
-        return;
-    }
-    let background = std::env::args().any(|a| a == "--background");
-
-    Application::new()
-        .with_assets(assets::Assets)
-        .run(move |cx: &mut App| {
-            let settings = Settings::load();
-            cx.set_global(flow::AppState::default());
-
-            let (tray, menu_ids) = build_tray();
-            let mut shortcuts = Shortcuts {
-                manager: GlobalHotKeyManager::new().ok(),
-                bindings: Vec::new(),
-                status: Vec::new(),
-                _tray: tray,
-                menu_ids,
-            };
-            shortcuts.register(&settings);
-            cx.set_global(shortcuts);
-            cx.set_global(settings);
-
-            let _ = cx.open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds {
-                        origin: gpui::point(px(-10000.), px(-10000.)),
-                        size: size(px(1.), px(1.)),
-                    })),
-                    show: false,
-                    focus: false,
-                    kind: WindowKind::PopUp,
-                    titlebar: None,
-                    ..Default::default()
-                },
-                |_, cx| cx.new(|_| KeepAlive),
-            );
-
-            if !background {
-                home::show(cx);
-            }
-
-            // Poll global hotkeys and tray events from the main thread.
-            cx.spawn(async move |cx| loop {
-                gpui::Timer::after(Duration::from_millis(30)).await;
-                let mut cmds = Vec::new();
-                while let Ok(ev) = GlobalHotKeyEvent::receiver().try_recv() {
-                    if ev.state() == HotKeyState::Pressed {
-                        cmds.push(ev.id());
-                    }
-                }
-                let mut menu = Vec::new();
-                while let Ok(ev) = MenuEvent::receiver().try_recv() {
-                    menu.push(ev.id().clone());
-                }
-                let mut tray_clicked = false;
-                while let Ok(ev) = TrayIconEvent::receiver().try_recv() {
-                    if let TrayIconEvent::DoubleClick { .. } = ev {
-                        tray_clicked = true;
-                    }
-                }
-                if cmds.is_empty() && menu.is_empty() && !tray_clicked {
-                    continue;
-                }
-                let ok = cx.update(|cx| {
-                    let s = cx.global::<Shortcuts>();
-                    let mut todo: Vec<Command> = cmds
-                        .iter()
-                        .filter_map(|id| s.bindings.iter().find(|(b, _)| b.id() == *id).map(|(_, c)| *c))
-                        .collect();
-                    todo.extend(
-                        menu.iter()
-                            .filter_map(|id| s.menu_ids.iter().find(|(m, _)| m == id).map(|(_, c)| *c)),
-                    );
-                    if tray_clicked {
-                        todo.push(Command::CaptureArea);
-                    }
-                    for c in todo {
-                        run_command(c, cx);
-                    }
-                });
-                if ok.is_err() {
-                    break;
-                }
-            })
-            .detach();
-        });
-}
 
 #[cfg(test)]
 mod pipeline_tests {
