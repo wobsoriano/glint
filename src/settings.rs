@@ -288,7 +288,7 @@ impl Settings {
     pub fn load() -> Self {
         let mut s: Settings = std::fs::read_to_string(path())
             .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
             .unwrap_or_default();
         s.overlay.layout = s.overlay.layout.normalized();
         s

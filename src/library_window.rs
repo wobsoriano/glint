@@ -390,6 +390,16 @@ fn sidebar_entry(id: &'static str, icon: &'static str, label: &'static str, coun
         .child(div().text_xs().text_color(rgb(MUTED)).child(count.to_string()))
 }
 
+/// A label over a long value that wraps, for paths.
+fn block(label: &str, value: String) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(div().text_xs().text_color(rgb(MUTED)).child(label.to_string()))
+        .child(div().text_xs().text_color(rgb(TEXT)).child(value))
+}
+
 fn row(label: &str, value: String) -> impl IntoElement {
     div()
         .flex()
@@ -517,7 +527,7 @@ impl LibraryWindow {
             )
             .child(match renaming {
                 Some(t) => div().flex_1().child(ui::text_box(&t, "", true)).into_any_element(),
-                None => div().flex_1().min_w_0().truncate().text_color(rgb(TEXT)).child(item.meta.title.clone()).into_any_element(),
+                None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(rgb(TEXT)).child(item.meta.title.clone()).into_any_element(),
             })
             .child(div().w(px(90.)).text_xs().text_color(rgb(MUTED)).child(if recording { "Recording" } else { "Screenshot" }))
             .child(div().w(px(96.)).text_xs().text_color(rgb(MUTED)).child(format!("{} × {}", item.meta.width, item.meta.height)))
@@ -552,15 +562,8 @@ impl LibraryWindow {
                     .child(row("Disk usage", actions::human_bytes(item.bytes)))
                     .child(row("Editing", edited.to_string()))
                     .when_some(item.meta.source.clone(), |d, s| d.child(row("Source", s)))
-                    .when_some(item.meta.imported_from.clone(), |d, p| d.child(row("Imported from", p.display().to_string())));
-                d = d.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(div().text_xs().text_color(rgb(MUTED)).child("Location"))
-                        .child(div().text_xs().text_color(rgb(TEXT)).child(item.dir.display().to_string())),
-                );
+                    .when_some(item.meta.imported_from.clone(), |d, p| d.child(block("Imported from", p.display().to_string())));
+                d = d.child(block("Location", item.dir.display().to_string()));
                 d.into_any_element()
             }
             many => div()
@@ -582,7 +585,7 @@ impl LibraryWindow {
             .flex_col()
             .gap_4()
             .p_4()
-            .bg(rgba(0x1C1C2080))
+            .bg(rgba(0x1C1C20E0))
             .border_l_1()
             .border_color(rgb(BORDER))
             .child(div().flex_1().min_h_0().child(body))
@@ -637,7 +640,7 @@ impl Render for LibraryWindow {
             .flex_col()
             .gap_1()
             .p_3()
-            .bg(rgba(0x1C1C2080))
+            .bg(rgba(0x1C1C20E0))
             .border_r_1()
             .border_color(rgb(BORDER))
             .child(div().px_2().pb_2().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child("LIBRARY"))

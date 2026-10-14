@@ -629,7 +629,7 @@ impl Render for Prefs {
                     .flex_col()
                     .gap_1()
                     .p_3()
-                    .bg(rgba(0x1C1C2080))
+                    .bg(rgba(0x1C1C20E0))
                     .border_r_1()
                     .border_color(rgb(BORDER))
                     .children(nav),
