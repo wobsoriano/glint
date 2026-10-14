@@ -55,6 +55,12 @@ fn body(name: &str) -> Option<&'static str> {
         "library" => r##"<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>"##,
         "stack" => r##"<rect x="5" y="9" width="14" height="11" rx="2"/><path d="M7 6h10M9 3h6"/>"##,
         "more" => r##"<circle cx="5" cy="12" r="1.2" fill="#000"/><circle cx="12" cy="12" r="1.2" fill="#000"/><circle cx="19" cy="12" r="1.2" fill="#000"/>"##,
+        "rect-filled" => r##"<rect x="4" y="5" width="16" height="14" rx="2.5" fill="#000"/>"##,
+        "pixelate" => r##"<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/><rect x="4" y="4" width="5.3" height="5.3" fill="#000"/><rect x="9.3" y="9.3" width="5.4" height="5.4" fill="#000"/><rect x="14.7" y="14.7" width="5.3" height="5.3" fill="#000"/>"##,
+        "blur" => r##"<circle cx="12" cy="12" r="8" stroke-dasharray="2 2.6"/><circle cx="12" cy="12" r="4" fill="#000"/>"##,
+        "align-left" => r##"<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>"##,
+        "align-center" => r##"<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>"##,
+        "align-right" => r##"<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>"##,
         _ => return None,
     })
 }

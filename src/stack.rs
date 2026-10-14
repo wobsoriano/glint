@@ -4,8 +4,9 @@
 use crate::cards::{CardAction, CardLayout, Corner};
 use crate::flow::Shot;
 use crate::settings::{Settings, Side};
-use crate::ui::{self, FONT, TEXT};
-use crate::{actions, editor, pin, quicklook, shell, win};
+use crate::ui::{self, FONT};
+use crate::library::Item;
+use crate::{actions, pin, quicklook, shell, win};
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, Global, ImageSource, MouseButton, MouseDownEvent,
@@ -140,13 +141,10 @@ impl Stack {
             CardAction::CopyText => actions::copy_text(&item, cx),
             CardAction::QuickLook => quicklook::open(item, cx),
             CardAction::Pin => {
-                pin::open(shot.image.clone(), shot.cap.dpi, cx);
+                pin::open(shot.image.clone(), shot.dpi, cx);
                 self.remove(id, window, cx);
             }
-            CardAction::Edit => {
-                editor::open_with(shot.cap.clone(), shot.redactions.clone(), cx);
-                self.remove(id, window, cx);
-            }
+            CardAction::Edit => actions::edit(&item, cx),
             CardAction::Delete => {
                 let handle = window.window_handle();
                 actions::delete(vec![item.dir.clone()], cx, move |ok, cx| {
@@ -239,6 +237,19 @@ fn past_edge(area: [i32; 4], side: Side) -> bool {
 
 fn thumb_of(shot: &Shot) -> Arc<RenderImage> {
     win::render_image(&crate::library::thumbnail(&shot.image))
+}
+
+/// Shows a capture's new deliverable on every card of it, after an edit was saved.
+pub fn show_edit(item: &Item, image: Arc<image::RgbaImage>, cx: &mut App) {
+    let Some(h) = cx.default_global::<StackState>().0 else { return };
+    let _ = h.update(cx, |this, _, cx| {
+        for c in this.cards.iter_mut().filter(|c| c.shot.item.dir == item.dir) {
+            c.shot.item = item.clone();
+            c.shot.image = image.clone();
+            c.thumb = thumb_of(&c.shot);
+        }
+        cx.notify();
+    });
 }
 
 /// Adds a capture to the stack, opening the stack on the display under the pointer.
@@ -391,6 +402,7 @@ pub fn card_actions(
 impl Render for Stack {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let left = self.side == Side::Left;
+        let t = ui::theme();
         if self.collapsed {
             let n = self.cards.len();
             return div()
@@ -402,16 +414,16 @@ impl Render for Stack {
                 .items_center()
                 .justify_center()
                 .gap_1()
-                .bg(rgba(0x1C1C1FF2))
+                .bg(t.flyout)
                 .border_1()
-                .border_color(rgba(0xFFFFFF2E))
+                .border_color(t.border)
                 .when(left, |d| d.rounded_r_lg())
                 .when(!left, |d| d.rounded_l_lg())
                 .cursor_pointer()
-                .hover(|s| s.bg(rgba(0x2A2A30F2)))
-                .text_color(rgb(TEXT))
+                .hover(|s| s.bg(t.control_hover))
+                .text_color(t.text)
                 .text_xs()
-                .child(ui::icon(if left { "chevron-right" } else { "chevron-left" }, 14., rgb(TEXT)))
+                .child(ui::icon(if left { "chevron-right" } else { "chevron-left" }, 14., t.text))
                 .child(n.to_string())
                 .tooltip(ui::tooltip(format!("Show {n} capture(s)")))
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -437,11 +449,11 @@ impl Render for Stack {
                     .flex()
                     .items_center()
                     .rounded_full()
-                    .bg(rgba(0x1C1C1FE6))
+                    .bg(t.flyout)
                     .border_1()
-                    .border_color(rgba(0xFFFFFF2E))
+                    .border_color(t.border)
                     .text_xs()
-                    .text_color(rgb(TEXT))
+                    .text_color(t.text)
                     .child(if n == 1 { "1 Screenshot".to_string() } else { format!("{n} Screenshots") }),
             )
             .child(
@@ -453,12 +465,12 @@ impl Render for Stack {
                     .items_center()
                     .rounded_full()
                     .cursor_pointer()
-                    .bg(rgba(0x1C1C1FE6))
+                    .bg(t.flyout)
                     .border_1()
-                    .border_color(rgba(0xFFFFFF2E))
+                    .border_color(t.border)
                     .hover(|s| s.bg(ui::accent_alpha(0xF0)))
                     .text_xs()
-                    .text_color(rgb(TEXT))
+                    .text_color(t.text)
                     .child("Clear All")
                     .on_click(|_, window, _| window.remove_window()),
             )
@@ -471,11 +483,11 @@ impl Render for Stack {
                     .justify_center()
                     .rounded_full()
                     .cursor_pointer()
-                    .bg(rgba(0x1C1C1FE6))
+                    .bg(t.flyout)
                     .border_1()
-                    .border_color(rgba(0xFFFFFF2E))
+                    .border_color(t.border)
                     .hover(|s| s.bg(ui::accent_alpha(0xF0)))
-                    .child(ui::icon(if left { "chevron-left" } else { "chevron-right" }, 13., rgb(TEXT)))
+                    .child(ui::icon(if left { "chevron-left" } else { "chevron-right" }, 13., t.text))
                     .tooltip(ui::tooltip("Tuck into the edge"))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.collapsed = true;
@@ -506,9 +518,9 @@ impl Render for Stack {
                 .flex_none()
                 .rounded(px(ui::RADIUS_WINDOW))
                 .overflow_hidden()
-                .bg(rgb(0x111113))
+                .bg(t.canvas)
                 .border_1()
-                .border_color(rgba(0xFFFFFF33))
+                .border_color(t.border)
                 .shadow_lg()
                 .cursor_pointer()
                 .child(img(ImageSource::Render(c.thumb.clone())).size_full().object_fit(ObjectFit::Cover))
@@ -527,9 +539,9 @@ impl Render for Stack {
                             .flex_col()
                             .gap_0p5()
                             .rounded(px(ui::RADIUS_WINDOW))
-                            .bg(rgba(0x202024F8))
+                            .bg(t.flyout)
                             .border_1()
-                            .border_color(rgba(0xFFFFFF2E))
+                            .border_color(t.border)
                             .shadow_lg()
                             .children(layout.hidden.iter().filter(|&&a| a != CardAction::More).map(|&a| {
                                 let w = w.clone();
@@ -544,9 +556,9 @@ impl Render for Stack {
                                     .rounded(px(ui::RADIUS_CONTROL))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(TEXT))
+                                    .text_color(t.text)
                                     .hover(|s| s.bg(ui::accent()))
-                                    .child(ui::icon(a.icon(), 12., rgb(TEXT)))
+                                    .child(ui::icon(a.icon(), 12., t.text))
                                     .child(a.label())
                                     .on_click(move |_, window, cx| {
                                         cx.stop_propagation();
@@ -554,7 +566,7 @@ impl Render for Stack {
                                     })
                             }))
                             .when(layout.hidden.iter().all(|&a| a == CardAction::More), |d| {
-                                d.child(div().p_2().text_xs().text_color(rgb(ui::MUTED)).child("No hidden actions"))
+                                d.child(div().p_2().text_xs().text_color(t.muted).child("No hidden actions"))
                             }),
                     )
                 })
@@ -581,7 +593,7 @@ impl Render for Stack {
                             .justify_center()
                             .gap_2()
                             .text_sm()
-                            .text_color(rgb(TEXT))
+                            .text_color(rgb(0xFFFFFF))
                             .child(ui::icon("check", 16., rgb(0x34C759)))
                             .child(msg),
                     )
@@ -596,7 +608,7 @@ impl Render for Stack {
             .flex_col()
             .gap(px(GAP))
             .p(px(PAD))
-            .bg(rgba(0x16161ACC))
+            .bg(t.base)
             .on_hover(cx.listener(|this, h: &bool, _, cx| {
                 this.hovered = *h;
                 if !*h {

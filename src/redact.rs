@@ -96,7 +96,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             group: 1,
             ..rule(
                 Kind::Secret,
-                r"(?i)\b(?:password|passwd|pwd|passcode|secret|token|api[_ -]?key|access[_ -]?key|client[_ -]?secret|private[_ -]?key|auth)\b\s*[:=]\s*(\S+)",
+                r"(?i)\b(?:password|passwd|pwd|passcode|secret|token|api[_ -]?key|access[_ -]?key|client[_ -]?secret|private[_ -]?key|auth)\b\s*[:=]\s*(\S+(?:\s+[A-Za-z0-9_+/=-]{6,})*)",
             )
         },
         Rule {
@@ -241,6 +241,14 @@ mod tests {
         assert_eq!(kinds("server 192.168.1.20 is up"), vec![Kind::Network]);
         assert_eq!(kinds("call +1 415-555-0132 now"), vec![Kind::Phone]);
         assert!(kinds("password: hunter2").contains(&Kind::Secret));
+    }
+
+    #[test]
+    fn labeled_secret_covers_a_token_ocr_split_in_two() {
+        let found = find(&[line("API key: sk_live_51 HxYzAbCdEfGhIjKlMnOpQr")], &RedactRules::default(), 0.0);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, Kind::Secret);
+        assert_eq!((found[0].rect.x, found[0].rect.right()), (200.0, 390.0));
     }
 
     #[test]
