@@ -26,7 +26,7 @@ pub fn show(cx: &mut App) {
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
-                title: Some("PrettyShot".into()),
+                title: Some("Glint".into()),
                 appears_transparent: false,
                 traffic_light_position: None,
             }),
@@ -147,7 +147,7 @@ impl Render for Home {
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .child(div().text_xl().font_weight(gpui::FontWeight::BOLD).child("PrettyShot"))
+                                    .child(div().text_xl().font_weight(gpui::FontWeight::BOLD).child("Glint"))
                                     .child(
                                         div()
                                             .text_sm()
@@ -287,7 +287,7 @@ impl Render for Home {
                                     .gap_2()
                                     .child(ui::button("last", "Open last capture", Some("image"), false, |_, _, cx| run_command(Command::OpenLast, cx)))
                                     .child(ui::button("cfg", "Edit shortcuts (settings.json)", Some("keyboard"), false, |_, _, cx| {
-                                        let p = dirs::config_dir().unwrap_or_default().join("PrettyShot").join("settings.json");
+                                        let p = dirs::config_dir().unwrap_or_default().join("Glint").join("settings.json");
                                         cx.global::<Settings>().save();
                                         cx.open_with_system(&p);
                                     }))
@@ -302,7 +302,7 @@ impl Render for Home {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(MUTED))
-                                    .child("Closing this window keeps PrettyShot running in the tray. Double-click the tray icon to capture an area."),
+                                    .child("Closing this window keeps Glint running in the tray. Double-click the tray icon to capture an area."),
                             ),
                     ),
             )

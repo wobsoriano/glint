@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod annotate;
 mod assets;
 mod capture;
 mod editor;
@@ -11,11 +10,11 @@ mod overlay;
 mod pin;
 mod quick;
 mod redact;
-mod render;
 mod settings;
-mod style;
 mod ui;
 mod win;
+
+pub use glint_render::{annotate, render, style};
 
 use global_hotkey::hotkey::HotKey;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
@@ -168,12 +167,12 @@ fn build_tray() -> (Option<TrayIcon>, Vec<(tray_icon::menu::MenuId, Command)>) {
         let _ = menu.append(&item);
     }
     let _ = menu.append(&PredefinedMenuItem::separator());
-    let quit = MenuItem::new("Quit PrettyShot", true, None);
+    let quit = MenuItem::new("Quit Glint", true, None);
     ids.push((quit.id().clone(), Command::Quit));
     let _ = menu.append(&quit);
 
     let tray = TrayIconBuilder::new()
-        .with_tooltip("PrettyShot")
+        .with_tooltip("Glint")
         .with_icon(tray_icon_image())
         .with_menu(Box::new(menu))
         .build()
@@ -330,7 +329,7 @@ mod pipeline_tests {
         let mk = |shape| Annotation { id: 0, shape, color: ink, width: 6.0 };
         anns.push(mk(Shape::Arrow { from: pt(w * 0.2, h * 0.7), to: pt(w * 0.45, h * 0.45) }));
         anns.push(mk(Shape::Rect { rect: R { x: w * 0.5, y: h * 0.2, w: w * 0.2, h: h * 0.15 }, filled: false }));
-        anns.push(mk(Shape::Text { pos: pt(w * 0.1, h * 0.1), text: "Hello PrettyShot".into(), size: 48.0, style: TextStyle::Pill }));
+        anns.push(mk(Shape::Text { pos: pt(w * 0.1, h * 0.1), text: "Hello Glint".into(), size: 48.0, style: TextStyle::Pill }));
         anns.push(mk(Shape::Counter { center: pt(w * 0.8, h * 0.7), n: 1, size: 22.0 }));
         anns.push(Annotation { color: Color::rgb(0xFFE14D), ..mk(Shape::Highlight { rect: R { x: w * 0.1, y: h * 0.3, w: w * 0.2, h: 40.0 } }) });
 

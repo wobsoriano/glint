@@ -5,7 +5,7 @@ use crate::capture::Capture;
 use crate::render::{self, Inputs, Layout};
 use crate::settings::{RedactStyle, Settings};
 use crate::style::{Background, Chrome, Color, Gradient, Style, ASPECTS, GRADIENTS, INK, SOLIDS};
-use crate::ui::{self, OnValue, ACCENT, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::{self, OnValue, ToRgba, ACCENT, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
 use crate::{ocr, pin, redact, win};
 use gpui::prelude::*;
 use gpui::{
@@ -81,7 +81,7 @@ pub fn open(cap: Capture, cx: &mut App) {
 
 pub fn open_with(cap: Capture, annotations: Vec<Annotation>, cx: &mut App) {
     let bounds = Bounds::centered(None, size(px(1320.), px(840.)), cx);
-    let title = format!("PrettyShot — {} × {}", cap.image.width(), cap.image.height());
+    let title = format!("Glint — {} × {}", cap.image.width(), cap.image.height());
     let _ = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -1030,7 +1030,7 @@ impl Editor {
                             ))
                             .child(ui::icon("area", 13., rgb(0xFFFFFF))),
                     )
-                    .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child("PrettyShot")),
+                    .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child("Glint")),
             )
             .child(div().id("drag-m1").h_full().flex_1().window_control_area(WindowControlArea::Drag))
             .child(
@@ -1122,7 +1122,7 @@ impl Editor {
                         .relative()
                         .child(ui::swatch(
                             "g-auto",
-                            &auto.iter().map(|c| c.to_gpui()).collect::<Vec<_>>(),
+                            &auto.iter().map(|c| c.rgba()).collect::<Vec<_>>(),
                             current.stops == auto,
                             34.,
                             on(weak, move |e, _| e.style.background = Background::Gradient(auto_g.clone())),
@@ -1140,7 +1140,7 @@ impl Editor {
                     let angle = current.angle;
                     grid = grid.child(ui::swatch(
                         eid("grad", i),
-                        &preset.stops.iter().map(|c| c.to_gpui()).collect::<Vec<_>>(),
+                        &preset.stops.iter().map(|c| c.rgba()).collect::<Vec<_>>(),
                         preset.stops == current.stops,
                         34.,
                         on(weak, move |e, _| {
@@ -1169,7 +1169,7 @@ impl Editor {
                     let col = Color::rgb(*hex);
                     grid = grid.child(ui::swatch(
                         eid("solid", i),
-                        &[col.to_gpui()],
+                        &[col.rgba()],
                         current == col,
                         30.,
                         on(weak, move |e, _| e.style.background = Background::Solid(col)),
@@ -1300,7 +1300,7 @@ impl Editor {
         let ink = ui::section("Annotations")
             .child(div().flex().flex_wrap().gap_1().children(INK.iter().enumerate().map(|(i, hex)| {
                 let col = Color::rgb(*hex);
-                ui::swatch(eid("ink", i), &[col.to_gpui()], self.color == col, 26., on(weak, move |e, _| {
+                ui::swatch(eid("ink", i), &[col.rgba()], self.color == col, 26., on(weak, move |e, _| {
                     e.color = col;
                     e.modify_selected(|a| {
                         if !a.is_redaction() {

@@ -363,3 +363,18 @@ pub fn kbd(text: &str) -> impl IntoElement {
                 .child(k.to_string())
         }))
 }
+
+pub trait ToRgba {
+    fn rgba(self) -> gpui::Rgba;
+}
+
+impl ToRgba for crate::style::Color {
+    fn rgba(self) -> gpui::Rgba {
+        gpui::Rgba {
+            r: self.r() as f32 / 255.0,
+            g: self.g() as f32 / 255.0,
+            b: self.b() as f32 / 255.0,
+            a: self.a() as f32 / 255.0,
+        }
+    }
+}

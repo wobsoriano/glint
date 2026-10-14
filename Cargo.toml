@@ -1,15 +1,26 @@
 [package]
-name = "prettyshot"
+name = "glint"
 version = "0.1.0"
 edition = "2021"
-description = "Beautiful screenshots for Windows, built with GPUI"
+description = "Screenshots, annotation and screen recording for Windows, built with GPUI"
+
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+windows = "0.62"
 
 [dependencies]
+glint-render = { path = "crates/glint-render" }
 gpui = "0.2.2"
 xcap = "0.9.8"
 global-hotkey = "0.8"
 tray-icon = "0.26"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { workspace = true }
 tiny-skia = "0.11"
 ab_glyph = "0.2"
 arboard = { version = "3", features = ["image-data"] }

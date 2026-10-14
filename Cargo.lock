@@ -2474,6 +2474,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "glint"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "arboard",
+ "chrono",
+ "dirs 6.0.0",
+ "glint-render",
+ "global-hotkey",
+ "gpui",
+ "image",
+ "raw-window-handle",
+ "regex",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tiny-skia",
+ "tray-icon",
+ "windows 0.62.2",
+ "xcap",
+]
+
+[[package]]
+name = "glint-render"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "image",
+ "serde",
+ "smallvec",
+ "tiny-skia",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4812,29 +4847,6 @@ checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "prettyshot"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "anyhow",
- "arboard",
- "chrono",
- "dirs 6.0.0",
- "global-hotkey",
- "gpui",
- "image",
- "raw-window-handle",
- "regex",
- "serde",
- "serde_json",
- "smallvec",
- "tiny-skia",
- "tray-icon",
- "windows 0.62.2",
- "xcap",
 ]
 
 [[package]]

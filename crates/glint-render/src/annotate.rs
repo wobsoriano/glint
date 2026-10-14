@@ -1,6 +1,6 @@
 //! Annotation shapes drawn on top of a screenshot. All coordinates are in source-image pixels.
 
-use crate::settings::RedactStyle;
+use serde::{Deserialize, Serialize};
 use crate::style::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -340,4 +340,22 @@ fn seg_dist(p: Pt, a: Pt, b: Pt) -> f32 {
     }
     let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
     p.dist(pt(a.x + t * dx, a.y + t * dy))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RedactStyle {
+    Blur,
+    Pixelate,
+    Solid,
+}
+
+impl RedactStyle {
+    pub const ALL: [RedactStyle; 3] = [RedactStyle::Blur, RedactStyle::Pixelate, RedactStyle::Solid];
+    pub fn label(self) -> &'static str {
+        match self {
+            RedactStyle::Blur => "Blur",
+            RedactStyle::Pixelate => "Pixelate",
+            RedactStyle::Solid => "Solid",
+        }
+    }
 }

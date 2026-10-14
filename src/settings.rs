@@ -1,5 +1,6 @@
-//! Persistent user preferences, stored as JSON in %APPDATA%\PrettyShot\settings.json.
+//! Persistent user preferences, stored as JSON in %APPDATA%\Glint\settings.json.
 
+pub use crate::annotate::RedactStyle;
 use crate::style::Style;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -9,24 +10,6 @@ pub enum AfterCapture {
     QuickAccess,
     OpenEditor,
     Nothing,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RedactStyle {
-    Blur,
-    Pixelate,
-    Solid,
-}
-
-impl RedactStyle {
-    pub const ALL: [RedactStyle; 3] = [RedactStyle::Blur, RedactStyle::Pixelate, RedactStyle::Solid];
-    pub fn label(self) -> &'static str {
-        match self {
-            RedactStyle::Blur => "Blur",
-            RedactStyle::Pixelate => "Pixelate",
-            RedactStyle::Solid => "Solid",
-        }
-    }
 }
 
 /// Categories of sensitive data the auto-redactor looks for.
@@ -101,7 +84,7 @@ impl Default for Settings {
         let save_dir = dirs::picture_dir()
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("PrettyShot");
+            .join("Glint");
         Self {
             style: Style::default(),
             after_capture: AfterCapture::QuickAccess,
@@ -123,7 +106,7 @@ impl Default for Settings {
 fn path() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("PrettyShot")
+        .join("Glint")
         .join("settings.json")
 }
 

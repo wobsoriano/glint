@@ -1,0 +1,11 @@
+[package]
+name = "glint-render"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = { workspace = true }
+tiny-skia = "0.11"
+ab_glyph = "0.2"
+serde = { workspace = true }
+smallvec = "1"

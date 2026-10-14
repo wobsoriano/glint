@@ -2,7 +2,7 @@
 //! The editor preview uses this exact code at a reduced scale, so what you see is what you export.
 
 use crate::annotate::{pt, Annotation, Pt, Shape, TextStyle, R};
-use crate::settings::RedactStyle;
+use crate::annotate::RedactStyle;
 use crate::style::{Background, Chrome, Color, Style};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::sync::LazyLock;

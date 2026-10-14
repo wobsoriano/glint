@@ -76,13 +76,13 @@ pub fn set_launch_at_login(enabled: bool) {
             let _ = RegSetKeyValueW(
                 HKEY_CURRENT_USER,
                 RUN_KEY,
-                w!("PrettyShot"),
+                w!("Glint"),
                 REG_SZ.0,
                 Some(value.as_ptr() as *const _),
                 (value.len() * 2) as u32,
             );
         } else {
-            let _ = RegDeleteKeyValueW(HKEY_CURRENT_USER, RUN_KEY, w!("PrettyShot"));
+            let _ = RegDeleteKeyValueW(HKEY_CURRENT_USER, RUN_KEY, w!("Glint"));
         }
     }
 }
@@ -90,7 +90,7 @@ pub fn set_launch_at_login(enabled: bool) {
 /// Returns false if another instance is already running.
 pub fn single_instance() -> bool {
     unsafe {
-        let name = HSTRING::from("Local\\PrettyShot.SingleInstance");
+        let name = HSTRING::from("Local\\Glint.SingleInstance");
         let handle = CreateMutexW(None, true, &name);
         // Leak the handle so the mutex lives as long as the process.
         std::mem::forget(handle);
@@ -114,7 +114,7 @@ pub fn copy_text(text: &str) -> anyhow::Result<()> {
 }
 
 pub fn file_name(created: &chrono::DateTime<chrono::Local>) -> String {
-    format!("PrettyShot {}.png", created.format("%Y-%m-%d at %H.%M.%S"))
+    format!("Glint {}.png", created.format("%Y-%m-%d at %H.%M.%S"))
 }
 
 pub fn save_png(img: &image::RgbaImage, path: &std::path::Path) -> anyhow::Result<()> {

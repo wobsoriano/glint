@@ -40,14 +40,6 @@ impl Color {
     pub fn to_skia(self) -> tiny_skia::Color {
         tiny_skia::Color::from_rgba8(self.r(), self.g(), self.b(), self.a())
     }
-    pub fn to_gpui(self) -> gpui::Rgba {
-        gpui::Rgba {
-            r: self.r() as f32 / 255.0,
-            g: self.g() as f32 / 255.0,
-            b: self.b() as f32 / 255.0,
-            a: self.a() as f32 / 255.0,
-        }
-    }
     pub fn hex(self) -> String {
         format!("#{:02X}{:02X}{:02X}", self.r(), self.g(), self.b())
     }

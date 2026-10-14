@@ -1,4 +1,4 @@
-# PrettyShot
+# Glint
 
 A CleanShot-style screenshot tool for Windows, built in Rust with [GPUI](https://gpui.rs) (Zed's GPU-accelerated UI framework).
 
@@ -49,10 +49,10 @@ Requires Rust (MSVC toolchain) and the Windows 10/11 SDK.
 
 ```sh
 cargo run --release               # opens the main window
-prettyshot.exe --background       # start silently in the tray
+glint.exe --background       # start silently in the tray
 ```
 
-Settings are stored in `%APPDATA%\PrettyShot\settings.json`. Edit the `hotkeys` section to rebind shortcuts, then click "Reload shortcuts" in the main window.
+Settings are stored in `%APPDATA%\Glint\settings.json`. Edit the `hotkeys` section to rebind shortcuts, then click "Reload shortcuts" in the main window.
 
 ## Tests
 
