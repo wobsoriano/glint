@@ -30,6 +30,8 @@ use tiny_skia::{
 pub struct CursorImage {
     pub pixmap: Pixmap,
     pub hotspot: [u32; 2],
+    /// Display scale the sprite was captured at.
+    pub scale: f32,
 }
 
 /// Session data the compositor needs besides the project: the input timeline, cursor
@@ -62,7 +64,7 @@ impl Assets {
             let img = image::open(&path)
                 .with_context(|| format!("reading cursor {}", path.display()))?
                 .to_rgba8();
-            cursors.insert(c.id, CursorImage { pixmap: pixmap_from_rgba(&img), hotspot: c.hotspot });
+            cursors.insert(c.id, CursorImage { pixmap: pixmap_from_rgba(&img), hotspot: c.hotspot, scale: c.scale });
         }
         Ok(Self::new(input, cursors, captions))
     }
@@ -264,7 +266,6 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     }
 
     // Overlays inside the card do not grow with zoom: they scale with the unzoomed card.
-    let unzoomed = l.fill_h / (project.crop.h as f64 * src.1 as f64);
     if project.click_highlights {
         let base = l.fill_h * 21.0 / 1080.0 * project.design.cursor.size as f64;
         for c in motion.clicks.at(t, base) {
@@ -275,8 +276,8 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     if project.design.cursor.visible {
         if let Some(p) = motion.pointer.at(t) {
             let (cx, cy) = xf.point(p.x, p.y);
-            let s = (unzoomed * project.design.cursor.size as f64 * p.press_scale) as f32;
-            let sprite = assets.cursors.get(&p.cursor).unwrap_or_else(|| fallback_cursor());
+            let sprite = sprite_for(assets, p.cursor);
+            let s = (cursor_scale(l.fill_h, sprite) * project.design.cursor.size as f64 * p.press_scale) as f32;
             let tf = Transform::from_translate(cx, cy)
                 .pre_scale(s, s)
                 .pre_translate(-(sprite.hotspot[0] as f32), -(sprite.hotspot[1] as f32));
@@ -531,6 +532,16 @@ fn draw_captions(pm: &mut Pixmap, project: &Project, c: &crate::overlays::Captio
 }
 
 /// Arrow drawn when a recording has no sprite for a cursor id.
+fn sprite_for(assets: &Assets, id: u32) -> &CursorImage {
+    assets.cursors.get(&id).unwrap_or_else(|| fallback_cursor())
+}
+
+/// Sprite scale that makes a 16 logical px cursor 3.2% of the card height, so the cursor reads
+/// the same at any recording resolution or display scale.
+fn cursor_scale(card_h: f64, sprite: &CursorImage) -> f64 {
+    card_h * 0.032 / 16.0 / sprite.scale.max(0.5) as f64
+}
+
 fn fallback_cursor() -> &'static CursorImage {
     static ARROW: OnceLock<CursorImage> = OnceLock::new();
     ARROW.get_or_init(|| {
@@ -549,7 +560,7 @@ fn fallback_cursor() -> &'static CursorImage {
         pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
         paint.set_color(Color::WHITE.to_skia());
         pm.stroke_path(&path, &paint, &Stroke { width: 1.8, ..Default::default() }, Transform::identity(), None);
-        CursorImage { pixmap: pm, hotspot: [2, 2] }
+        CursorImage { pixmap: pm, hotspot: [2, 2], scale: 1.0 }
     })
 }
 
@@ -612,7 +623,7 @@ mod tests {
         };
         let mut sprite = Pixmap::new(48, 48).unwrap();
         sprite.fill(tiny_skia::Color::BLACK);
-        let cursors = HashMap::from([(0, CursorImage { pixmap: sprite, hotspot: [0, 0] })]);
+        let cursors = HashMap::from([(0, CursorImage { pixmap: sprite, hotspot: [0, 0], scale: 1.5 })]);
         let assets = Assets::new(input, cursors, Vec::new());
         let mut project = Project::new(5000.0);
         project.design.padding = 0.0;
@@ -638,9 +649,9 @@ mod tests {
     }
 
     #[test]
-    fn cursor_keeps_its_recorded_size_relative_to_the_content() {
-        // 48 px over 2160 rows becomes 24 px over 1080 rows, times the project's multiplier.
-        assert_eq!(cursor_size_at_1080p(1.0), (24, 24));
-        assert_eq!(cursor_size_at_1080p(1.5), (36, 36));
+    fn cursor_is_sized_relative_to_the_card() {
+        // A 48 px sprite at 150% is 32 logical px: 2 x 3.2% of the 1080 px card, times the multiplier.
+        assert_eq!(cursor_size_at_1080p(1.0), (69, 69));
+        assert_eq!(cursor_size_at_1080p(0.5), (35, 35));
     }
 }
