@@ -254,7 +254,7 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     let xf_at = |t: f64| ScreenXf::new(project, l, src, motion.viewport(t));
     let xf = xf_at(t);
 
-    let mut pm = stage.base.clone();
+    let mut pm = canvas_from(&stage.base);
     let samples = if blur { shutter_samples(project, t, &xf_at, l) } else { vec![xf] };
     for (i, s) in samples.iter().enumerate() {
         // Drawing sample i at 1/(i+1) keeps the result the running average.
@@ -549,6 +549,32 @@ fn fallback_cursor() -> &'static CursorImage {
         pm.stroke_path(&path, &paint, &Stroke { width: 1.8, ..Default::default() }, Transform::identity(), None);
         CursorImage { pixmap: pm, hotspot: [2, 2] }
     })
+}
+
+/// Frames handed back by consumers, reused as canvases: a fresh multi-megabyte buffer per
+/// frame costs more in page faults than drawing the frame.
+static CANVASES: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
+const MAX_POOLED: usize = 8;
+
+/// Returns a finished frame's buffer for reuse by later frames.
+pub fn recycle_frame(frame: RgbaImage) {
+    let mut pool = CANVASES.lock().unwrap_or_else(|e| e.into_inner());
+    if pool.len() < MAX_POOLED {
+        pool.push(frame.into_raw());
+    }
+}
+
+fn canvas_from(base: &Pixmap) -> Pixmap {
+    let pooled = CANVASES.lock().unwrap_or_else(|e| e.into_inner()).pop();
+    match pooled {
+        Some(mut data) => {
+            data.clear();
+            data.extend_from_slice(base.data());
+            let size = tiny_skia::IntSize::from_wh(base.width(), base.height()).expect("non-zero output size");
+            Pixmap::from_vec(data, size).expect("buffer matches size")
+        }
+        None => base.clone(),
+    }
 }
 
 /// Unpremultiplies in place; opaque pixels, nearly all of them, are left untouched.
