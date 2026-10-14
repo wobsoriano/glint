@@ -245,16 +245,28 @@ pub fn place(window: &gpui::Window, rect: [i32; 4], cx: &gpui::App) {
         .detach();
 }
 
-/// Gives a regular window the Windows 11 Mica backdrop and a dark title bar. GPUI must
-/// open the window with a see-through background for the backdrop to show.
+/// Gives a regular window the Windows 11 Mica backdrop. GPUI must open the window with a
+/// see-through background for the backdrop to show; GPUI keeps the title bar's light or
+/// dark mode in step with the system.
 pub fn mica(window: &gpui::Window) {
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMSBT_MAINWINDOW, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE};
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMSBT_MAINWINDOW, DWMWA_SYSTEMBACKDROP_TYPE};
     let Some(h) = crate::win::hwnd(window) else { return };
-    let dark = windows::core::BOOL::from(true);
     let backdrop = DWMSBT_MAINWINDOW;
     unsafe {
-        let _ = DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark as *const _ as *const _, 4);
         let _ = DwmSetWindowAttribute(h, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop as *const _ as *const _, 4);
+    }
+    caption_text(window);
+}
+
+/// Sets the title text color for the current theme. Over GPUI's blurred backdrop DWM draws
+/// the active title in white even in light mode, so light mode asks for black explicitly.
+pub fn caption_text(window: &gpui::Window) {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TEXT_COLOR};
+    let Some(h) = crate::win::hwnd(window) else { return };
+    const DWMWA_COLOR_DEFAULT: u32 = 0xFFFF_FFFF;
+    let color: u32 = if crate::ui::theme().dark { DWMWA_COLOR_DEFAULT } else { 0x0000_0000 };
+    unsafe {
+        let _ = DwmSetWindowAttribute(h, DWMWA_TEXT_COLOR, &color as *const _ as *const _, 4);
     }
 }
 

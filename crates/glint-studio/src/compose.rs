@@ -13,7 +13,7 @@ use anyhow::Context;
 use glint_media::input::InputTimeline;
 use glint_render::annotate::R;
 use glint_render::render::{
-    draw_shadow, draw_text, make_blur_bg, measure_text, paint_background, pixmap_from_rgba,
+    draw_background, draw_shadow, draw_text, make_blur_bg, measure_text, pixmap_from_rgba,
     rounded_rect,
 };
 use glint_render::style::{Background, Color};
@@ -184,13 +184,15 @@ impl Stage {
             Background::Image(p) => image::open(p).ok().map(|i| pixmap_from_rgba(&i.to_rgba8())),
             _ => None,
         };
-        paint_background(&mut base, bg, blur.as_ref(), image.as_ref());
+        draw_background(&mut base, bg, out.0 as f32, out.1 as f32, (0.0, 0.0), blur.as_ref(), image.as_ref());
         let short = out.0.min(out.1) as f32;
         let shadow = project.design.shadow.clamp(0.0, 1.0);
         if shadow > 0.0 {
-            draw_shadow(&mut base, &layout.card, layout.radius, short * 0.035, shadow);
-            if let Some((b, r)) = layout.bubble.filter(|_| has_camera) {
-                draw_shadow(&mut base, &b, r, short * 0.02, shadow);
+            if let Some(p) = rounded_rect(&layout.card, layout.radius) {
+                draw_shadow(&mut base, &p, short * 0.035, shadow);
+            }
+            if let Some(p) = layout.bubble.filter(|_| has_camera).and_then(|(b, r)| rounded_rect(&b, r)) {
+                draw_shadow(&mut base, &p, short * 0.02, shadow);
             }
         }
         let mut card_mask = Mask::new(out.0, out.1).expect("non-zero output size");
@@ -254,7 +256,7 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     let xf_at = |t: f64| ScreenXf::new(project, l, src, motion.viewport(t));
     let xf = xf_at(t);
 
-    let mut pm = stage.base.clone();
+    let mut pm = canvas_from(&stage.base);
     let samples = if blur { shutter_samples(project, t, &xf_at, l) } else { vec![xf] };
     for (i, s) in samples.iter().enumerate() {
         // Drawing sample i at 1/(i+1) keeps the result the running average.
@@ -549,6 +551,32 @@ fn fallback_cursor() -> &'static CursorImage {
         pm.stroke_path(&path, &paint, &Stroke { width: 1.8, ..Default::default() }, Transform::identity(), None);
         CursorImage { pixmap: pm, hotspot: [2, 2] }
     })
+}
+
+/// Frames handed back by consumers, reused as canvases: a fresh multi-megabyte buffer per
+/// frame costs more in page faults than drawing the frame.
+static CANVASES: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
+const MAX_POOLED: usize = 8;
+
+/// Returns a finished frame's buffer for reuse by later frames.
+pub fn recycle_frame(frame: RgbaImage) {
+    let mut pool = CANVASES.lock().unwrap_or_else(|e| e.into_inner());
+    if pool.len() < MAX_POOLED {
+        pool.push(frame.into_raw());
+    }
+}
+
+fn canvas_from(base: &Pixmap) -> Pixmap {
+    let pooled = CANVASES.lock().unwrap_or_else(|e| e.into_inner()).pop();
+    match pooled {
+        Some(mut data) => {
+            data.clear();
+            data.extend_from_slice(base.data());
+            let size = tiny_skia::IntSize::from_wh(base.width(), base.height()).expect("non-zero output size");
+            Pixmap::from_vec(data, size).expect("buffer matches size")
+        }
+        None => base.clone(),
+    }
 }
 
 /// Unpremultiplies in place; opaque pixels, nearly all of them, are left untouched.

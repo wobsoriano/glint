@@ -6,8 +6,11 @@ edition = "2021"
 [dependencies]
 glint-render = { path = "../glint-render" }
 glint-media = { path = "../glint-media" }
+glint-transcribe = { path = "../glint-transcribe" }
 image = { workspace = true }
 tiny-skia = "0.11"
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+gif = "0.14"
+color_quant = "1.1"

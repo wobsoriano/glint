@@ -3,7 +3,7 @@
 use super::chrome::{self, Kind, Placement};
 use super::target::work_area;
 use super::{Stage, Target};
-use crate::ui::{self, FONT, MUTED, TEXT};
+use crate::ui::{self, FONT};
 use gpui::prelude::*;
 use gpui::{div, px, rgb, rgba, AnyWindowHandle, App, ClickEvent, Context, FontWeight, SharedString, Window};
 use std::time::Instant;
@@ -53,8 +53,8 @@ fn button(id: &'static str, icon: &str, danger: bool, on: impl Fn(&ClickEvent, &
         .justify_center()
         .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
-        .hover(move |s| if danger { s.bg(rgba(0xC42B1CE6)) } else { s.bg(rgba(0xFFFFFF1F)) })
-        .child(ui::icon(icon, 16., rgb(TEXT)))
+        .hover(move |s| if danger { s.bg(rgba(0xC42B1CE6)) } else { s.bg(ui::theme().control_hover) })
+        .child(ui::icon(icon, 16., ui::theme().text))
         .on_click(on)
 }
 
@@ -74,10 +74,10 @@ impl Render for Bar {
             .px_2()
             .font_family(FONT)
             .rounded(px(ui::RADIUS_WINDOW))
-            .bg(rgba(0x1C1C1FF2))
+            .bg(ui::theme().flyout)
             .border_1()
-            .border_color(rgba(0xFFFFFF26))
-            .text_color(rgb(TEXT));
+            .border_color(ui::theme().border)
+            .text_color(ui::theme().text);
         if self.confirm_delete {
             return shell
                 .justify_between()
@@ -129,9 +129,9 @@ impl Render for Bar {
                     .flex_none()
                     .child(div().size(px(10.)).rounded_full().bg(if paused { rgb(0xF7B500) } else if lit { rgb(0xFF453A) } else { rgba(0xFF453A40) }))
                     .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(label))
-                    .when(paused, |d| d.child(div().text_xs().text_color(rgb(MUTED)).child("Paused"))),
+                    .when(paused, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Paused"))),
             )
-            .child(div().w(px(1.)).h(px(22.)).bg(rgba(0xFFFFFF26)))
+            .child(div().w(px(1.)).h(px(22.)).bg(ui::theme().border))
             .child(button("pause", if paused { "play" } else { "pause" }, false, later(super::pause_toggle)))
             .child(button("restart", "restart", false, later(super::restart)))
             .child(button("stop", "stop", false, later(super::stop)))

@@ -301,8 +301,8 @@ impl Render for Prompter {
                         .items_end()
                         .gap_1p5()
                         .text_xs()
-                        .text_color(rgb(ui::MUTED))
-                        .child(div().size(px(6.)).mb(px(5.)).rounded_full().bg(if listening { rgb(0x34C759) } else { rgb(ui::MUTED) }))
+                        .text_color(rgba(0xFFFFFF99))
+                        .child(div().size(px(6.)).mb(px(5.)).rounded_full().bg(if listening { rgb(0x34C759) } else { rgba(0xFFFFFF99) }))
                         .child(note)
                         .when(!tip.is_empty(), |d| d.tooltip(ui::tooltip(tip))),
                 ),

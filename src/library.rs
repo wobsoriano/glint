@@ -3,6 +3,7 @@
 
 use anyhow::{bail, Context as _, Result};
 use chrono::{DateTime, Local};
+use glint_render::doc::EditDoc;
 use image::RgbaImage;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -114,12 +115,12 @@ impl Library {
         crate::settings::data_dir().join("Library")
     }
 
-    /// Writes a new screenshot capture. `image` is the deliverable (with any automatic
-    /// redactions applied); `base` is the untouched original.
+    /// Writes a new screenshot capture. `base` is the untouched original; `edit` is an
+    /// initial edit (automatic redactions) and the deliverable it renders to.
     pub fn import_screenshot(
         &self,
         base: &RgbaImage,
-        image: &RgbaImage,
+        edit: Option<(&RgbaImage, &EditDoc)>,
         created: DateTime<Local>,
         source: Option<String>,
         imported_from: Option<PathBuf>,
@@ -143,11 +144,17 @@ impl Library {
         let (id, staging) = self.reserve(&created)?;
         let written = (|| -> Result<()> {
             write_png(base, &staging.join("base.png"))?;
-            if base == image {
-                std::fs::copy(staging.join("base.png"), staging.join("image.png"))?;
-            } else {
-                write_png(image, &staging.join("image.png"))?;
-            }
+            let image = match edit {
+                Some((image, doc)) => {
+                    write_png(image, &staging.join("image.png"))?;
+                    std::fs::write(staging.join("edit.json"), doc.to_json())?;
+                    image
+                }
+                None => {
+                    std::fs::copy(staging.join("base.png"), staging.join("image.png"))?;
+                    base
+                }
+            };
             write_png(&thumbnail(image), &staging.join("thumb.png"))?;
             write_meta(&staging, &meta)
         })();
@@ -200,7 +207,14 @@ impl Library {
             bail!("{} has no pixels", path.display());
         }
         let title = path.file_stem().map(|s| s.to_string_lossy().into_owned());
-        self.import_screenshot(&img, &img, Local::now(), None, Some(path.to_path_buf()), title)
+        self.import_screenshot(&img, None, Local::now(), None, Some(path.to_path_buf()), title)
+    }
+
+    /// The capture directory `path` names or lies inside, when it is in this Library.
+    pub fn item_dir(&self, path: &Path) -> Option<PathBuf> {
+        let rel = path.strip_prefix(&self.root).ok()?;
+        let first = rel.components().next()?;
+        Some(self.root.join(first))
     }
 
     /// Every capture under the root, newest first. Unreadable entries are skipped.
@@ -243,6 +257,44 @@ pub fn load(dir: &Path) -> Result<Item> {
         bail!("{} has kind {:?} in the wrong directory type", dir.display(), meta.kind);
     }
     Ok(Item { dir: dir.to_path_buf(), meta, bytes: dir_size(dir) })
+}
+
+/// The untouched original and the saved edit, if any, of a screenshot.
+pub fn load_edit(item: &Item) -> Result<(RgbaImage, Option<EditDoc>)> {
+    let path = item.dir.join("base.png");
+    let base = image::open(&path).with_context(|| format!("reading {}", path.display()))?.to_rgba8();
+    let doc = match std::fs::read_to_string(item.dir.join("edit.json")) {
+        Ok(json) => Some(EditDoc::from_json(&json).with_context(|| format!("parsing {}", item.dir.join("edit.json").display()))?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e).context("reading edit.json"),
+    };
+    Ok((base, doc))
+}
+
+/// Stores an edit: the flattened deliverable, the document that reproduces it from base.png,
+/// a fresh thumbnail and the modification time. Every file is written to a temporary name
+/// first and renamed into place, so a failed save leaves the previous edit intact.
+pub fn save_edit(item: &Item, image: &RgbaImage, doc: &EditDoc) -> Result<Item> {
+    let dir = &item.dir;
+    let staged = [("image.png", dir.join("image.png.tmp")), ("edit.json", dir.join("edit.json.tmp")), ("thumb.png", dir.join("thumb.png.tmp"))];
+    let written = (|| -> Result<()> {
+        write_png(image, &staged[0].1)?;
+        std::fs::write(&staged[1].1, doc.to_json()).with_context(|| format!("writing {}", staged[1].1.display()))?;
+        write_png(&thumbnail(image), &staged[2].1)
+    })();
+    if let Err(e) = written {
+        for (_, tmp) in &staged {
+            let _ = std::fs::remove_file(tmp);
+        }
+        return Err(e);
+    }
+    for (name, tmp) in &staged {
+        std::fs::rename(tmp, dir.join(name)).with_context(|| format!("saving {}", dir.join(name).display()))?;
+    }
+    let mut meta = item.meta.clone();
+    meta.modified = Local::now();
+    write_meta(dir, &meta)?;
+    load(dir)
 }
 
 /// Sets the user-visible title. The directory name never changes.
@@ -375,7 +427,7 @@ mod tests {
         let mut redacted = base.clone();
         redacted.put_pixel(0, 0, image::Rgba([0, 0, 0, 255]));
         let item = lib
-            .import_screenshot(&base, &redacted, at(14, 3, 22), Some("Display 1".into()), None, None)
+            .import_screenshot(&base, Some((&redacted, &EditDoc::default())), at(14, 3, 22), Some("Display 1".into()), None, None)
             .unwrap();
 
         assert!(item.id().starts_with("2026-10-14_14-03-22_"), "id {}", item.id());
@@ -387,7 +439,7 @@ mod tests {
         assert_eq!(image::open(item.deliverable()).unwrap().to_rgba8(), redacted);
         let thumb = image::open(item.thumb()).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (512, 256));
-        assert!(!item.is_edited());
+        assert!(item.is_edited(), "automatic redactions stay editable");
         let names: Vec<String> = std::fs::read_dir(&root.0).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         assert_eq!(names, vec![item.id().to_string()], "no staging directory left behind");
     }
@@ -418,8 +470,8 @@ mod tests {
         let root = TempRoot::new("scan");
         let lib = Library::new(&root.0);
         let img = checker(40, 40);
-        let older = lib.import_screenshot(&img, &img, at(9, 0, 0), None, None, None).unwrap();
-        let newer = lib.import_screenshot(&img, &img, at(18, 30, 0), None, None, None).unwrap();
+        let older = lib.import_screenshot(&img, None, at(9, 0, 0), None, None, None).unwrap();
+        let newer = lib.import_screenshot(&img, None, at(18, 30, 0), None, None, None).unwrap();
 
         let rec_dir = root.0.join("2026-10-14_12-00-00_beef.glintrec");
         std::fs::create_dir_all(&rec_dir).unwrap();
@@ -455,7 +507,7 @@ mod tests {
         let root = TempRoot::new("rename");
         let lib = Library::new(&root.0);
         let img = checker(16, 16);
-        let item = lib.import_screenshot(&img, &img, Local.with_ymd_and_hms(2001, 2, 3, 10, 0, 0).unwrap(), None, None, None).unwrap();
+        let item = lib.import_screenshot(&img, None, Local.with_ymd_and_hms(2001, 2, 3, 10, 0, 0).unwrap(), None, None, None).unwrap();
 
         let renamed = rename(&item, "  Login bug  ").unwrap();
         assert_eq!(renamed.meta.title, "Login bug");
@@ -486,5 +538,42 @@ mod tests {
         let thumb = image::open(item.thumb()).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (512, 288));
         assert_eq!(lib.scan(), vec![item]);
+    }
+
+    #[test]
+    fn save_edit_replaces_the_deliverable_and_reopens_the_same_doc() {
+        let root = TempRoot::new("edit");
+        let lib = Library::new(&root.0);
+        let base = checker(800, 400);
+        let item = lib.import_screenshot(&base, None, at(8, 0, 0), None, None, None).unwrap();
+        assert_eq!(load_edit(&item).unwrap(), (base.clone(), None));
+
+        let mut doc = EditDoc::default();
+        doc.window_title = Some("Login bug".into());
+        doc.crop = Some(glint_render::annotate::R::new(10.0, 20.0, 300.0, 200.0));
+        let framed = checker(1000, 600);
+        let saved = save_edit(&item, &framed, &doc).unwrap();
+
+        assert!(saved.is_edited());
+        assert!(saved.meta.modified > item.meta.modified);
+        assert_eq!(saved.meta.created, item.meta.created);
+        assert_eq!(image::open(saved.deliverable()).unwrap().to_rgba8(), framed);
+        let thumb = image::open(saved.thumb()).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (512, 307));
+        assert_eq!(load_edit(&saved).unwrap(), (base, Some(doc)));
+        let mut names: Vec<String> = std::fs::read_dir(&saved.dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        assert_eq!(names, ["base.png", "edit.json", "image.png", "meta.json", "thumb.png"]);
+    }
+
+    #[test]
+    fn item_dir_finds_the_capture_a_path_belongs_to() {
+        let lib_root = || PathBuf::from(r"C:\Data\Library");
+        let lib = Library::new(lib_root());
+        let dir = lib_root().join("2026-10-14_14-03-22_ab12");
+        assert_eq!(lib.item_dir(&dir), Some(dir.clone()));
+        assert_eq!(lib.item_dir(&dir.join("image.png")), Some(dir.clone()));
+        assert_eq!(lib.item_dir(&lib_root()), None);
+        assert_eq!(lib.item_dir(Path::new(r"C:\Pictures\shot.png")), None);
     }
 }

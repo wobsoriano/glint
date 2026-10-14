@@ -35,7 +35,8 @@ pub enum Request {
     Library,
     /// Opens the recording picker, or stops the recording in progress.
     Record,
-    /// An image to import into the Library and open in the editor. Always absolute.
+    /// An image to open in the editor: a Library capture as it is, any other file imported
+    /// as a copy first. Always absolute.
     Open(PathBuf),
 }
 
@@ -45,7 +46,7 @@ pub struct Launch {
     pub requests: Vec<Request>,
 }
 
-pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [image...]";
+pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [image or Library capture...]";
 
 pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
     let mut launch = Launch { background: false, requests: Vec::new() };

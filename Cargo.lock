@@ -2508,6 +2508,7 @@ dependencies = [
  "dirs 6.0.0",
  "glint-media",
  "glint-render",
+ "glint-studio",
  "glint-transcribe",
  "global-hotkey",
  "gpui",
@@ -2539,8 +2540,10 @@ name = "glint-render"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "anyhow",
  "image",
  "serde",
+ "serde_json",
  "smallvec",
  "tiny-skia",
 ]
@@ -2550,8 +2553,11 @@ name = "glint-studio"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "color_quant",
+ "gif",
  "glint-media",
  "glint-render",
+ "glint-transcribe",
  "image",
  "serde",
  "serde_json",

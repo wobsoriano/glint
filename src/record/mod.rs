@@ -11,7 +11,7 @@ mod target;
 
 use crate::library::{Item, PendingRecording, RecordingInfo};
 use crate::settings::{RecordPrefs, RecordTarget, Settings};
-use crate::{flow, overlay, shell, stack, store, toast};
+use crate::{flow, overlay, stack, store, toast};
 use chrono::Local;
 use glint_media::{DeviceId, Fps, MicMonitor, RecordOptions, Recorder, VideoReader};
 use gpui::{AnyWindowHandle, App, AppContext as _, Global, Timer};
@@ -447,9 +447,7 @@ fn stop(cx: &mut App) {
 fn automate(item: Item, cx: &mut App) {
     let a = cx.global::<Settings>().after_recording.clone();
     if a.copy {
-        if let Err(e) = shell::copy_files(&[item.deliverable()], None) {
-            toast::show(format!("Copy failed: {e:#}"), cx);
-        }
+        crate::actions::copy(&item, cx);
     }
     if a.save {
         crate::actions::save(&item, false, cx, Box::new(|r, cx| crate::actions::report_save(&r, cx)));
@@ -459,7 +457,5 @@ fn automate(item: Item, cx: &mut App) {
     }
     if a.preview {
         stack::push_recording(item, cx);
-    } else if a.copy && !a.studio {
-        toast::show("Copied the video file", cx);
     }
 }

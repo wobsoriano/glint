@@ -3,7 +3,7 @@
 use crate::capture::{Capture, MonitorShot, WinInfo};
 use crate::flow::{self, AppState};
 use crate::settings::Settings;
-use crate::ui::{self, ACCENT, FONT};
+use crate::ui::{self, FONT};
 use crate::win;
 use gpui::prelude::*;
 use gpui::{
@@ -349,7 +349,7 @@ impl Render for Overlay {
                             .w(px(w + 2.))
                             .h(px(h + 2.))
                             .border_2()
-                            .border_color(if is_sel { rgb(ACCENT) } else { rgb(0xFFFFFF) })
+                            .border_color(if is_sel { ui::theme().accent } else { rgb(0xFFFFFF) })
                             .when(!is_sel, |d| d.bg(rgba(0x7C8CFF1A))),
                     );
                 let label = match (is_sel, self.hover) {
@@ -405,7 +405,7 @@ impl Render for Overlay {
                             Mode::Image => "area",
                         },
                         15.,
-                        rgb(ACCENT),
+                        ui::theme().accent,
                     ))
                     .child(hint),
             ),

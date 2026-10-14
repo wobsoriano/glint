@@ -2,7 +2,7 @@
 
 use super::chrome::{self, Kind, Placement};
 use super::Target;
-use crate::ui::{FONT, MUTED};
+use crate::ui::FONT;
 use gpui::prelude::*;
 use gpui::{div, px, rgb, rgba, AnyWindowHandle, App, Context, FontWeight, Window};
 
@@ -35,7 +35,7 @@ impl Render for Countdown {
                 .border_1()
                 .border_color(rgba(0xFFFFFF26))
                 .child(div().text_size(px(104.)).font_weight(FontWeight::SEMIBOLD).line_height(px(112.)).text_color(rgb(0xFFFFFF)).child(left.to_string()))
-                .child(div().text_xs().text_color(rgb(MUTED)).child("Esc to cancel")),
+                .child(div().text_xs().text_color(rgba(0xFFFFFFB3)).child("Esc to cancel")),
         )
     }
 }

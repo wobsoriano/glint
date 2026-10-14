@@ -5,7 +5,7 @@ use super::chrome::{self, Kind, Placement};
 use super::target::work_area;
 use super::{prefs, rec, update_prefs, Rec, Stage, Target};
 use crate::settings::RecordTarget;
-use crate::ui::{self, FONT, MUTED, TEXT};
+use crate::ui::{self, FONT};
 use crate::{toast, win};
 use glint_media::{AudioDevice, CameraDevice, CameraPreview, DeviceId, DisplayInfo};
 use gpui::prelude::*;
@@ -182,14 +182,14 @@ fn chip(id: impl Into<SharedString>, active: bool, enabled: bool) -> gpui::State
         .gap_1p5()
         .rounded(px(ui::RADIUS_CONTROL))
         .text_sm()
-        .text_color(rgb(TEXT))
+        .text_color(ui::theme().text)
         .when(active, |d| d.bg(ui::accent_alpha(0x40)))
-        .when(enabled, |d| d.cursor_pointer().hover(|s| s.bg(rgba(0xFFFFFF1A))))
+        .when(enabled, |d| d.cursor_pointer().hover(|s| s.bg(ui::theme().control_hover)))
         .when(!enabled, |d| d.opacity(0.4))
 }
 
 fn separator() -> impl IntoElement {
-    div().w(px(1.)).h(px(26.)).mx_1().bg(rgba(0xFFFFFF26))
+    div().w(px(1.)).h(px(26.)).mx_1().bg(ui::theme().border)
 }
 
 /// Meter fill for an RMS level, on a -60..0 dB scale.
@@ -208,14 +208,14 @@ fn row(id: impl Into<SharedString>, label: impl Into<SharedString>, selected: bo
         .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
-        .text_color(rgb(TEXT))
-        .hover(|s| s.bg(rgba(0xFFFFFF1A)))
+        .text_color(ui::theme().text)
+        .hover(|s| s.bg(ui::theme().control_hover))
         .child(div().w(px(16.)).child(if selected { ui::icon("check", 14., ui::accent()).into_any_element() } else { div().into_any_element() }))
         .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.into()))
 }
 
 fn surface() -> gpui::Div {
-    div().rounded(px(ui::RADIUS_WINDOW)).bg(rgba(0x1C1C1FF5)).border_1().border_color(rgba(0xFFFFFF26)).font_family(FONT)
+    div().rounded(px(ui::RADIUS_WINDOW)).bg(ui::theme().flyout).border_1().border_color(ui::theme().border).font_family(FONT)
 }
 
 impl Picker {
@@ -269,7 +269,7 @@ impl Picker {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(rgb(TEXT)).child("Teleprompter"))
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(ui::theme().text).child("Teleprompter"))
                     .child(div().w(px(220.)).child(ui::toggle("prompter-on", "Show while recording", p.teleprompter, |_, _, cx| {
                         update_prefs(cx, |p| p.teleprompter = !p.teleprompter);
                     }))),
@@ -284,12 +284,12 @@ impl Picker {
                     .justify_end()
                     .overflow_hidden()
                     .rounded(px(ui::RADIUS_CONTROL))
-                    .bg(rgb(0x101012))
+                    .bg(ui::theme().field)
                     .border_1()
                     .border_color(ui::accent())
                     .text_sm()
-                    .text_color(rgb(TEXT))
-                    .when(empty, |d| d.justify_start().child(div().text_color(rgb(MUTED)).child("Type or paste your script (Ctrl+V)")))
+                    .text_color(ui::theme().text)
+                    .when(empty, |d| d.justify_start().child(div().text_color(ui::theme().muted).child("Type or paste your script (Ctrl+V)")))
                     .children(paragraphs.into_iter().enumerate().map(move |(i, line)| {
                         div()
                             .min_h(px(18.))
@@ -303,7 +303,7 @@ impl Picker {
                     .items_center()
                     .gap_2()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(ui::theme().muted)
                     .child("Lines")
                     .children((1..=5u32).map(|n| {
                         ui::chip(SharedString::from(format!("lines-{n}")), n.to_string(), p.prompter_lines == n, move |_, _, cx| update_prefs(cx, |p| p.prompter_lines = n))
@@ -352,7 +352,7 @@ impl Render for Picker {
 
         let source = |id: &'static str, k: RecordTarget, icon: &'static str, label: &'static str| {
             chip(id, kind == k, !counting)
-                .child(ui::icon(icon, 16., rgb(TEXT)))
+                .child(ui::icon(icon, 16., ui::theme().text))
                 .child(label)
                 .when(!counting, |d| d.on_click(later(move |cx| super::choose(k, cx))))
         };
@@ -376,17 +376,17 @@ impl Render for Picker {
             .child(
                 chip("camera", self.panel == Some(Panel::Camera), true)
                     .max_w(px(150.))
-                    .child(ui::icon(if camera_name.is_some() { "camera" } else { "camera-off" }, 16., rgb(TEXT)))
+                    .child(ui::icon(if camera_name.is_some() { "camera" } else { "camera-off" }, 16., ui::theme().text))
                     .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(camera_name.unwrap_or_else(|| "No camera".into())))
                     .tooltip(ui::tooltip("Camera"))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(Panel::Camera, w, cx))),
             )
             .child(
                 chip("mic", self.panel == Some(Panel::Mic), true)
-                    .child(ui::icon(if mic_on { "mic" } else { "mic-off" }, 16., rgb(TEXT)))
+                    .child(ui::icon(if mic_on { "mic" } else { "mic-off" }, 16., ui::theme().text))
                     .child(
-                        div().w(px(48.)).h(px(6.)).rounded_full().bg(rgba(0xFFFFFF1F)).overflow_hidden().child(
-                            div().h_full().rounded_full().bg(rgb(0x34C759)).w(px(48. * level.map(meter_fraction).unwrap_or(0.))),
+                        div().w(px(48.)).h(px(6.)).rounded_full().bg(ui::theme().control_hover).overflow_hidden().child(
+                            div().h_full().rounded_full().bg(ui::accent()).w(px(48. * level.map(meter_fraction).unwrap_or(0.))),
                         ),
                     )
                     .tooltip(ui::tooltip(if mic_on { "Microphone" } else { "No microphone" }))
@@ -394,20 +394,20 @@ impl Render for Picker {
             )
             .child(
                 chip("system-audio", p.system_audio, true)
-                    .child(ui::icon(if p.system_audio { "speaker" } else { "speaker-off" }, 16., rgb(TEXT)))
+                    .child(ui::icon(if p.system_audio { "speaker" } else { "speaker-off" }, 16., ui::theme().text))
                     .tooltip(ui::tooltip(if p.system_audio { "Recording system audio" } else { "System audio off" }))
                     .on_click(|_, _, cx| update_prefs(cx, |p| p.system_audio = !p.system_audio)),
             )
             .child(
                 chip("timer", self.panel == Some(Panel::Timer), true)
-                    .child(ui::icon("timer", 16., rgb(TEXT)))
+                    .child(ui::icon("timer", 16., ui::theme().text))
                     .child(if p.countdown == 0 { "Off".to_string() } else { format!("{} s", p.countdown) })
                     .tooltip(ui::tooltip("Start timer"))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(Panel::Timer, w, cx))),
             )
             .child(
                 chip("prompter", p.teleprompter || self.panel == Some(Panel::Script), true)
-                    .child(ui::icon("prompter", 16., rgb(TEXT)))
+                    .child(ui::icon("prompter", 16., ui::theme().text))
                     .tooltip(ui::tooltip("Teleprompter"))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(Panel::Script, w, cx))),
             )
@@ -443,8 +443,8 @@ impl Render for Picker {
                     .justify_center()
                     .rounded(px(ui::RADIUS_CONTROL))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgba(0xFFFFFF1A)))
-                    .child(ui::icon("close", 15., rgb(TEXT)))
+                    .hover(|s| s.bg(ui::theme().control_hover))
+                    .child(ui::icon("close", 15., ui::theme().text))
                     .tooltip(ui::tooltip("Close (Esc)"))
                     .on_click(later(super::close_picker)),
             );
@@ -504,7 +504,7 @@ impl Render for CameraBubble {
             .size_full()
             .rounded_full()
             .overflow_hidden()
-            .bg(rgb(0x101012))
+            .bg(ui::theme().field)
             .border_2()
             .border_color(rgba(0xFFFFFF40))
             .when_some(self.image.clone(), |d, image| d.child(img(ImageSource::Render(image)).size_full().object_fit(ObjectFit::Cover)))
