@@ -193,4 +193,14 @@ mod tests {
         let odd = shrink(&RgbaImage::from_pixel(5, 3, image::Rgba([10, 20, 30, 255])), 2, 2);
         assert!(odd.pixels().all(|p| p.0 == [10, 20, 30, 255]));
     }
+
+    #[test]
+    fn trim_starts_on_the_exact_frame_at_44100_hz() {
+        // Stereo 44.1 kHz, 61 s, every sample carries its frame index.
+        let frames = 61 * 44_100;
+        let samples = (0..frames).flat_map(|f| [f as f32, f as f32]).collect();
+        let trimmed = trim_audio(crate::wav::WavData { sample_rate: 44_100, channels: 2, samples }, 60_000, 61_000);
+        assert_eq!(trimmed.samples[0], 2_646_000.0, "first sample is frame 60 s * 44100");
+        assert_eq!(trimmed.samples.len(), 88_200, "one second of stereo frames");
+    }
 }
