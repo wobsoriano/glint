@@ -225,11 +225,19 @@ impl HookState {
         self.last_pointer_ms = Some(t);
     }
 
-    /// Notices cursor shape changes, saving each new shape once.
+    /// Notices cursor shape changes, saving each new shape once, and position changes the
+    /// hooks did not see (`SetCursorPos` moves the cursor without input events).
     fn poll_cursor(&mut self) {
         let mut info = CURSORINFO { cbSize: std::mem::size_of::<CURSORINFO>() as u32, ..Default::default() };
         if unsafe { GetCursorInfo(&mut info) }.is_err() || info.flags.0 & CURSOR_SHOWING.0 == 0 {
             return;
+        }
+        let pos = self.map(info.ptScreenPos.x, info.ptScreenPos.y);
+        if pos != self.last_pos {
+            if let Some(t) = self.now() {
+                self.last_pos = pos;
+                self.push_pointer(t, pos);
+            }
         }
         let handle = info.hCursor.0 as isize;
         if handle == self.current_handle {

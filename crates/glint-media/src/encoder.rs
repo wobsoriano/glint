@@ -107,10 +107,10 @@ impl Mp4Sink {
             out.SetUINT32(&MF_MT_MPEG2_PROFILE, video.codec.profile())?;
             let video_stream = writer.AddStream(&out).with_context(|| format!("AddStream {:?}", video.codec))?;
 
-            let input = rgb32_type(video.width, video.height, video.fps)?;
+            let input = bgra_type(video.width, video.height, video.fps)?;
             writer
                 .SetInputMediaType(video_stream, &input, None)
-                .with_context(|| format!("SetInputMediaType RGB32 for {:?}", video.codec))?;
+                .with_context(|| format!("SetInputMediaType ARGB32 for {:?}", video.codec))?;
 
             let audio_stream = match audio {
                 Some(a) => Some(add_aac_stream(&writer, a)?),
@@ -224,11 +224,14 @@ impl Mp4Sink {
     }
 }
 
-fn rgb32_type(width: u32, height: u32, fps: u32) -> anyhow::Result<IMFMediaType> {
+/// BGRA input type. `ARGB32` maps to `DXGI_FORMAT_B8G8R8A8_UNORM`, the format WGC frames come
+/// in, so pooled textures can be copied from them (`RGB32` would make `B8G8R8X8` textures and
+/// the copy would silently do nothing).
+fn bgra_type(width: u32, height: u32, fps: u32) -> anyhow::Result<IMFMediaType> {
     unsafe {
         let t = MFCreateMediaType()?;
         t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        t.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)?;
+        t.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_ARGB32)?;
         t.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
         t.SetUINT64(&MF_MT_FRAME_SIZE, pack2(width, height))?;
         t.SetUINT64(&MF_MT_FRAME_RATE, pack2(fps, 1))?;
@@ -342,7 +345,7 @@ impl SampleAllocator {
             let attrs = attrs.unwrap();
             attrs.SetUINT32(&MF_SA_D3D11_BINDFLAGS, (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE).0 as u32)?;
             attrs.SetUINT32(&MF_SA_BUFFERS_PER_SAMPLE, 1)?;
-            let media_type = rgb32_type(width, height, fps)?;
+            let media_type = bgra_type(width, height, fps)?;
             allocator.InitializeSampleAllocatorEx(4, 12, &attrs, &media_type).context("InitializeSampleAllocatorEx")?;
             Ok(Self { allocator })
         }
