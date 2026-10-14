@@ -4,6 +4,7 @@ mod actions;
 mod assets;
 mod capture;
 mod cards;
+mod clip;
 mod editor;
 mod flow;
 mod hotkeys;
@@ -41,6 +42,7 @@ pub enum Command {
     Capture(CaptureCmd),
     CaptureTimer,
     Recording,
+    TrimVideo,
     Library,
     Settings,
     OpenLast,
@@ -70,6 +72,7 @@ pub fn run_command(cmd: Command, cx: &mut App) {
         Command::Capture(CaptureCmd::Previous) => flow::capture_previous(cx),
         Command::CaptureTimer => flow::capture_after_timer(cx),
         Command::Recording => record::toggle(cx),
+        Command::TrimVideo => clip::pick(cx),
         Command::Library => library_window::show(cx),
         Command::Settings => prefs::show(cx),
         Command::OpenLast => flow::open_last(cx),
@@ -85,6 +88,7 @@ fn handle_requests(requests: Vec<Request>, cx: &mut App) {
             Request::Library => library_window::show(cx),
             Request::Record => record::toggle(cx),
             Request::Open(path) => images.push(path),
+            Request::Trim(path) => clip::open(path, cx),
         }
     }
     if !images.is_empty() {
@@ -122,6 +126,7 @@ fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
     for (label, accel, cmd) in items {
         add(accel.map(|a| format!("{label}\t{a}")).unwrap_or(label.to_string()), cmd);
     }
+    add("Trim & Compress Video…".into(), Command::TrimVideo);
     let _ = menu.append(&PredefinedMenuItem::separator());
     add(format!("Open Library\t{}", hotkeys::display(&h.library)), Command::Library);
     add("Edit Last Capture".into(), Command::OpenLast);

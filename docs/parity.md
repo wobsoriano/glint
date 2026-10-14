@@ -80,4 +80,4 @@ calls the real code. The evidence column points at that proof.
 - [ ] On-device transcription; captions editor with seek, position, size, karaoke highlight
 - [ ] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences
 - [ ] Export: quality, resolution, format, 30/60 fps, motion blur, audio; progress; cancel; cached renders
-- [ ] Trim-and-compress editor for regular video files
+- [x] Trim-and-compress editor for regular video files

@@ -35,6 +35,8 @@ pub enum Request {
     Library,
     /// Opens the recording picker, or stops the recording in progress.
     Record,
+    /// A video to open in Trim & Compress. Always absolute.
+    Trim(PathBuf),
     /// An image to open in the editor: a Library capture as it is, any other file imported
     /// as a copy first. Always absolute.
     Open(PathBuf),
@@ -46,7 +48,7 @@ pub struct Launch {
     pub requests: Vec<Request>,
 }
 
-pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [image or Library capture...]";
+pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [--trim video] [image, video or Library capture...]";
 
 pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
     let mut launch = Launch { background: false, requests: Vec::new() };
@@ -68,7 +70,12 @@ pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
                 };
                 launch.requests.push(Request::Capture(cmd));
             }
+            "--trim" => match it.next() {
+                Some(path) => launch.requests.push(Request::Trim(cwd.join(path))),
+                None => bail!("--trim needs a video file\n{USAGE}"),
+            },
             flag if flag.starts_with("--") => bail!("unknown option {flag}\n{USAGE}"),
+            path if crate::clip::is_video(Path::new(path)) => launch.requests.push(Request::Trim(cwd.join(path))),
             path => launch.requests.push(Request::Open(cwd.join(path))),
         }
     }
@@ -186,6 +193,21 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn routes_videos_to_trim() {
+        let cwd = Path::new(r"C:\Users\me\Videos");
+        let l = parse(&args(&["--trim", "talk.mov", r"D:\clip.MP4", "shot.png"]), cwd).unwrap();
+        assert_eq!(
+            l.requests,
+            vec![
+                Request::Trim(PathBuf::from(r"C:\Users\me\Videos\talk.mov")),
+                Request::Trim(PathBuf::from(r"D:\clip.MP4")),
+                Request::Open(PathBuf::from(r"C:\Users\me\Videos\shot.png")),
+            ]
+        );
+        assert!(parse(&args(&["--trim"]), cwd).unwrap_err().to_string().starts_with("--trim needs a video file"));
     }
 
     #[test]
