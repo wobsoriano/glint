@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         println!("mic level rms {level:.4}");
     }
     let wall = started.elapsed();
-    let summary = rec.stop()?;
+    let summary = rec.stop();
     println!("stopped after {wall:?} wall; summary: {summary:#?}");
 
     let mut video = VideoReader::open(&session_dir.join("screen.mp4"))?;

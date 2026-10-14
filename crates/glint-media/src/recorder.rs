@@ -190,8 +190,15 @@ impl Recorder {
         &self.session_dir
     }
 
-    /// Finalizes every file and returns what was written.
-    pub fn stop(self) -> anyhow::Result<RecordSummary> {
+    /// False once the screen capture has ended on its own, because its window closed or it
+    /// failed. [`stop`](Self::stop) still finalizes what was written and says why in `warnings`.
+    pub fn is_live(&self) -> bool {
+        self.screen.is_live()
+    }
+
+    /// Finalizes every file and returns what was written. A track that failed, the screen
+    /// master included, keeps what it wrote before failing and is reported in `warnings`.
+    pub fn stop(self) -> RecordSummary {
         self.clock.pause();
         let duration_ms = self.clock.now_ms();
         let mut warnings = self.warnings;
@@ -223,36 +230,34 @@ impl Recorder {
                 Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
             }
         }
-        let screen_path = self.screen.path.clone();
-        let screen = self.screen.stop().context("screen track")?;
-        if screen.source_closed {
-            warnings.push("the captured window closed; the recording ends there".into());
-        }
-        files.insert(0, screen_path);
+        files.insert(0, self.screen.path.clone());
+        let hardware_encoder = match self.screen.stop() {
+            Ok(screen) => {
+                if screen.source_closed {
+                    warnings.push("the captured window closed; the recording ends there".into());
+                }
+                screen.hardware
+            }
+            Err(e) => {
+                warnings.push(format!("the screen capture failed; the recording ends there: {e:#}"));
+                false
+            }
+        };
 
         let bytes = files.iter().map(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0)).sum();
-        Ok(RecordSummary {
-            files,
-            duration_ms,
-            bytes,
-            width: self.width,
-            height: self.height,
-            hardware_encoder: screen.hardware,
-            warnings,
-        })
+        RecordSummary { files, duration_ms, bytes, width: self.width, height: self.height, hardware_encoder, warnings }
     }
 
     /// Stops and deletes everything this recording wrote, including the session directory
     /// when it is empty afterwards.
-    pub fn cancel(self) -> anyhow::Result<()> {
+    pub fn cancel(self) {
         let dir = self.session_dir.clone();
-        let summary = self.stop()?;
+        let summary = self.stop();
         for f in summary.files {
             let _ = std::fs::remove_file(f);
         }
         let _ = std::fs::remove_dir(dir.join("cursors"));
         let _ = std::fs::remove_dir(&dir);
-        Ok(())
     }
 }
 

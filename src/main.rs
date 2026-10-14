@@ -77,7 +77,7 @@ pub fn run_command(cmd: Command, cx: &mut App) {
         Command::Library => library_window::show(cx),
         Command::Settings => prefs::show(cx),
         Command::OpenLast => flow::open_last(cx),
-        Command::Quit => cx.quit(),
+        Command::Quit => record::quit(cx),
     }
 }
 

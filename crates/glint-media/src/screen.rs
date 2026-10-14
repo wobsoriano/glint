@@ -126,6 +126,11 @@ impl ScreenTrack {
         }
     }
 
+    /// False once the capture thread has ended on its own: its source closed or it failed.
+    pub fn is_live(&self) -> bool {
+        self.thread.as_ref().is_some_and(|t| !t.is_finished())
+    }
+
     pub fn stop(mut self) -> anyhow::Result<ScreenStats> {
         self.stop.store(true, Ordering::Relaxed);
         let thread = self.thread.take().unwrap();
@@ -158,6 +163,13 @@ struct Capture {
     closed: Arc<AtomicBool>,
     warnings: Vec<String>,
     path: PathBuf,
+    fail_after: Option<u64>,
+}
+
+/// `GLINT_FAIL_SCREEN_AFTER=<n>` makes the frame write fail once `n` frames are in the file,
+/// to exercise the capture thread's failure path. Unset, nothing is injected.
+fn injected_failure() -> Option<u64> {
+    std::env::var("GLINT_FAIL_SCREEN_AFTER").ok()?.parse().ok()
 }
 
 impl Capture {
@@ -232,6 +244,7 @@ impl Capture {
             closed,
             warnings,
             path: path.to_path_buf(),
+            fail_after: injected_failure(),
         })
     }
 
@@ -288,20 +301,39 @@ impl Capture {
         while *next_index <= target_index {
             let Some((sample, texture)) = self.samples.take()? else { break };
             unsafe { self.d3d.context.CopyResource(&texture, &self.latest) };
+            if self.fail_after == Some(self.sink.frames()) {
+                bail!("GLINT_FAIL_SCREEN_AFTER: injected failure after {} frames", self.sink.frames());
+            }
             self.sink.write_sample(&sample, *next_index * frame_dur)?;
             *next_index += 1;
         }
         Ok(())
     }
 
+    /// Captures until `stop`, the source closing, or a failure. The session is closed and the
+    /// sink finalized whichever way the loop ended, so the file plays up to the last frame
+    /// written, and a failure is returned only once it has been.
     fn run(mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<ScreenStats> {
+        let captured = self.capture(clock, stop);
+        let _ = self.session.Close();
+        let _ = self.pool.Close();
+        drop(self.item);
+        let frames = self.sink.frames();
+        let hardware = self.sink.hardware();
+        let finished = self.sink.finish();
+        let source_closed = captured?;
+        finished?;
+        let bytes = std::fs::metadata(&self.path)?.len();
+        Ok(ScreenStats { frames, bytes, hardware, source_closed })
+    }
+
+    /// The capture loop. True when the source closed before `stop`.
+    fn capture(&mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<bool> {
         let frame_dur = self.sink.params().frame_duration();
         let mut next_index: i64 = 0;
-        let mut source_closed = false;
         while !stop.load(Ordering::Relaxed) {
             if self.closed.load(Ordering::Relaxed) {
-                source_closed = true;
-                break;
+                return Ok(true);
             }
             self.drain()?;
             if clock.is_paused() {
@@ -313,17 +345,8 @@ impl Capture {
             let wait = (next_due - media_100ns(clock)).clamp(5_000, frame_dur);
             std::thread::sleep(Duration::from_nanos(wait as u64 * 100));
         }
-        if !source_closed {
-            self.drain()?;
-            self.catch_up(clock, frame_dur, &mut next_index)?;
-        }
-        let _ = self.session.Close();
-        let _ = self.pool.Close();
-        drop(self.item);
-        let frames = self.sink.frames();
-        let hardware = self.sink.hardware();
-        self.sink.finish()?;
-        let bytes = std::fs::metadata(&self.path)?.len();
-        Ok(ScreenStats { frames, bytes, hardware, source_closed })
+        self.drain()?;
+        self.catch_up(clock, frame_dur, &mut next_index)?;
+        Ok(false)
     }
 }

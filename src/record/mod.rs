@@ -61,6 +61,8 @@ pub struct Rec {
     /// Meters the chosen microphone while the picker is open.
     monitor: Option<MicMonitor>,
     windows: Windows,
+    /// [`quit`] was asked for; the app quits once the current stage has settled.
+    quitting: bool,
 }
 
 impl Global for Rec {}
@@ -89,6 +91,28 @@ pub fn toggle(cx: &mut App) {
         }
         Stage::Countdown { .. } => cancel_countdown(cx),
         Stage::Live(_) => stop(cx),
+        Stage::Starting | Stage::Finishing => {}
+    }
+}
+
+/// Quits the app, after finishing a recording in progress into the Library like Stop would.
+/// A picker or countdown is cancelled instead.
+pub fn quit(cx: &mut App) {
+    rec(cx).quitting = true;
+    match rec(cx).stage {
+        Stage::Idle => cx.quit(),
+        Stage::Picking => {
+            overlay::close_all(cx);
+            close_picker(cx);
+            cx.quit();
+        }
+        Stage::Countdown { .. } => {
+            cancel_countdown(cx);
+            close_picker(cx);
+            cx.quit();
+        }
+        Stage::Live(_) => stop(cx),
+        // Their continuations read `quitting` and carry on from there.
         Stage::Starting | Stage::Finishing => {}
     }
 }
@@ -335,20 +359,50 @@ fn begin(cx: &mut App) {
                 Ok(recorder) => {
                     let warnings = recorder.warnings().to_vec();
                     rec(cx).stage = Stage::Live(Box::new(Live { recorder, pending, target: target.clone() }));
+                    if rec(cx).quitting {
+                        return stop(cx);
+                    }
                     if rec(cx).windows.bar.is_none() {
                         rec(cx).windows.bar = bar::open(&target, cx);
                     }
                     if !warnings.is_empty() {
                         toast::show(warnings.join(" · "), cx);
                     }
+                    watch_live(epoch, cx);
                 }
                 Err(e) => {
                     let _ = std::fs::remove_dir_all(&pending.dir);
                     toast::show(format!("Could not start recording: {e:#}"), cx);
                     end(cx);
+                    if rec(cx).quitting {
+                        cx.quit();
+                    }
                 }
             }
         });
+    })
+    .detach();
+}
+
+/// Stops on the user's behalf when the screen capture ends before they do, because its
+/// window closed or it failed; `stop` then says why in a toast.
+fn watch_live(epoch: u64, cx: &mut App) {
+    cx.spawn(async move |cx| loop {
+        Timer::after(Duration::from_millis(250)).await;
+        let go_on = cx.update(|cx| {
+            let r = rec(cx);
+            if r.epoch != epoch {
+                return false;
+            }
+            let ended = matches!(&r.stage, Stage::Live(live) if !live.recorder.is_live());
+            if ended {
+                stop(cx);
+            }
+            !ended
+        });
+        if !matches!(go_on, Ok(true)) {
+            break;
+        }
     })
     .detach();
 }
@@ -418,7 +472,7 @@ fn stop(cx: &mut App) {
     let lib = store::library(cx);
     let task = cx.background_spawn(async move {
         let Live { recorder, pending, target } = live;
-        let summary = recorder.stop()?;
+        let summary = recorder.stop();
         let first = VideoReader::open(&summary.files[0]).and_then(|mut r| r.next_frame()).ok().flatten();
         let info = RecordingInfo { width: summary.width, height: summary.height, duration_ms: summary.duration_ms, source: target.label() };
         let item = lib.finish_recording(&pending, &info, first.as_ref().map(|f| &f.image))?;
@@ -435,9 +489,14 @@ fn stop(cx: &mut App) {
                     if !warnings.is_empty() {
                         toast::show(warnings.join(" · "), cx);
                     }
-                    automate(item, cx);
+                    if !rec(cx).quitting {
+                        automate(item, cx);
+                    }
                 }
                 Err(e) => toast::show(format!("The recording could not be saved: {e:#}"), cx),
+            }
+            if rec(cx).quitting {
+                cx.quit();
             }
         });
     })
