@@ -2509,6 +2509,7 @@ dependencies = [
  "glint-media",
  "glint-render",
  "glint-studio",
+ "glint-transcribe",
  "global-hotkey",
  "gpui",
  "image",

@@ -18,6 +18,8 @@ use std::sync::Arc;
 pub enum Mode {
     Image,
     Text,
+    /// Picks what to record: an area, a window, or (Space) the whole display.
+    Record,
 }
 
 pub struct Overlay {
@@ -58,6 +60,7 @@ pub fn open(shots: Vec<MonitorShot>, windows: Vec<WinInfo>, mode: Mode, cx: &mut
         let local: Vec<WinInfo> = windows
             .iter()
             .map(|w| WinInfo {
+                hwnd: w.hwnd,
                 title: w.title.clone(),
                 rect: [w.rect[0] - m.x, w.rect[1] - m.y, w.rect[2], w.rect[3]],
             })
@@ -224,12 +227,16 @@ impl Overlay {
             }
         } else if let Some(i) = self.window_at(p.0, p.1) {
             let w = self.windows[i].clone();
-            self.complete(w.rect, Some(w.title), cx);
+            self.complete(w.rect, Some(w), cx);
         }
     }
 
     fn on_key(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         match e.keystroke.key.as_str() {
+            "escape" if self.mode == Mode::Record => cx.defer(|cx| {
+                close_all(cx);
+                crate::record::reopen_picker(cx);
+            }),
             "escape" => cx.defer(close_all),
             "space" | "f" | "enter" => {
                 let (w, h) = (self.shot.width() as i32, self.shot.height() as i32);
@@ -243,7 +250,7 @@ impl Overlay {
         }
     }
 
-    fn complete(&mut self, rect: [i32; 4], title: Option<String>, cx: &mut Context<Self>) {
+    fn complete(&mut self, rect: [i32; 4], window: Option<WinInfo>, cx: &mut Context<Self>) {
         let (w, h) = (self.shot.width() as i32, self.shot.height() as i32);
         let x = rect[0].clamp(0, w);
         let y = rect[1].clamp(0, h);
@@ -252,6 +259,16 @@ impl Overlay {
         if r - x < 2 || b - y < 2 {
             return;
         }
+        if self.mode == Mode::Record {
+            let global = [x + self.origin.0, y + self.origin.1, r - x, b - y];
+            let window = window.map(|w| (w.hwnd, w.title));
+            cx.defer(move |cx| {
+                close_all(cx);
+                crate::record::picked(global, window, cx);
+            });
+            return;
+        }
+        let title = window.map(|w| w.title);
         let img = image::imageops::crop_imm(self.shot.as_ref(), x as u32, y as u32, (r - x) as u32, (b - y) as u32)
             .to_image();
         let cap = Capture::new(img, self.dpi, title);
@@ -265,6 +282,7 @@ impl Overlay {
             match mode {
                 Mode::Image => flow::finish(cap, cx),
                 Mode::Text => flow::finish_text(cap, cx),
+                Mode::Record => {}
             }
         });
     }
@@ -364,6 +382,7 @@ impl Render for Overlay {
         let hint = match self.mode {
             Mode::Image => "Drag to capture an area  ·  Click a window  ·  Space for full screen  ·  Esc to cancel",
             Mode::Text => "Select text to copy  ·  Esc to cancel",
+            Mode::Record => "Drag to record an area  ·  Click a window  ·  Space for the whole display  ·  Esc to go back",
         };
         root = root.child(
             div().absolute().top(px(24.)).left_0().w_full().flex().justify_center().child(
@@ -379,7 +398,15 @@ impl Render for Overlay {
                     .border_color(rgba(0xFFFFFF1F))
                     .text_sm()
                     .text_color(rgb(0xEDEDED))
-                    .child(ui::icon(if self.mode == Mode::Text { "scan" } else { "area" }, 15., ui::theme().accent))
+                    .child(ui::icon(
+                        match self.mode {
+                            Mode::Text => "scan",
+                            Mode::Record => "record",
+                            Mode::Image => "area",
+                        },
+                        15.,
+                        ui::theme().accent,
+                    ))
                     .child(hint),
             ),
         );

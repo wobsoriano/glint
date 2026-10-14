@@ -23,7 +23,7 @@ impl Default for AfterShot {
     }
 }
 
-/// What happens after every recording. Stored here; the recorder reads it.
+/// What happens after every recording.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AfterRecording {
@@ -36,6 +36,48 @@ pub struct AfterRecording {
 impl Default for AfterRecording {
     fn default() -> Self {
         Self { preview: true, copy: false, save: false, studio: false }
+    }
+}
+
+/// The kind of source the recording picker starts on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordTarget {
+    Display,
+    Window,
+    Area,
+}
+
+/// The recording picker's last choices.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecordPrefs {
+    pub target: RecordTarget,
+    /// Last recorded area, physical virtual-desktop pixels: x, y, w, h.
+    pub area: Option<[i32; 4]>,
+    /// Device ids; `None` records without that input.
+    pub camera: Option<String>,
+    pub mic: Option<String>,
+    pub system_audio: bool,
+    /// Start timer in seconds; 0 starts at once.
+    pub countdown: u32,
+    pub teleprompter: bool,
+    pub script: String,
+    pub prompter_lines: u32,
+}
+
+impl Default for RecordPrefs {
+    fn default() -> Self {
+        Self {
+            target: RecordTarget::Display,
+            area: None,
+            camera: None,
+            mic: None,
+            system_audio: true,
+            countdown: 3,
+            teleprompter: false,
+            script: String::new(),
+            prompter_lines: 3,
+        }
     }
 }
 
@@ -234,6 +276,7 @@ pub struct Settings {
     pub show_loupe: bool,
     pub after_shot: AfterShot,
     pub after_recording: AfterRecording,
+    pub record: RecordPrefs,
     pub overlay: OverlayPrefs,
     pub hotkeys: Hotkeys,
     pub auto_redact: bool,
@@ -262,6 +305,7 @@ impl Default for Settings {
             show_loupe: true,
             after_shot: AfterShot::default(),
             after_recording: AfterRecording::default(),
+            record: RecordPrefs::default(),
             overlay: OverlayPrefs::default(),
             hotkeys: Hotkeys::default(),
             auto_redact: false,

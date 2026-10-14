@@ -6,7 +6,7 @@ use crate::flow::Shot;
 use crate::settings::{Settings, Side};
 use crate::ui::{self, FONT};
 use crate::library::Item;
-use crate::{actions, pin, quicklook, shell, win};
+use crate::{actions, pin, quicklook, shell, toast, win};
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, Global, ImageSource, MouseButton, MouseDownEvent,
@@ -31,9 +31,25 @@ struct StackState(Option<WindowHandle<Stack>>);
 
 impl Global for StackState {}
 
+/// What a card shows: a screenshot with what the editor needs, or a recording.
+#[derive(Clone)]
+enum Entry {
+    Shot(Shot),
+    Recording(Item),
+}
+
+impl Entry {
+    fn item(&self) -> &Item {
+        match self {
+            Entry::Shot(s) => &s.item,
+            Entry::Recording(i) => i,
+        }
+    }
+}
+
 struct Card {
     id: u64,
-    shot: Shot,
+    entry: Entry,
     thumb: Arc<RenderImage>,
     deadline: Option<Instant>,
     status: Option<(SharedString, Instant)>,
@@ -110,9 +126,13 @@ impl Stack {
             self.more = None;
         }
         let Some(card) = self.card(id) else { return };
-        let shot = card.shot.clone();
-        let item = shot.item.clone();
+        let entry = card.entry.clone();
+        let item = entry.item().clone();
         let this = cx.entity().downgrade();
+        let shot = match entry {
+            Entry::Shot(shot) => shot,
+            Entry::Recording(_) => return self.run_recording(id, item, action, window, cx),
+        };
         match action {
             CardAction::Copy => match win::copy_image(&shot.image) {
                 Ok(()) => self.flash(id, "Copied", cx),
@@ -164,6 +184,54 @@ impl Stack {
         }
     }
 
+    fn run_recording(&mut self, id: u64, item: Item, action: CardAction, window: &mut Window, cx: &mut Context<Self>) {
+        match action {
+            CardAction::Copy => {
+                let this = cx.entity().downgrade();
+                self.flash(id, "Preparing video…", cx);
+                actions::with_recording_file(&item, cx, move |file, cx| {
+                    let msg = match file.and_then(|f| shell::copy_files(&[f], None)) {
+                        Ok(()) => "Copied".to_string(),
+                        Err(e) => format!("Copy failed: {e:#}"),
+                    };
+                    let _ = this.update(cx, |s, cx| s.flash(id, msg, cx));
+                });
+            }
+            CardAction::Save | CardAction::SaveAs => {
+                let this = cx.entity().downgrade();
+                actions::save(
+                    &item,
+                    action == CardAction::SaveAs,
+                    cx,
+                    Box::new(move |result, cx| {
+                        if result.is_ok() {
+                            let _ = this.update(cx, |s, cx| s.flash(id, "Saved", cx));
+                        }
+                        actions::report_save(&result, cx);
+                    }),
+                );
+            }
+            CardAction::Edit => toast::show("Studio is not part of this build yet; the recording is in the Library", cx),
+            CardAction::Delete => {
+                let handle = window.window_handle();
+                let this = cx.entity().downgrade();
+                actions::delete(vec![item.dir.clone()], cx, move |ok, cx| {
+                    if ok {
+                        let _ = handle.update(cx, |_, window, cx| {
+                            let _ = this.update(cx, |s, cx| s.remove(id, window, cx));
+                        });
+                    }
+                });
+            }
+            CardAction::Dismiss => self.remove(id, window, cx),
+            CardAction::More => {
+                self.more = if self.more == Some(id) { None } else { Some(id) };
+                cx.notify();
+            }
+            CardAction::Compress | CardAction::CopyText | CardAction::QuickLook | CardAction::Pin => {}
+        }
+    }
+
     /// Starts a system drag of the card's file once the pointer travels past the slop.
     fn on_move(&mut self, id: u64, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some((pid, start)) = self.press else { return };
@@ -177,7 +245,11 @@ impl Stack {
         // OLE never reports the button release to GPUI; disarm so the next move can't re-drag.
         self.press = None;
         let Some(card) = self.card(id) else { return };
-        let (item, image) = (card.shot.item.clone(), card.shot.image.clone());
+        let item = card.entry.item().clone();
+        let image = match &card.entry {
+            Entry::Shot(s) => Some(s.image.clone()),
+            Entry::Recording(_) => None,
+        };
         let dismiss = cx.global::<Settings>().overlay.dismiss_after_drag;
         let (area, side) = (self.area, self.side);
         let handle = window.window_handle();
@@ -185,7 +257,7 @@ impl Stack {
         // The drag loop pumps messages, so it must run outside any GPUI update.
         cx.spawn(async move |_, cx| {
             Timer::after(Duration::from_millis(1)).await;
-            let dropped = actions::drag_file(&item).and_then(|path| shell::drag_out(&path, Some(&image)));
+            let dropped = actions::drag_file(&item).and_then(|path| shell::drag_out(&path, image.as_deref()));
             let _ = handle.update(cx, |_, window, cx| {
                 let _ = this.update(cx, |s, cx| match dropped {
                     Ok(true) if dismiss => s.remove(id, window, cx),
@@ -243,24 +315,38 @@ fn thumb_of(shot: &Shot) -> Arc<RenderImage> {
 pub fn show_edit(item: &Item, image: Arc<image::RgbaImage>, cx: &mut App) {
     let Some(h) = cx.default_global::<StackState>().0 else { return };
     let _ = h.update(cx, |this, _, cx| {
-        for c in this.cards.iter_mut().filter(|c| c.shot.item.dir == item.dir) {
-            c.shot.item = item.clone();
-            c.shot.image = image.clone();
-            c.thumb = thumb_of(&c.shot);
+        for c in &mut this.cards {
+            if let Entry::Shot(shot) = &mut c.entry {
+                if shot.item.dir == item.dir {
+                    shot.item = item.clone();
+                    shot.image = image.clone();
+                    c.thumb = thumb_of(shot);
+                }
+            }
         }
         cx.notify();
     });
 }
 
-/// Adds a capture to the stack, opening the stack on the display under the pointer.
+/// Adds a screenshot to the stack, opening the stack on the display under the pointer.
 pub fn push(shot: Shot, cx: &mut App) {
+    let thumb = thumb_of(&shot);
+    push_entry(Entry::Shot(shot), thumb, cx);
+}
+
+/// Adds a finished recording, shown by its thumbnail with a duration badge.
+pub fn push_recording(item: Item, cx: &mut App) {
+    let thumb = image::open(item.thumb()).map(|i| i.to_rgba8()).unwrap_or_else(|_| image::RgbaImage::from_pixel(16, 9, image::Rgba([17, 17, 19, 255])));
+    push_entry(Entry::Recording(item), win::render_image(&thumb), cx);
+}
+
+fn push_entry(entry: Entry, thumb: Arc<RenderImage>, cx: &mut App) {
     let s = cx.global::<Settings>().overlay.clone();
     let deadline = (s.auto_close_seconds > 0).then(|| Instant::now() + Duration::from_secs(s.auto_close_seconds as u64));
-    let thumb = thumb_of(&shot);
     if let Some(h) = cx.default_global::<StackState>().0 {
         let added = h.update(cx, |this, window, cx| {
             this.next_id += 1;
-            let card = Card { id: this.next_id, shot: shot.clone(), thumb: thumb.clone(), deadline, status: None };
+            let card = Card { id: this.next_id, entry: entry.clone(), thumb: thumb.clone(), deadline, status: None };
             this.cards.push(card);
             let cap = capacity(this.area[3] as f32 / this.scale);
             if this.cards.len() > cap {
@@ -277,7 +363,7 @@ pub fn push(shot: Shot, cx: &mut App) {
     }
     let (area, scale) = shell::work_area_at_cursor();
     let stack = Stack {
-        cards: vec![Card { id: 1, shot, thumb, deadline, status: None }],
+        cards: vec![Card { id: 1, entry, thumb, deadline, status: None }],
         collapsed: false,
         hovered: false,
         area,
@@ -329,6 +415,19 @@ pub fn refresh(cx: &mut App) {
     }
 }
 
+fn count_label(cards: &[Card]) -> String {
+    let n = cards.len();
+    let recordings = cards.iter().filter(|c| matches!(c.entry, Entry::Recording(_))).count();
+    let noun = match (recordings, n) {
+        (0, 1) => "Screenshot",
+        (0, _) => "Screenshots",
+        (r, 1) if r == n => "Recording",
+        (r, _) if r == n => "Recordings",
+        (_, _) => "Captures",
+    };
+    format!("{n} {noun}")
+}
+
 fn round_button(id: SharedString, action: CardAction) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
@@ -369,12 +468,20 @@ fn pill(id: SharedString, action: CardAction) -> gpui::Stateful<gpui::Div> {
         .tooltip(ui::tooltip(action.help()))
 }
 
-/// The action overlay of one card, laid out from the user's card layout.
+/// Actions that only make sense for an image.
+fn image_only(a: CardAction) -> bool {
+    matches!(a, CardAction::Compress | CardAction::CopyText | CardAction::QuickLook | CardAction::Pin)
+}
+
+/// The action overlay of one card, laid out from the user's card layout. Recordings skip
+/// the image-only actions.
 pub fn card_actions(
     layout: &CardLayout,
     key: &str,
+    recording: bool,
     on: impl Fn(CardAction) -> Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App)>,
 ) -> gpui::Div {
+    let shown = move |a: CardAction| !(recording && image_only(a));
     let mut overlay = div()
         .absolute()
         .inset_0()
@@ -384,9 +491,9 @@ pub fn card_actions(
         .items_center()
         .justify_center()
         .gap_1p5()
-        .children(layout.center.iter().map(|&a| pill(format!("{key}-c-{a:?}").into(), a).on_click(on(a))));
+        .children(layout.center.iter().filter(|&&a| shown(a)).map(|&a| pill(format!("{key}-c-{a:?}").into(), a).on_click(on(a))));
     for corner in Corner::ALL {
-        let Some(a) = layout.corner(corner) else { continue };
+        let Some(a) = layout.corner(corner).filter(|&a| shown(a)) else { continue };
         let b = round_button(format!("{key}-{corner:?}").into(), a).absolute().on_click(on(a));
         let b = match corner {
             Corner::TopLeft => b.top(px(6.)).left(px(6.)),
@@ -435,7 +542,6 @@ impl Render for Stack {
         }
 
         let layout = cx.global::<Settings>().overlay.layout.clone();
-        let n = self.cards.len();
         let header = div()
             .h(px(HEADER_H))
             .flex()
@@ -454,7 +560,7 @@ impl Render for Stack {
                     .border_color(t.border)
                     .text_xs()
                     .text_color(t.text)
-                    .child(if n == 1 { "1 Screenshot".to_string() } else { format!("{n} Screenshots") }),
+                    .child(count_label(&self.cards)),
             )
             .child(
                 div()
@@ -501,8 +607,12 @@ impl Render for Stack {
             let id = c.id;
             let key = format!("card{id}");
             let menu_open = self.more == Some(id);
+            let recording = match &c.entry {
+                Entry::Recording(item) => Some(item.meta.duration_ms.unwrap_or(0)),
+                Entry::Shot(_) => None,
+            };
             let w = weak.clone();
-            let actions = card_actions(&layout, &key, move |a| {
+            let actions = card_actions(&layout, &key, recording.is_some(), move |a| {
                 let w = w.clone();
                 Box::new(move |_, window, cx| {
                     cx.stop_propagation();
@@ -524,6 +634,25 @@ impl Render for Stack {
                 .shadow_lg()
                 .cursor_pointer()
                 .child(img(ImageSource::Render(c.thumb.clone())).size_full().object_fit(ObjectFit::Cover))
+                .when_some(recording, |d, ms| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .bottom(px(6.))
+                            .left(px(6.))
+                            .px_1p5()
+                            .py(px(1.))
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .rounded(px(ui::RADIUS_CONTROL))
+                            .bg(rgba(0x000000B3))
+                            .text_xs()
+                            .text_color(rgb(0xFFFFFF))
+                            .child(ui::icon("film", 11., rgb(0xFFFFFF)))
+                            .child(crate::record::clock(ms)),
+                    )
+                })
                 .child(if menu_open { actions } else { actions.invisible().group_hover(SharedString::from(key.clone()), |s| s.visible()) })
                 .when(menu_open, |d| {
                     let w = weak.clone();
@@ -543,7 +672,7 @@ impl Render for Stack {
                             .border_1()
                             .border_color(t.border)
                             .shadow_lg()
-                            .children(layout.hidden.iter().filter(|&&a| a != CardAction::More).map(|&a| {
+                            .children(layout.hidden.iter().filter(|&&a| a != CardAction::More && !(recording.is_some() && image_only(a))).map(|&a| {
                                 let w = w.clone();
                                 div()
                                     .id(SharedString::from(format!("{key}-more-{a:?}")))

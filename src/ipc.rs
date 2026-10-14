@@ -33,6 +33,8 @@ pub enum CaptureCmd {
 pub enum Request {
     Capture(CaptureCmd),
     Library,
+    /// Opens the recording picker, or stops the recording in progress.
+    Record,
     /// An image to open in the editor: a Library capture as it is, any other file imported
     /// as a copy first. Always absolute.
     Open(PathBuf),
@@ -46,7 +48,7 @@ pub struct Launch {
     pub requests: Vec<Request>,
 }
 
-pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--capture area|window|screen|text|previous] [--studio <session dir>] [image or Library capture...]";
+pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [--studio <session dir>] [image or Library capture...]";
 
 pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
     let mut launch = Launch { background: false, requests: Vec::new() };
@@ -55,6 +57,7 @@ pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
         match a.as_str() {
             "--background" => launch.background = true,
             "--library" => launch.requests.push(Request::Library),
+            "--record" => launch.requests.push(Request::Record),
             "--capture" => {
                 let what = it.next().map(String::as_str).unwrap_or("");
                 let cmd = match what {
@@ -175,7 +178,7 @@ mod tests {
     #[test]
     fn parses_flags_captures_and_relative_paths() {
         let cwd = Path::new(r"C:\Users\me\Pictures");
-        let l = parse(&args(&["--background", "--capture", "window", "shot.png", r"D:\x\y.jpg", "--library", "--studio", "rec.glintrec"]), cwd).unwrap();
+        let l = parse(&args(&["--background", "--capture", "window", "shot.png", r"D:\x\y.jpg", "--library", "--record", "--studio", "rec.glintrec"]), cwd).unwrap();
         assert_eq!(
             l,
             Launch {
@@ -185,6 +188,7 @@ mod tests {
                     Request::Open(PathBuf::from(r"C:\Users\me\Pictures\shot.png")),
                     Request::Open(PathBuf::from(r"D:\x\y.jpg")),
                     Request::Library,
+                    Request::Record,
                     Request::Studio(PathBuf::from(r"C:\Users\me\Pictures\rec.glintrec")),
                 ],
             }

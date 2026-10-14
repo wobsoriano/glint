@@ -594,4 +594,53 @@ fn rgba_from_opaque_pixmap(pm: Pixmap) -> RgbaImage {
     RgbaImage::from_raw(w, h, data).expect("buffer matches size")
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::Resolution;
+    use glint_media::input::{CursorSprite, InputTimeline, PointerSample};
 
+    /// A 4K recording from a 150% display, whose arrow is a 48 px sprite, exported at 1080p
+    /// with the pointer resting at (1000, 1000). Returns the drawn cursor's size in canvas px.
+    fn cursor_size_at_1080p(multiplier: f32) -> (u32, u32) {
+        let input = InputTimeline {
+            version: 1,
+            size: [3840, 2160],
+            pointer: vec![PointerSample(0, 1000.0, 1000.0, 0), PointerSample(5000, 1000.0, 1000.0, 0)],
+            cursors: vec![CursorSprite { id: 0, file: "cursors/0.png".into(), hotspot: [0, 0], scale: 1.5 }],
+            ..Default::default()
+        };
+        let mut sprite = Pixmap::new(48, 48).unwrap();
+        sprite.fill(tiny_skia::Color::BLACK);
+        let cursors = HashMap::from([(0, CursorImage { pixmap: sprite, hotspot: [0, 0] })]);
+        let assets = Assets::new(input, cursors, Vec::new());
+        let mut project = Project::new(5000.0);
+        project.design.padding = 0.0;
+        project.design.shadow = 0.0;
+        project.design.cursor.size = multiplier;
+        project.design.cursor.smoothing = 0.0;
+        project.export.resolution = Resolution::P1080;
+        let out = project.output_size((3840, 2160));
+        assert_eq!(out, (1920, 1080));
+        let screen = RgbaImage::from_pixel(3840, 2160, image::Rgba([120, 120, 120, 255]));
+        let inputs = FrameInputs { screen: &screen, camera: None, output_ms: 1000.0 };
+        let shown = compose_frame(&project, &assets, &inputs, out);
+        project.design.cursor.visible = false;
+        let hidden = compose_frame(&project, &assets, &inputs, out);
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+        for (x, y, p) in shown.enumerate_pixels() {
+            if p != hidden.get_pixel(x, y) {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            }
+        }
+        assert_eq!((x0, y0), (500, 500), "cursor tip follows the content: 1000 source px at half scale");
+        (x1 - x0 + 1, y1 - y0 + 1)
+    }
+
+    #[test]
+    fn cursor_keeps_its_recorded_size_relative_to_the_content() {
+        // 48 px over 2160 rows becomes 24 px over 1080 rows, times the project's multiplier.
+        assert_eq!(cursor_size_at_1080p(1.0), (24, 24));
+        assert_eq!(cursor_size_at_1080p(1.5), (36, 36));
+    }
+}

@@ -140,7 +140,7 @@ const TABS: [(Tab, &str, &str); 8] = [
     (Tab::Cursor, "select", "Cursor"),
     (Tab::Keystrokes, "keyboard", "Keystrokes"),
     (Tab::Camera, "camera", "Camera"),
-    (Tab::Audio, "volume", "Audio"),
+    (Tab::Audio, "speaker", "Audio"),
     (Tab::Zoom, "zoom", "Zoom"),
     (Tab::Presets, "stack", "Presets"),
 ];
