@@ -4,7 +4,7 @@ pub use crate::annotate::RedactStyle;
 use crate::cards::CardLayout;
 use crate::style::Style;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What happens after every screenshot. Each toggle is independent.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -330,7 +330,15 @@ pub fn path() -> PathBuf {
 
 impl Settings {
     pub fn load() -> Self {
-        let mut s: Settings = std::fs::read_to_string(path())
+        Self::load_from(&path())
+    }
+
+    pub fn save(&self) {
+        self.save_to(&path());
+    }
+
+    fn load_from(p: &Path) -> Self {
+        let mut s: Settings = std::fs::read_to_string(p)
             .ok()
             .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
             .unwrap_or_default();
@@ -338,8 +346,7 @@ impl Settings {
         s
     }
 
-    pub fn save(&self) {
-        let p = path();
+    fn save_to(&self, p: &Path) {
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -350,3 +357,44 @@ impl Settings {
 }
 
 impl gpui::Global for Settings {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("glint-settings-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn corrupt_file_is_kept_aside_and_defaults_load() {
+        let dir = temp_dir("corrupt");
+        let p = dir.join("settings.json");
+        std::fs::write(&p, "{ not json").unwrap();
+        assert_eq!(Settings::load_from(&p), Settings::default());
+        assert_eq!(std::fs::read_to_string(dir.join("settings.json.broken")).unwrap(), "{ not json");
+        assert!(!p.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn save_round_trips_through_a_replaced_file() {
+        let dir = temp_dir("save");
+        let p = dir.join("settings.json");
+        std::fs::write(&p, "old").unwrap();
+        let mut s = Settings::default();
+        s.timer_seconds = 9;
+        s.hotkeys.area = "Ctrl+Alt+A".into();
+        s.save_to(&p);
+        let back: Settings = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.timer_seconds, 9);
+        assert_eq!(back.hotkeys.area, "Ctrl+Alt+A");
+        assert_eq!(back, s);
+        let names: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("settings.json")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
