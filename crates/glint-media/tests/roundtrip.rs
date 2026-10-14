@@ -128,7 +128,7 @@ fn transcode_trims_and_resizes() {
     let src = temp("tc_src.mp4");
     write_sample_file(&src, VideoCodec::H264);
     let dst = temp("tc_dst.mp4");
-    let opts = TranscodeOptions { size: Some((160, 120)), bitrate: Some(500_000), codec: None, trim: Some((1000, 2000)) };
+    let opts = TranscodeOptions { size: Some((160, 120)), bitrate: Some(500_000), codec: None, trim: Some((1000, 2000)), drop_audio: false };
     let mut last = 0.0;
     let summary = transcode(&src, &dst, &opts, &AtomicBool::new(false), |p| last = p).unwrap();
     assert_eq!(last, 1.0);
@@ -141,6 +141,18 @@ fn transcode_trims_and_resizes() {
     assert_close(*first.image.get_pixel(150, 110), [255, 255, 0], "trimmed first frame bottom");
     let audio = read_mp4_audio(&dst).unwrap().expect("audio carried over");
     assert!((900..=1100).contains(&audio.duration_ms()), "trimmed audio {}", audio.duration_ms());
+}
+
+#[test]
+fn transcode_can_drop_audio() {
+    let src = temp("tc_mute_src.mp4");
+    write_sample_file(&src, VideoCodec::H264);
+    let dst = temp("tc_mute_dst.mp4");
+    let opts = TranscodeOptions { drop_audio: true, ..Default::default() };
+    transcode(&src, &dst, &opts, &AtomicBool::new(false), |_| {}).unwrap();
+    assert!(read_mp4_audio(&src).unwrap().is_some(), "source has audio");
+    assert!(read_mp4_audio(&dst).unwrap().is_none(), "audio dropped");
+    assert_eq!(VideoReader::open(&dst).unwrap().size(), (W, H));
 }
 
 const BLOCKS: [[u8; 3]; 8] =

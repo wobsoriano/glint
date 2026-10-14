@@ -314,6 +314,9 @@ pub fn save_failed_dialog(detail: &str) -> SaveChoice {
 
 pub const OPEN_WITH_TYPES: [&str; 6] = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"];
 const PROGID: &str = "Glint.Image";
+/// Videos open in Trim & Compress.
+pub const OPEN_WITH_VIDEO_TYPES: [&str; 3] = [".mp4", ".mov", ".m4v"];
+const VIDEO_PROGID: &str = "Glint.Video";
 
 fn reg_set(key: &str, name: Option<&str>, value: &str) -> anyhow::Result<()> {
     let data: Vec<u16> = value.encode_utf16().chain(Some(0)).collect();
@@ -332,7 +335,8 @@ fn reg_set(key: &str, name: Option<&str>, value: &str) -> anyhow::Result<()> {
     }
 }
 
-/// Registers "Open with Glint" for common image types under HKCU. Safe to repeat.
+/// Registers "Open with Glint" under HKCU: images open in the editor, videos in Trim &
+/// Compress. Safe to repeat.
 pub fn register_open_with() -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let command = format!("\"{}\" \"%1\"", exe.display());
@@ -346,6 +350,15 @@ pub fn register_open_with() -> anyhow::Result<()> {
     for ext in OPEN_WITH_TYPES {
         reg_set(&format!(r"{app}\SupportedTypes"), Some(ext), "")?;
         reg_set(&format!(r"Software\Classes\{ext}\OpenWithProgids"), Some(PROGID), "")?;
+    }
+    let trim = format!("\"{}\" --trim \"%1\"", exe.display());
+    let progid = format!(r"Software\Classes\{VIDEO_PROGID}");
+    reg_set(&progid, None, "Glint Video")?;
+    reg_set(&format!(r"{progid}\shell\open"), Some("FriendlyAppName"), "Glint Trim & Compress")?;
+    reg_set(&format!(r"{progid}\shell\open\command"), None, &trim)?;
+    for ext in OPEN_WITH_VIDEO_TYPES {
+        reg_set(&format!(r"{app}\SupportedTypes"), Some(ext), "")?;
+        reg_set(&format!(r"Software\Classes\{ext}\OpenWithProgids"), Some(VIDEO_PROGID), "")?;
     }
     Ok(())
 }

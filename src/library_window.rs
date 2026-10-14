@@ -5,10 +5,10 @@ use crate::library::{CaptureKind, Item};
 use crate::settings::{LibraryView, Settings, SortKey};
 use crate::store::{self, Store};
 use crate::ui::{self, Edit, FONT};
-use crate::{actions, flow, overlay, prefs, quicklook, shell, toast, win};
+use crate::{actions, clip, flow, overlay, prefs, quicklook, shell, toast, win};
 use gpui::prelude::*;
 use gpui::{
-    div, img, px, rgb, rgba, size, uniform_list, App, Bounds, ClickEvent, Context, FocusHandle, Global, ImageSource,
+    div, img, px, rgb, rgba, size, uniform_list, App, Bounds, ClickEvent, Context, ExternalPaths, FocusHandle, Global, ImageSource,
     KeyDownEvent, ObjectFit, PromptLevel, RenderImage, SharedString, TitlebarOptions, UniformListScrollHandle, Window,
     WindowBounds, WindowHandle, WindowOptions,
 };
@@ -775,6 +775,15 @@ impl Render for LibraryWindow {
             .font_family(FONT)
             .text_color(ui::theme().text)
             .on_key_down(cx.listener(Self::on_key))
+            .on_drop(|dropped: &ExternalPaths, _, cx| {
+                let (videos, images): (Vec<PathBuf>, Vec<PathBuf>) = dropped.paths().iter().cloned().partition(|p| clip::is_video(p));
+                for v in videos {
+                    clip::open(v, cx);
+                }
+                if !images.is_empty() {
+                    flow::open_images(images, cx);
+                }
+            })
             .child(sidebar)
             .child(div().flex_1().min_w_0().h_full().flex().flex_col().bg(ui::theme().base).child(toolbar).child(content).child(status))
             .when(prefs.inspector, |d| d.child(self.inspector(cx)))

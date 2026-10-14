@@ -124,6 +124,7 @@ pub fn compress_video(
         bitrate: Some(bitrate(size.0, size.1, fps, opts.quality)),
         codec: Some(pick_codec(opts.codec)),
         trim: opts.trim,
+        drop_audio: false,
     };
     transcode(src, dst, &topts, cancel, progress)
 }
