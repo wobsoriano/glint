@@ -1,3 +1,4 @@
 ﻿target/
 .audit/
 todo.md
+.claude/
