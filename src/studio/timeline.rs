@@ -212,7 +212,7 @@ impl Studio {
                             .flex()
                             .flex_col()
                             .rounded(px(ui::RADIUS_WINDOW))
-                            .bg(ui::theme().control)
+                            .bg(ui::theme().flyout)
                             .border_1()
                             .border_color(ui::theme().border)
                             .shadow_lg()

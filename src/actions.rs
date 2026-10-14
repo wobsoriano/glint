@@ -63,10 +63,10 @@ pub fn copy_files(items: &[Item], cx: &mut App) {
 
 /// Opens a screenshot in the editor on its untouched base.png, restoring edit.json when
 /// present. Done and Save write the edit back into the capture and refresh every view of it.
+/// A recording opens in Studio.
 pub fn edit(item: &Item, cx: &mut App) {
-    if item.kind() != CaptureKind::Screenshot {
-        toast::show("Recordings open in Studio, which is not part of this build yet", cx);
-        return;
+    if item.kind() == CaptureKind::Recording {
+        return crate::studio::open(cx, item.dir.clone());
     }
     let loaded = item.clone();
     let task = cx.background_spawn(async move { library::load_edit(&loaded) });

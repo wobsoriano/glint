@@ -690,7 +690,7 @@ impl Render for Studio {
             .border_color(ui::theme().border)
             .child(ui::icon("film", 16., ui::theme().muted))
             .child(div().ml_1().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).truncate().child(self.title.clone()))
-            .when(self.dirty, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Saving\u{2026}")))
+            .when(self.dirty && self.save_error.is_none(), |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Saving\u{2026}")))
             .child(div().flex_1())
             .child(div().child(ui::icon_button("undo", "undo", false, "Undo (Ctrl+Z)", cx.listener(|s, _, _, cx| s.undo(cx)))).when(!undo, |d| d.opacity(0.4)))
             .child(div().child(ui::icon_button("redo", "redo", false, "Redo (Ctrl+Y)", cx.listener(|s, _, _, cx| s.redo(cx)))).when(!redo, |d| d.opacity(0.4)))

@@ -194,7 +194,7 @@ impl Studio {
                         .w(px(440.))
                         .p_5()
                         .rounded(px(ui::RADIUS_WINDOW))
-                        .bg(ui::theme().layer)
+                        .bg(ui::theme().flyout)
                         .border_1()
                         .border_color(ui::theme().border)
                         .shadow_lg()
