@@ -15,7 +15,7 @@ use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, STGM
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::{CF_DIB, CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE};
-use windows::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
+use windows::Win32::System::Registry::{RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::Controls::{
@@ -335,14 +335,39 @@ fn reg_set(key: &str, name: Option<&str>, value: &str) -> anyhow::Result<()> {
     }
 }
 
+fn reg_get(key: &str) -> Option<String> {
+    let key = HSTRING::from(key);
+    let mut bytes = 0u32;
+    unsafe {
+        RegGetValueW(HKEY_CURRENT_USER, &key, PCWSTR::null(), RRF_RT_REG_SZ, None, None, Some(&mut bytes)).ok().ok()?;
+        let mut buf = vec![0u16; bytes as usize / 2];
+        RegGetValueW(HKEY_CURRENT_USER, &key, PCWSTR::null(), RRF_RT_REG_SZ, None, Some(buf.as_mut_ptr().cast()), Some(&mut bytes))
+            .ok()
+            .ok()?;
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
+    }
+}
+
+/// The program a shell command like `"C:\Glint\glint.exe" "%1"` runs.
+fn command_exe(command: &str) -> Option<PathBuf> {
+    let quoted = command.strip_prefix('"')?;
+    Some(PathBuf::from(&quoted[..quoted.find('"')?]))
+}
+
 /// Registers "Open with Glint" under HKCU: images open in the editor, videos in Trim &
-/// Compress. Safe to repeat.
+/// Compress. An existing registration is kept while the exe it runs still exists, so
+/// starting another build (a debug one, say) never takes the file types away from the install.
 pub fn register_open_with() -> anyhow::Result<()> {
+    let app = r"Software\Classes\Applications\glint.exe";
+    let command_key = format!(r"{app}\shell\open\command");
+    if reg_get(&command_key).and_then(|c| command_exe(&c)).is_some_and(|exe| exe.is_file()) {
+        return Ok(());
+    }
     let exe = std::env::current_exe()?;
     let command = format!("\"{}\" \"%1\"", exe.display());
-    let app = r"Software\Classes\Applications\glint.exe";
     reg_set(app, Some("FriendlyAppName"), "Glint")?;
-    reg_set(&format!(r"{app}\shell\open\command"), None, &command)?;
+    reg_set(&command_key, None, &command)?;
     let progid = format!(r"Software\Classes\{PROGID}");
     reg_set(&progid, None, "Glint Image")?;
     reg_set(&format!(r"{progid}\shell\open"), Some("FriendlyAppName"), "Glint")?;
@@ -394,5 +419,18 @@ pub fn exclude_own_windows_from_capture(include: bool) {
             SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, None, Some(on_show), std::process::id(), 0, WINEVENT_OUTOFCONTEXT);
         }
         let _ = EnumThreadWindows(GetCurrentThreadId(), Some(each_window), LPARAM(0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_exe_reads_the_quoted_program() {
+        let command = r#""C:\Program Files\Glint\glint.exe" --trim "%1""#;
+        assert_eq!(command_exe(command), Some(PathBuf::from(r"C:\Program Files\Glint\glint.exe")));
+        assert_eq!(command_exe(r#"glint.exe "%1""#), None);
+        assert_eq!(command_exe(r#""unterminated"#), None);
     }
 }
