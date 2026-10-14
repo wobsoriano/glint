@@ -168,9 +168,10 @@ impl Editor {
         }
     }
 
-    pub(super) fn zoom_by(&mut self, factor: f32, anchor: Option<Pt>) {
+    /// Zooms to the next standard level, around the middle of the view.
+    pub(super) fn zoom_step(&mut self, up: bool) {
         let z = self.preview.as_ref().map_or(1.0, |p| p.view.zoom);
-        self.zoom_to(Some(z * factor), anchor);
+        self.zoom_to(Some(super::viewport::step(z, up)), None);
     }
 
     pub(super) fn on_scroll(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -359,7 +360,8 @@ impl Editor {
                             .text_sm()
                             .text_color(rgb(TEXT))
                             .child(ui::icon(if self.busy.is_some() { "scan" } else { "check" }, 15., rgb(ACCENT)))
-                            .child(msg),
+                            .max_w(px(620.))
+                            .child(div().truncate().child(msg)),
                     ),
                 )
             })
@@ -436,9 +438,9 @@ impl Editor {
                     .gap_1()
                     .child(zb("z-fit", "Fit", |e| e.zoom_to(None, None)))
                     .child(zb("z-100", "100%", |e| e.zoom_to(Some(1.0), None)))
-                    .child(zb("z-out", "−", |e| e.zoom_by(0.8, None)))
+                    .child(zb("z-out", "−", |e| e.zoom_step(false)))
                     .child(div().w(px(44.)).flex().justify_center().text_color(rgb(TEXT)).child(format!("{zoom:.0}%")))
-                    .child(zb("z-in", "+", |e| e.zoom_by(1.25, None))),
+                    .child(zb("z-in", "+", |e| e.zoom_step(true))),
             )
     }
 }

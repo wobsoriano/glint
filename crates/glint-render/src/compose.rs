@@ -109,9 +109,12 @@ impl Compositor {
         let lc = l.translated(-card_region.x, -card_region.y);
         let (mut card, mask) = self.card(doc, src, &f, card_region);
         render::draw_highlights(&mut card, &lc, &doc.annotations, mask.as_ref());
+        // Annotations belong to the screenshot: whatever a crop cut away stays hidden.
+        let mut marks = Pixmap::new(card.width(), card.height()).unwrap();
         for a in doc.annotations.iter().filter(|a| !a.is_redaction()) {
-            render::draw_annotation(&mut card, &lc, a);
+            render::draw_annotation(&mut marks, &lc, a);
         }
+        card.draw_pixmap(0, 0, marks.as_ref(), &PixmapPaint::default(), Transform::identity(), mask.as_ref());
         effects::draw_watermark(&mut card, lc.image, l.unit, &doc.effects.watermark, mask.as_ref());
         if blur.is_active() && blur.edge == BlurEdge::Clipped {
             effects::progressive_blur(&mut card, lc.image, lc.image, blur, mask.as_ref());

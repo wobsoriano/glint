@@ -114,7 +114,7 @@ pub fn open_dir(dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
         let tmp = dir.join("image.png.tmp");
         win::save_png(&req.image, &tmp)?;
         std::fs::rename(&tmp, dir.join("image.png")).context("replacing image.png")?;
-        Ok(format!("Saved {}", dir.display()))
+        Ok("Saved".into())
     });
     open_doc(Arc::new(base), doc, title, on_save, cx);
     Ok(())

@@ -316,6 +316,7 @@ impl Editor {
             "escape" => return true,
             "enter" if !shift || typing == Typing::Watermark => return true,
             "enter" => text.push('\n'),
+            "space" => text.push(' '),
             "backspace" => {
                 text.pop();
             }
@@ -361,8 +362,8 @@ impl Editor {
                 self.set_tool(Tool::Select);
                 self.selected = self.doc.annotations.iter().map(|a| a.id).collect();
             }
-            (true, _, "=" | "+") => self.zoom_by(1.25, None),
-            (true, _, "-") => self.zoom_by(0.8, None),
+            (true, _, "=" | "+") => self.zoom_step(true),
+            (true, _, "-") => self.zoom_step(false),
             (true, _, "0") => self.zoom_to(Some(1.0), None),
             (true, _, "1") => self.zoom_to(None, None),
             (true, false, "w") => window.remove_window(),

@@ -39,6 +39,17 @@ impl Default for Viewport {
     }
 }
 
+const STEPS: [f32; 16] = [0.05, 0.1, 0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0];
+
+/// The next standard zoom level above or below `zoom`.
+pub fn step(zoom: f32, up: bool) -> f32 {
+    if up {
+        STEPS.into_iter().find(|s| *s > zoom * 1.01).unwrap_or(MAX_ZOOM)
+    } else {
+        STEPS.into_iter().rev().find(|s| *s < zoom * 0.99).unwrap_or(STEPS[0])
+    }
+}
+
 pub fn fit_zoom(canvas: (f32, f32), view: (f32, f32), scale_factor: f32) -> f32 {
     let m = 2.0 * FIT_MARGIN * scale_factor;
     ((view.0 - m).max(40.0) / canvas.0).min((view.1 - m).max(40.0) / canvas.1).min(1.0)
@@ -103,6 +114,15 @@ mod tests {
         let mid = v.to_canvas(pt(500.0, 400.0));
         assert!((mid.x - 1000.0).abs() < 1e-3 && (mid.y - 500.0).abs() < 1e-3);
         assert_eq!(Viewport::default().resolve((100.0, 50.0), VIEW, 1.0).zoom, 1.0, "small images are not enlarged");
+    }
+
+    #[test]
+    fn zoom_steps_walk_standard_levels() {
+        assert_eq!(step(1.0, true), 1.25);
+        assert_eq!(step(6.0, true), 8.0);
+        assert_eq!(step(0.43, true), 0.5);
+        assert_eq!(step(0.43, false), 1.0 / 3.0);
+        assert_eq!(step(10.0, true), MAX_ZOOM);
     }
 
     #[test]
