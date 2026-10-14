@@ -158,6 +158,13 @@ struct Capture {
     closed: Arc<AtomicBool>,
     warnings: Vec<String>,
     path: PathBuf,
+    fail_after: Option<u64>,
+}
+
+/// `GLINT_FAIL_SCREEN_AFTER=<n>` makes the frame write fail once `n` frames are in the file,
+/// to exercise the capture thread's failure path. Unset, nothing is injected.
+fn injected_failure() -> Option<u64> {
+    std::env::var("GLINT_FAIL_SCREEN_AFTER").ok()?.parse().ok()
 }
 
 impl Capture {
@@ -232,6 +239,7 @@ impl Capture {
             closed,
             warnings,
             path: path.to_path_buf(),
+            fail_after: injected_failure(),
         })
     }
 
@@ -288,6 +296,9 @@ impl Capture {
         while *next_index <= target_index {
             let Some((sample, texture)) = self.samples.take()? else { break };
             unsafe { self.d3d.context.CopyResource(&texture, &self.latest) };
+            if self.fail_after == Some(self.sink.frames()) {
+                bail!("GLINT_FAIL_SCREEN_AFTER: injected failure after {} frames", self.sink.frames());
+            }
             self.sink.write_sample(&sample, *next_index * frame_dur)?;
             *next_index += 1;
         }
