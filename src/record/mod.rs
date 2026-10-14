@@ -61,6 +61,8 @@ pub struct Rec {
     /// Meters the chosen microphone while the picker is open.
     monitor: Option<MicMonitor>,
     windows: Windows,
+    /// [`quit`] was asked for; the app quits once the current stage has settled.
+    quitting: bool,
 }
 
 impl Global for Rec {}
@@ -89,6 +91,28 @@ pub fn toggle(cx: &mut App) {
         }
         Stage::Countdown { .. } => cancel_countdown(cx),
         Stage::Live(_) => stop(cx),
+        Stage::Starting | Stage::Finishing => {}
+    }
+}
+
+/// Quits the app, after finishing a recording in progress into the Library like Stop would.
+/// A picker or countdown is cancelled instead.
+pub fn quit(cx: &mut App) {
+    rec(cx).quitting = true;
+    match rec(cx).stage {
+        Stage::Idle => cx.quit(),
+        Stage::Picking => {
+            overlay::close_all(cx);
+            close_picker(cx);
+            cx.quit();
+        }
+        Stage::Countdown { .. } => {
+            cancel_countdown(cx);
+            close_picker(cx);
+            cx.quit();
+        }
+        Stage::Live(_) => stop(cx),
+        // Their continuations read `quitting` and carry on from there.
         Stage::Starting | Stage::Finishing => {}
     }
 }
@@ -335,6 +359,9 @@ fn begin(cx: &mut App) {
                 Ok(recorder) => {
                     let warnings = recorder.warnings().to_vec();
                     rec(cx).stage = Stage::Live(Box::new(Live { recorder, pending, target: target.clone() }));
+                    if rec(cx).quitting {
+                        return stop(cx);
+                    }
                     if rec(cx).windows.bar.is_none() {
                         rec(cx).windows.bar = bar::open(&target, cx);
                     }
@@ -347,6 +374,9 @@ fn begin(cx: &mut App) {
                     let _ = std::fs::remove_dir_all(&pending.dir);
                     toast::show(format!("Could not start recording: {e:#}"), cx);
                     end(cx);
+                    if rec(cx).quitting {
+                        cx.quit();
+                    }
                 }
             }
         });
@@ -459,9 +489,14 @@ fn stop(cx: &mut App) {
                     if !warnings.is_empty() {
                         toast::show(warnings.join(" · "), cx);
                     }
-                    automate(item, cx);
+                    if !rec(cx).quitting {
+                        automate(item, cx);
+                    }
                 }
                 Err(e) => toast::show(format!("The recording could not be saved: {e:#}"), cx),
+            }
+            if rec(cx).quitting {
+                cx.quit();
             }
         });
     })
