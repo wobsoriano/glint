@@ -133,6 +133,7 @@ fn open_with_broken(name: &str, file: &str, bytes: &[u8]) -> (Session, PathBuf, 
 fn unparsable_project_is_set_aside() {
     let (s, dir, kept) = open_with_broken("bad-project", "project.json", b"{ not json");
     assert_eq!(kept, b"{ not json");
+    assert_eq!(s.notices, vec!["project.json could not be read (key must be a string at line 1 column 3), so it was renamed project.json.broken and defaults are used"]);
     assert_eq!(s.project, Project::new(s.source_duration_ms));
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -142,6 +143,7 @@ fn project_from_a_newer_version_is_set_aside() {
     let json = br#"{ "version": 99, "clips": [{ "start_ms": 0, "end_ms": 1000 }] }"#;
     let (s, dir, kept) = open_with_broken("new-project", "project.json", json);
     assert_eq!(kept, json);
+    assert_eq!(s.notices, vec!["project.json could not be read (project version 99 is newer than supported 1), so it was renamed project.json.broken and defaults are used"]);
     assert_eq!(s.project, Project::new(s.source_duration_ms));
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -150,6 +152,7 @@ fn project_from_a_newer_version_is_set_aside() {
 fn unparsable_transcript_is_set_aside() {
     let (s, dir, kept) = open_with_broken("bad-transcript", "transcript.json", b"{ not json");
     assert_eq!(kept, b"{ not json");
+    assert_eq!(s.notices, vec!["transcript.json could not be read (key must be a string at line 1 column 3), so it was renamed transcript.json.broken and defaults are used"]);
     assert!(s.transcript.is_none());
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -159,6 +162,7 @@ fn transcript_from_a_newer_version_is_set_aside() {
     let json = br#"{ "version": 99, "language": "en", "words": [] }"#;
     let (s, dir, kept) = open_with_broken("new-transcript", "transcript.json", json);
     assert_eq!(kept, json);
+    assert_eq!(s.notices, vec!["transcript.json could not be read (transcript version 99 is newer than supported 1), so it was renamed transcript.json.broken and defaults are used"]);
     assert!(s.transcript.is_none());
     std::fs::remove_dir_all(&dir).unwrap();
 }

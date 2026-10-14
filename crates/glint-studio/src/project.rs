@@ -407,15 +407,12 @@ impl Project {
         }
     }
 
-    /// Reads `project.json` from a session directory; a missing file means defaults.
-    pub fn load(session_dir: &Path, source_duration_ms: f64) -> anyhow::Result<Self> {
-        let path = session_dir.join(Self::FILE);
-        let mut project = match std::fs::read_to_string(&path) {
-            Ok(json) => serde_json::from_str::<Project>(&json)
-                .with_context(|| format!("parsing {}", path.display()))?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Project::default(),
-            Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
-        };
+    /// Parses the contents of `project.json`, repaired to fit the recording.
+    pub fn parse(json: &[u8], source_duration_ms: f64) -> anyhow::Result<Self> {
+        let mut project: Project = serde_json::from_slice(json)?;
+        if project.version > PROJECT_VERSION {
+            anyhow::bail!("project version {} is newer than supported {PROJECT_VERSION}", project.version);
+        }
         project.normalize(source_duration_ms);
         Ok(project)
     }
@@ -508,17 +505,10 @@ mod tests {
     }
 
     #[test]
-    fn load_repairs_overlapping_and_out_of_range_clips() {
-        let dir = std::env::temp_dir().join(format!("glint-studio-load-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join(Project::FILE),
-            r#"{ "clips": [{ "start_ms": 3000, "end_ms": 9000, "speed": 20 },
-                           { "start_ms": 0, "end_ms": 4000 }] }"#,
-        )
-        .unwrap();
-        let p = Project::load(&dir, 8000.0).unwrap();
-        std::fs::remove_dir_all(&dir).ok();
+    fn parse_repairs_overlapping_and_out_of_range_clips() {
+        let json = br#"{ "clips": [{ "start_ms": 3000, "end_ms": 9000, "speed": 20 },
+                                   { "start_ms": 0, "end_ms": 4000 }] }"#;
+        let p = Project::parse(json, 8000.0).unwrap();
         assert_eq!(
             p.clips,
             vec![

@@ -41,11 +41,14 @@ pub struct Session {
     /// Pixel size of the screen master.
     pub source_size: (u32, u32),
     pub source_duration_ms: f64,
+    /// One sentence for the user per sidecar file that could not be read and was renamed to
+    /// `<name>.broken`, so the session opened with defaults in its place.
+    pub notices: Vec<String>,
 }
 
 impl Session {
-    /// Opens a session directory. Without `project.json` the project covers the whole
-    /// recording with auto zooms generated from the recorded clicks.
+    /// Opens a session directory. Without a readable `project.json` the project covers the
+    /// whole recording with auto zooms generated from the recorded clicks.
     pub fn open(dir: &Path) -> anyhow::Result<Self> {
         let tracks = Tracks::find(dir)?;
         let reader = VideoReader::open(&tracks.screen)?;
@@ -53,16 +56,15 @@ impl Session {
         let source_duration_ms = reader.duration_ms() as f64;
         drop(reader);
 
-        let transcript_path = dir.join(TRANSCRIPT_FILE);
-        let transcript = transcript_path.is_file().then(|| Transcript::load(&transcript_path)).transpose()?;
+        let mut notices = Vec::new();
+        let transcript = read_sidecar(dir, TRANSCRIPT_FILE, Transcript::parse, &mut notices)?;
         let assets = load_assets(dir, source_size, transcript.as_ref())?;
-        let mut project = if dir.join(Project::FILE).is_file() {
-            Project::load(dir, source_duration_ms)?
-        } else {
+        let project = read_sidecar(dir, Project::FILE, |json| Project::parse(json, source_duration_ms), &mut notices)?;
+        let mut project = project.unwrap_or_else(|| {
             let mut p = Project::new(source_duration_ms);
             p.apply_auto_zoom(assets.input(), source_duration_ms);
             p
-        };
+        });
         if let (true, Some(t)) = (project.caption_cues.is_empty(), &transcript) {
             project.caption_cues = caption_cues(t);
         }
@@ -74,6 +76,7 @@ impl Session {
             transcript,
             source_size,
             source_duration_ms,
+            notices,
         })
     }
 
@@ -113,6 +116,31 @@ pub fn caption_cues(transcript: &Transcript) -> Vec<CaptionCue> {
         .into_iter()
         .map(|l| CaptionCue { start_ms: l.start_ms as f64, end_ms: l.end_ms as f64, text: l.text })
         .collect()
+}
+
+/// Reads and parses `dir/name`. A missing file is `None`. So is one that does not parse or
+/// comes from a newer Glint: it is renamed to `<name>.broken`, replacing an older one, and a
+/// notice says so, because one bad sidecar must not make the recording unopenable.
+fn read_sidecar<T>(
+    dir: &Path,
+    name: &str,
+    parse: impl FnOnce(&[u8]) -> anyhow::Result<T>,
+    notices: &mut Vec<String>,
+) -> anyhow::Result<Option<T>> {
+    let path = dir.join(name);
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let err = match parse(&bytes) {
+        Ok(value) => return Ok(Some(value)),
+        Err(e) => e,
+    };
+    let broken = dir.join(format!("{name}.broken"));
+    std::fs::rename(&path, &broken).with_context(|| format!("renaming {} to {}", path.display(), broken.display()))?;
+    notices.push(format!("{name} could not be read ({err:#}), so it was renamed {name}.broken and defaults are used"));
+    Ok(None)
 }
 
 /// A session recorded with input capture off has no `input.json`: it gets an empty timeline.

@@ -43,10 +43,11 @@ fn display_scale() -> f32 {
 }
 
 /// A recording's current edit as a video file, rendered with its Studio project (defaults
-/// when it was never opened in Studio) and cached in its `render/` folder. Blocking.
-pub fn recording_file(item: &Item) -> anyhow::Result<PathBuf> {
+/// when it was never opened in Studio) and cached in its `render/` folder, plus the session's
+/// notices about files it had to set aside. Blocking.
+fn recording_file(item: &Item) -> anyhow::Result<(PathBuf, Vec<String>)> {
     let session = glint_studio::Session::open(&item.dir).with_context(|| format!("opening {}", item.dir.display()))?;
-    glint_studio::deliverable(&session)
+    Ok((glint_studio::deliverable(&session)?, session.notices))
 }
 
 /// Renders a recording's deliverable in the background, then continues on the main thread.
@@ -55,7 +56,15 @@ pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Res
     let task = cx.background_spawn(async move { recording_file(&item) });
     cx.spawn(async move |cx| {
         let result = task.await;
-        let _ = cx.update(|cx| f(result, cx));
+        let _ = cx.update(|cx| match result {
+            Ok((file, notices)) => {
+                f(Ok(file), cx);
+                if !notices.is_empty() {
+                    toast::show(notices.join(" "), cx);
+                }
+            }
+            Err(e) => f(Err(e), cx),
+        });
     })
     .detach();
 }

@@ -90,8 +90,8 @@ struct Prepared {
 
 impl Prepared {
     fn load(dir: &Path) -> anyhow::Result<Self> {
-        let fresh = !dir.join(Project::FILE).is_file();
         let mut session = Session::open(dir)?;
+        let fresh = !dir.join(Project::FILE).is_file();
         let presets = PresetStore::new(settings::data_dir().join("StudioPresets"));
         if fresh {
             if let Some(p) = presets.default_preset() {
@@ -259,6 +259,10 @@ impl Studio {
         s.reload_presets();
         s.load_thumbnails(cx);
         s.kick(cx);
+        if !s.session.notices.is_empty() {
+            let text = s.session.notices.join(" ");
+            s.notify(text, true, cx);
+        }
         s
     }
 
@@ -281,6 +285,7 @@ impl Studio {
             transcript: s.transcript.clone(),
             source_size: s.source_size,
             source_duration_ms: s.source_duration_ms,
+            notices: Vec::new(),
         }
     }
 
