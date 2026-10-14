@@ -2518,6 +2518,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glint-studio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glint-media",
+ "glint-render",
+ "image",
+ "serde",
+ "serde_json",
+ "tiny-skia",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

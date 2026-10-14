@@ -56,6 +56,11 @@ fn measure_with(font: Option<&FontVec>, text: &str, size: f32) -> (f32, f32) {
     (w, lines as f32 * size * 1.25)
 }
 
+/// Draws bold UI text (the face `measure_text` measures) with its top-left corner at (x, y).
+pub fn draw_text(pm: &mut Pixmap, text: &str, x: f32, y: f32, size: f32, color: Color) {
+    draw_text_with(pm, BOLD.as_ref(), text, x, y, size, color);
+}
+
 /// Draws (possibly multi-line) text with its top-left corner at (x, y).
 fn draw_text_with(
     pm: &mut Pixmap,
@@ -454,30 +459,7 @@ pub struct Inputs<'a> {
 pub fn render_base(inp: &Inputs, annotations: &[Annotation]) -> Pixmap {
     let l = &inp.layout;
     let mut pm = Pixmap::new(l.width, l.height).unwrap();
-    let (w, h) = (l.width as f32, l.height as f32);
-    let full = Rect::from_xywh(0.0, 0.0, w, h).unwrap();
-
-    match &inp.style.background {
-        Background::None => {}
-        Background::Solid(c) => pm.fill(c.to_skia()),
-        Background::Gradient(g) => {
-            let paint = Paint {
-                shader: gradient_shader(&g.stops, g.angle, w, h),
-                ..Default::default()
-            };
-            pm.fill_rect(full, &paint, Transform::identity(), None);
-        }
-        Background::Blurred => {
-            if let Some(b) = inp.blur_bg {
-                draw_cover(&mut pm, b, FilterQuality::Bilinear);
-                pm.fill_rect(full, &solid(Color(0x0000001F)), Transform::identity(), None);
-            }
-        }
-        Background::Image(_) => match inp.bg_image {
-            Some(b) => draw_cover(&mut pm, b, FilterQuality::Bicubic),
-            None => pm.fill(Color::rgb(0x27272A).to_skia()),
-        },
-    }
+    paint_background(&mut pm, &inp.style.background, inp.blur_bg, inp.bg_image);
 
     let radius = inp.style.radius * l.unit;
     let card_path = rounded_rect(&l.card, radius);
@@ -536,7 +518,41 @@ pub fn render_base(inp: &Inputs, annotations: &[Annotation]) -> Pixmap {
     pm
 }
 
-fn draw_shadow(pm: &mut Pixmap, card: &R, radius: f32, blur: f32, opacity: f32) {
+/// Fills the whole pixmap with a background. `blur_bg` and `bg_image` are the decoded
+/// sources for `Background::Blurred` and `Background::Image`.
+pub fn paint_background(
+    pm: &mut Pixmap,
+    background: &Background,
+    blur_bg: Option<&Pixmap>,
+    bg_image: Option<&Pixmap>,
+) {
+    let (w, h) = (pm.width() as f32, pm.height() as f32);
+    let full = Rect::from_xywh(0.0, 0.0, w, h).unwrap();
+    match background {
+        Background::None => {}
+        Background::Solid(c) => pm.fill(c.to_skia()),
+        Background::Gradient(g) => {
+            let paint = Paint {
+                shader: gradient_shader(&g.stops, g.angle, w, h),
+                ..Default::default()
+            };
+            pm.fill_rect(full, &paint, Transform::identity(), None);
+        }
+        Background::Blurred => {
+            if let Some(b) = blur_bg {
+                draw_cover(pm, b, FilterQuality::Bilinear);
+                pm.fill_rect(full, &solid(Color(0x0000001F)), Transform::identity(), None);
+            }
+        }
+        Background::Image(_) => match bg_image {
+            Some(b) => draw_cover(pm, b, FilterQuality::Bicubic),
+            None => pm.fill(Color::rgb(0x27272A).to_skia()),
+        },
+    }
+}
+
+/// Soft drop shadow under a rounded card, offset slightly downward.
+pub fn draw_shadow(pm: &mut Pixmap, card: &R, radius: f32, blur: f32, opacity: f32) {
     let blur_r = blur.max(1.0);
     let off_y = blur * 0.45;
     let margin = (blur_r * 3.0).ceil();
