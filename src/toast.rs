@@ -32,7 +32,7 @@ impl Render for Toast {
                 .shadow_lg()
                 .text_sm()
                 .text_color(rgb(TEXT))
-                .child(ui::icon("sparkles", 15., rgb(ui::ACCENT)))
+                .child(ui::icon("sparkles", 15., ui::accent()))
                 .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(self.0.clone())),
         )
     }

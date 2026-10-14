@@ -54,6 +54,7 @@ fn body(name: &str) -> Option<&'static str> {
         "film" => r##"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>"##,
         "library" => r##"<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>"##,
         "stack" => r##"<rect x="5" y="9" width="14" height="11" rx="2"/><path d="M7 6h10M9 3h6"/>"##,
+        "more" => r##"<circle cx="5" cy="12" r="1.2" fill="#000"/><circle cx="12" cy="12" r="1.2" fill="#000"/><circle cx="19" cy="12" r="1.2" fill="#000"/>"##,
         _ => return None,
     })
 }

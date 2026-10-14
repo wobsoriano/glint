@@ -4,7 +4,7 @@
 use crate::library::{CaptureKind, Item};
 use crate::settings::{LibraryView, Settings, SortKey};
 use crate::store::{self, Store};
-use crate::ui::{self, Edit, ACCENT, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::{self, Edit, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
 use crate::{actions, flow, overlay, prefs, quicklook, shell, toast, win};
 use gpui::prelude::*;
 use gpui::{
@@ -92,9 +92,11 @@ pub fn show(cx: &mut App) {
             titlebar: Some(TitlebarOptions { title: Some("Glint Library".into()), appears_transparent: false, traffic_light_position: None }),
             window_min_size: Some(size(px(760.), px(480.))),
             focus: true,
+            window_background: gpui::WindowBackgroundAppearance::Blurred,
             ..Default::default()
         },
         |window, cx| {
+            shell::mica(window);
             let view = cx.new(|cx| {
                 cx.observe_global::<Store>(|_, cx| cx.notify()).detach();
                 cx.observe_global::<Settings>(|_, cx| cx.notify()).detach();
@@ -378,12 +380,12 @@ fn sidebar_entry(id: &'static str, icon: &'static str, label: &'static str, coun
         .flex()
         .items_center()
         .gap_2()
-        .rounded_md()
+        .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
-        .when(active, |d| d.bg(rgba(0x7C8CFF33)).text_color(rgb(0xFFFFFF)))
+        .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(rgb(0xFFFFFF)))
         .when(!active, |d| d.text_color(rgb(TEXT)).hover(|s| s.bg(rgb(HOVER))))
-        .child(ui::icon(icon, 15., rgb(if active { ACCENT } else { MUTED })))
+        .child(ui::icon(icon, 15., if active { ui::accent() } else { rgb(MUTED).into() }))
         .child(div().flex_1().child(label))
         .child(div().text_xs().text_color(rgb(MUTED)).child(count.to_string()))
 }
@@ -414,20 +416,21 @@ impl LibraryWindow {
             .flex_col()
             .gap_1p5()
             .p_1p5()
-            .rounded_lg()
+            .rounded(px(ui::RADIUS_WINDOW))
             .cursor_pointer()
-            .when(selected, |d| d.bg(rgba(0x7C8CFF2E)))
+            .when(selected, |d| d.bg(ui::accent_alpha(0x2E)))
             .when(!selected, |d| d.hover(|s| s.bg(rgb(PANEL))))
+            .group(SharedString::from(format!("tile-{}", item.id())))
             .child(
                 div()
                     .relative()
                     .w_full()
                     .h(px(110.))
-                    .rounded_md()
+                    .rounded(px(ui::RADIUS_CONTROL))
                     .overflow_hidden()
                     .bg(rgb(0x0E0E10))
                     .border_2()
-                    .border_color(if selected { rgb(ACCENT) } else { rgb(BORDER) })
+                    .border_color(if selected { ui::accent() } else { rgb(BORDER) })
                     .flex()
                     .items_center()
                     .justify_center()
@@ -435,6 +438,19 @@ impl LibraryWindow {
                         Some(t) => img(ImageSource::Render(t)).size_full().object_fit(ObjectFit::Contain).into_any_element(),
                         None => ui::icon(if recording { "film" } else { "image" }, 26., rgb(MUTED)).into_any_element(),
                     })
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(4.))
+                            .right(px(4.))
+                            .flex()
+                            .gap_1()
+                            .invisible()
+                            .group_hover(SharedString::from(format!("tile-{}", item.id())), |s| s.visible())
+                            .child(tile_action(format!("{}-copy", item.id()), "copy", "Copy", item.clone(), |i, cx| actions::copy(i, cx)))
+                            .child(tile_action(format!("{}-ql", item.id()), "eye", "Quick Look", item.clone(), |i, cx| quicklook::open(i.clone(), cx)))
+                            .child(tile_action(format!("{}-edit", item.id()), "edit", "Edit", item.clone(), |i, cx| actions::edit(i, cx))),
+                    )
                     .when_some(item.meta.duration_ms.filter(|_| recording), |d, ms| {
                         d.child(
                             div()
@@ -442,7 +458,7 @@ impl LibraryWindow {
                                 .bottom(px(4.))
                                 .right(px(4.))
                                 .px_1()
-                                .rounded_sm()
+                                .rounded(px(ui::RADIUS_CONTROL))
                                 .bg(rgba(0x000000B3))
                                 .text_xs()
                                 .text_color(rgb(0xFFFFFF))
@@ -457,7 +473,6 @@ impl LibraryWindow {
                     .text_xs()
                     .text_color(rgb(TEXT))
                     .truncate()
-                    .text_center()
                     .child(item.meta.title.clone())
                     .into_any_element(),
             })
@@ -482,14 +497,14 @@ impl LibraryWindow {
             .text_sm()
             .border_b_1()
             .border_color(rgb(0x1F1F23))
-            .when(selected, |d| d.bg(rgba(0x7C8CFF2E)))
+            .when(selected, |d| d.bg(ui::accent_alpha(0x2E)))
             .when(!selected, |d| d.hover(|s| s.bg(rgb(PANEL))))
             .child(
                 div()
                     .w(px(52.))
                     .h(px(32.))
                     .flex_none()
-                    .rounded_sm()
+                    .rounded(px(ui::RADIUS_CONTROL))
                     .overflow_hidden()
                     .bg(rgb(0x0E0E10))
                     .flex()
@@ -567,7 +582,7 @@ impl LibraryWindow {
             .flex_col()
             .gap_4()
             .p_4()
-            .bg(rgb(PANEL))
+            .bg(rgba(0x1C1C2080))
             .border_l_1()
             .border_color(rgb(BORDER))
             .child(div().flex_1().min_h_0().child(body))
@@ -622,7 +637,7 @@ impl Render for LibraryWindow {
             .flex_col()
             .gap_1()
             .p_3()
-            .bg(rgb(PANEL))
+            .bg(rgba(0x1C1C2080))
             .border_r_1()
             .border_color(rgb(BORDER))
             .child(div().px_2().pb_2().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child("LIBRARY"))
@@ -753,14 +768,35 @@ impl Render for LibraryWindow {
             .track_focus(&self.focus)
             .size_full()
             .flex()
-            .bg(rgb(BG))
+            
             .font_family(FONT)
             .text_color(rgb(TEXT))
             .on_key_down(cx.listener(Self::on_key))
             .child(sidebar)
-            .child(div().flex_1().min_w_0().h_full().flex().flex_col().child(toolbar).child(content).child(status))
+            .child(div().flex_1().min_w_0().h_full().flex().flex_col().bg(rgb(BG)).child(toolbar).child(content).child(status))
             .when(prefs.inspector, |d| d.child(self.inspector(cx)))
     }
+}
+
+/// A small round action shown over a Library thumbnail on hover.
+fn tile_action(id: String, icon: &'static str, tip: &'static str, item: Item, f: fn(&Item, &mut App)) -> impl IntoElement {
+    div()
+        .id(SharedString::from(id))
+        .size(px(24.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .bg(rgba(0x1C1C1FE6))
+        .border_1()
+        .border_color(rgba(0xFFFFFF2E))
+        .hover(|s| s.bg(ui::accent()))
+        .child(ui::icon(icon, 12., rgb(0xFFFFFF)))
+        .tooltip(ui::tooltip(tip))
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            f(&item, cx);
+        })
 }
 
 fn capture_entry(id: &'static str, icon: &'static str, label: &'static str, f: fn(&mut App)) -> impl IntoElement {
@@ -771,7 +807,7 @@ fn capture_entry(id: &'static str, icon: &'static str, label: &'static str, f: f
         .flex()
         .items_center()
         .gap_2()
-        .rounded_md()
+        .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
         .text_color(rgb(TEXT))

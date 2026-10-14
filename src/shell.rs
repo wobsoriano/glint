@@ -7,9 +7,9 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{w, HSTRING, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, POINT};
+use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromPoint, BITMAPINFOHEADER, BI_RGB, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    ClientToScreen, GetMonitorInfoW, MonitorFromPoint, BITMAPINFOHEADER, BI_RGB, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
@@ -29,7 +29,7 @@ use windows::Win32::UI::Shell::{
     SHDoDragDrop, SHOpenFolderAndSelectItems, DROPFILES,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumThreadWindows, GetAncestor, GetCursorPos, SetWindowDisplayAffinity, SetWindowPos, EVENT_OBJECT_SHOW,
+    EnumThreadWindows, GetAncestor, GetClientRect, GetCursorPos, GetWindowRect, SetWindowDisplayAffinity, SetWindowPos, EVENT_OBJECT_SHOW,
     GA_ROOT, HWND_TOPMOST, OBJID_WINDOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
     WINEVENT_OUTOFCONTEXT,
 };
@@ -215,11 +215,46 @@ pub fn work_area_at_cursor() -> ([i32; 4], f32) {
     }
 }
 
-/// Moves a window to a physical rectangle, topmost, without activating it.
-pub fn place(window: &gpui::Window, rect: [i32; 4]) {
+/// Moves a window so its client area covers a physical rectangle, topmost, without
+/// activating it. The move runs as a separate task: WM_SIZE must reach GPUI while no app
+/// borrow is held, or GPUI keeps rendering at the old size.
+pub fn place(window: &gpui::Window, rect: [i32; 4], cx: &gpui::App) {
     let Some(h) = crate::win::hwnd(window) else { return };
+    cx.foreground_executor()
+        .spawn(async move {
+            unsafe {
+                // GPUI windows keep invisible resize borders outside the client area.
+                let (mut outer, mut inner, mut origin) = (RECT::default(), RECT::default(), POINT::default());
+                let _ = GetWindowRect(h, &mut outer);
+                let _ = GetClientRect(h, &mut inner);
+                let _ = ClientToScreen(h, &mut origin);
+                let (left, top) = (origin.x - outer.left, origin.y - outer.top);
+                let extra_w = (outer.right - outer.left) - inner.right;
+                let extra_h = (outer.bottom - outer.top) - inner.bottom;
+                let _ = SetWindowPos(
+                    h,
+                    Some(HWND_TOPMOST),
+                    rect[0] - left,
+                    rect[1] - top,
+                    rect[2] + extra_w,
+                    rect[3] + extra_h,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+        })
+        .detach();
+}
+
+/// Gives a regular window the Windows 11 Mica backdrop and a dark title bar. GPUI must
+/// open the window with a see-through background for the backdrop to show.
+pub fn mica(window: &gpui::Window) {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMSBT_MAINWINDOW, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE};
+    let Some(h) = crate::win::hwnd(window) else { return };
+    let dark = windows::core::BOOL::from(true);
+    let backdrop = DWMSBT_MAINWINDOW;
     unsafe {
-        let _ = SetWindowPos(h, Some(HWND_TOPMOST), rect[0], rect[1], rect[2], rect[3], SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        let _ = DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark as *const _ as *const _, 4);
+        let _ = DwmSetWindowAttribute(h, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop as *const _ as *const _, 4);
     }
 }
 

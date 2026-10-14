@@ -18,7 +18,55 @@ pub const TEXT: u32 = 0xECECEF;
 pub const MUTED: u32 = 0x8D8D96;
 pub const ACCENT: u32 = 0x7C8CFF;
 
-pub const FONT: &str = "Segoe UI";
+pub const FONT: &str = "Segoe UI Variable Text";
+
+/// Corner radius of windows, cards and panels.
+pub const RADIUS_WINDOW: f32 = 8.;
+/// Corner radius of buttons, fields and other controls.
+pub const RADIUS_CONTROL: f32 = 4.;
+
+/// The Windows accent color (Settings > Personalization > Colors), read once.
+fn system_accent() -> u32 {
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+    static CACHE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *CACHE.get_or_init(|| {
+        let mut abgr = 0u32;
+        let mut size = 4u32;
+        let ok = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                windows::core::w!(r"Software\Microsoft\Windows\DWM"),
+                windows::core::w!("AccentColor"),
+                RRF_RT_REG_DWORD,
+                None,
+                Some(&mut abgr as *mut u32 as *mut _),
+                Some(&mut size),
+            )
+        }
+        .is_ok();
+        if !ok {
+            return ACCENT;
+        }
+        let (r, g, b) = (abgr & 0xFF, (abgr >> 8) & 0xFF, (abgr >> 16) & 0xFF);
+        // Dark surfaces need a light enough accent to read; lift dim accents toward white.
+        let lift = |c: u32| if r.max(g).max(b) < 0x90 { c + (0xFF - c) / 3 } else { c };
+        (lift(r) << 16) | (lift(g) << 8) | lift(b)
+    })
+}
+
+pub fn accent() -> Rgba {
+    rgb(system_accent())
+}
+
+pub fn accent_alpha(alpha: u8) -> Rgba {
+    rgba((system_accent() << 8) | alpha as u32)
+}
+
+pub fn accent_hover() -> Rgba {
+    let c = system_accent();
+    let up = |v: u32| v + (0xFF - v) / 5;
+    rgb((up(c >> 16) << 16) | (up((c >> 8) & 0xFF) << 8) | up(c & 0xFF))
+}
 
 pub type OnValue = Rc<dyn Fn(f32, &mut Window, &mut App)>;
 
@@ -41,7 +89,7 @@ impl Render for Tip {
             .bg(rgb(0x0C0C0E))
             .border_1()
             .border_color(rgb(BORDER))
-            .rounded_md()
+            .rounded(px(RADIUS_CONTROL))
             .text_xs()
             .text_color(rgb(TEXT))
             .child(self.0.clone())
@@ -66,9 +114,9 @@ pub fn icon_button(
         .flex()
         .items_center()
         .justify_center()
-        .rounded_md()
+        .rounded(px(RADIUS_CONTROL))
         .cursor_pointer()
-        .when(active, |d| d.bg(rgb(ACCENT)))
+        .when(active, |d| d.bg(accent()))
         .when(!active, |d| d.hover(|s| s.bg(rgb(HOVER))))
         .child(icon(icon_name, 17., rgb(if active { 0xFFFFFF } else { TEXT })))
         .tooltip(tooltip(tip))
@@ -91,13 +139,13 @@ pub fn button(
         .items_center()
         .justify_center()
         .gap_1p5()
-        .rounded_md()
+        .rounded(px(RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
         .when(primary, |d| {
-            d.bg(rgb(ACCENT))
+            d.bg(accent())
                 .text_color(rgb(0xFFFFFF))
-                .hover(|s| s.bg(rgb(0x8E9BFF)))
+                .hover(|s| s.bg(accent_hover()))
         })
         .when(!primary, |d| {
             d.bg(rgb(ELEV))
@@ -144,13 +192,13 @@ pub fn chip(
         .flex()
         .items_center()
         .justify_center()
-        .rounded_md()
+        .rounded(px(RADIUS_CONTROL))
         .text_xs()
         .cursor_pointer()
         .border_1()
         .when(selected, |d| {
-            d.bg(rgba(0x7C8CFF33))
-                .border_color(rgb(ACCENT))
+            d.bg(accent_alpha(0x33))
+                .border_color(accent())
                 .text_color(rgb(0xFFFFFF))
         })
         .when(!selected, |d| {
@@ -187,7 +235,7 @@ pub fn toggle(
                 .rounded_full()
                 .p(px(2.))
                 .flex()
-                .when(on, |d| d.bg(rgb(ACCENT)).justify_end())
+                .when(on, |d| d.bg(accent()).justify_end())
                 .when(!on, |d| d.bg(rgb(HOVER)).justify_start())
                 .child(div().size(px(16.)).rounded_full().bg(rgb(0xFFFFFF))),
         )
@@ -220,7 +268,7 @@ pub fn swatch(
         .rounded(px(size * 0.32))
         .cursor_pointer()
         .border_2()
-        .when(selected, |d| d.border_color(rgb(ACCENT)))
+        .when(selected, |d| d.border_color(accent()))
         .when(!selected, |d| d.border_color(rgba(0x00000000)).hover(|s| s.border_color(rgb(HOVER))))
         .child(inner.border_1().border_color(rgba(0xFFFFFF1F)))
         .on_click(on_click)
@@ -303,7 +351,7 @@ pub fn slider(
                                 .h_full()
                                 .w(relative(frac))
                                 .rounded_full()
-                                .bg(rgb(ACCENT)),
+                                .bg(accent()),
                         ),
                 )
                 .child(
@@ -354,7 +402,7 @@ pub fn kbd(text: &str) -> impl IntoElement {
             div()
                 .px_1p5()
                 .py(px(1.))
-                .rounded_sm()
+                .rounded(px(RADIUS_CONTROL))
                 .bg(rgb(ELEV))
                 .border_1()
                 .border_color(rgb(BORDER))
@@ -398,6 +446,10 @@ pub fn edit_text(text: &mut String, e: &gpui::KeyDownEvent) -> Edit {
             Err(_) => Edit::Ignored,
         },
         _ if ctrl || k.modifiers.alt => Edit::Ignored,
+        "space" => {
+            text.push(' ');
+            Edit::Changed
+        }
         _ => match &k.key_char {
             Some(c) if !c.chars().any(char::is_control) => {
                 text.push_str(c);
@@ -416,10 +468,10 @@ pub fn text_box(value: &str, placeholder: &str, focused: bool) -> gpui::Div {
         .flex()
         .items_center()
         .gap_1p5()
-        .rounded_md()
+        .rounded(px(RADIUS_CONTROL))
         .bg(rgb(0x101012))
         .border_1()
-        .border_color(rgb(if focused { ACCENT } else { BORDER }))
+        .border_color(if focused { accent() } else { rgb(BORDER) })
         .text_sm()
         .overflow_hidden()
         .child(
@@ -430,7 +482,7 @@ pub fn text_box(value: &str, placeholder: &str, focused: bool) -> gpui::Div {
                 .whitespace_nowrap()
                 .when(value.is_empty() && !focused, |d| d.text_color(rgb(MUTED)).child(placeholder.to_string()))
                 .when(!value.is_empty(), |d| d.text_color(rgb(TEXT)).child(value.to_string()))
-                .when(focused, |d| d.child(div().w(px(1.5)).h(px(16.)).bg(rgb(ACCENT)))),
+                .when(focused, |d| d.child(div().w(px(1.5)).h(px(16.)).bg(accent()))),
         )
 }
 

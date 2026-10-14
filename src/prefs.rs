@@ -4,7 +4,7 @@ use crate::cards::{CardAction, CardLayout, Corner, Zone};
 use crate::hotkeys::{self, Hotkeys};
 use crate::library::Library;
 use crate::settings::{ExportFormat, HotkeyAction, RedactRules, RedactStyle, Settings, Side};
-use crate::ui::{self, ACCENT, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::{self, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
 use crate::{shell, stack, win};
 use gpui::prelude::*;
 use gpui::{
@@ -69,7 +69,7 @@ struct DragGhost(CardAction);
 
 impl Render for DragGhost {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        action_chip(self.0).bg(rgb(ACCENT)).font_family(FONT).shadow_lg()
+        action_chip(self.0).bg(ui::accent()).font_family(FONT).shadow_lg()
     }
 }
 
@@ -98,9 +98,11 @@ fn open(pane: Option<Pane>, cx: &mut App) {
             titlebar: Some(TitlebarOptions { title: Some("Glint Settings".into()), appears_transparent: false, traffic_light_position: None }),
             window_min_size: Some(size(px(720.), px(520.))),
             focus: true,
+            window_background: gpui::WindowBackgroundAppearance::Blurred,
             ..Default::default()
         },
         move |window, cx| {
+            shell::mica(window);
             let view = cx.new(|cx| Prefs { pane: pane.unwrap_or(Pane::General), recording: None, shortcut_note: None, focus: cx.focus_handle() });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
@@ -128,7 +130,7 @@ fn group(title: &str) -> gpui::Div {
         .flex_col()
         .gap_3()
         .p_4()
-        .rounded_xl()
+        .rounded(px(ui::RADIUS_WINDOW))
         .bg(rgb(PANEL))
         .border_1()
         .border_color(rgb(BORDER))
@@ -170,10 +172,10 @@ impl Prefs {
         action_chip(a)
             .id(SharedString::from(format!("drag-{key}-{a:?}")))
             .cursor_grab()
-            .hover(|s| s.border_color(rgb(ACCENT)))
+            .hover(|s| s.border_color(ui::accent()))
             .tooltip(ui::tooltip(a.help()))
             .on_drag(DragAction(a), |d, _, _, cx| cx.new(|_| DragGhost(d.0)))
-            .drag_over::<DragAction>(|s, _, _, _| s.border_color(rgb(ACCENT)))
+            .drag_over::<DragAction>(|s, _, _, _| s.border_color(ui::accent()))
             .when(key == "center", |d| {
                 d.on_drop(cx.listener(move |this, dragged: &DragAction, _, cx| {
                     let layout = &cx.global::<Settings>().overlay.layout;
@@ -198,7 +200,7 @@ impl Prefs {
             .border_dashed()
             .border_color(rgba(0xFFFFFF55))
             .bg(rgba(0x00000066))
-            .drag_over::<DragAction>(|s, _, _, _| s.bg(rgba(0x7C8CFF66)).border_color(rgb(ACCENT)))
+            .drag_over::<DragAction>(|s, _, _, _| s.bg(ui::accent_alpha(0x66)).border_color(ui::accent()))
             .on_drop(cx.listener(move |this, d: &DragAction, _, cx| this.place(d.0, Zone::Corner(corner), None, cx)));
         let slot = match corner {
             Corner::TopLeft => slot.top(px(10.)).left(px(10.)),
@@ -224,7 +226,7 @@ impl Prefs {
             .relative()
             .w(px(380.))
             .h(px(250.))
-            .rounded_xl()
+            .rounded(px(ui::RADIUS_WINDOW))
             .border_1()
             .border_color(rgb(BORDER))
             .bg(gpui::linear_gradient(135., gpui::linear_color_stop(rgb(0x3B3F7A), 0.), gpui::linear_color_stop(rgb(0x7A3B66), 1.)))
@@ -241,12 +243,12 @@ impl Prefs {
                     .items_center()
                     .justify_center()
                     .gap_1p5()
-                    .rounded_lg()
+                    .rounded(px(ui::RADIUS_WINDOW))
                     .border_1()
                     .border_dashed()
                     .border_color(rgba(0xFFFFFF55))
                     .bg(rgba(0x00000040))
-                    .drag_over::<DragAction>(|s, _, _, _| s.bg(rgba(0x7C8CFF55)).border_color(rgb(ACCENT)))
+                    .drag_over::<DragAction>(|s, _, _, _| s.bg(ui::accent_alpha(0x55)).border_color(ui::accent()))
                     .on_drop(cx.listener(|this, d: &DragAction, _, cx| this.place(d.0, Zone::Center, None, cx)))
                     .children(layout.center.iter().map(|&a| self.draggable(a, "center", cx).into_any_element()))
                     .when(layout.center.is_empty(), |d| d.child(note("Drop up to three buttons here"))),
@@ -259,12 +261,12 @@ impl Prefs {
             .flex()
             .flex_wrap()
             .gap_2()
-            .rounded_lg()
+            .rounded(px(ui::RADIUS_WINDOW))
             .border_1()
             .border_dashed()
             .border_color(rgb(BORDER))
             .bg(rgb(0x18181B))
-            .drag_over::<DragAction>(|s, _, _, _| s.bg(rgba(0x7C8CFF33)).border_color(rgb(ACCENT)))
+            .drag_over::<DragAction>(|s, _, _, _| s.bg(ui::accent_alpha(0x33)).border_color(ui::accent()))
             .on_drop(cx.listener(|this, d: &DragAction, _, cx| this.place(d.0, Zone::Tray, None, cx)))
             .children(layout.hidden.iter().map(|&a| self.draggable(a, "tray", cx).into_any_element()))
             .when(layout.hidden.is_empty(), |d| d.child(note("Drag actions here to hide them")));
@@ -341,11 +343,11 @@ impl Prefs {
                                 .px_2()
                                 .flex()
                                 .items_center()
-                                .rounded_md()
+                                .rounded(px(ui::RADIUS_CONTROL))
                                 .border_1()
-                                .border_color(rgb(ACCENT))
+                                .border_color(ui::accent())
                                 .text_xs()
-                                .text_color(rgb(ACCENT))
+                                .text_color(ui::accent())
                                 .child("Press a shortcut… (Esc to cancel)")
                                 .into_any_element()
                         } else {
@@ -430,6 +432,7 @@ fn folder_row(id: &'static str, label: &'static str, path: std::path::PathBuf, c
         .gap_3()
         .child(
             div()
+                .flex_1()
                 .flex()
                 .flex_col()
                 .min_w_0()
@@ -472,12 +475,12 @@ impl Render for Prefs {
                 .flex()
                 .items_center()
                 .gap_2()
-                .rounded_md()
+                .rounded(px(ui::RADIUS_CONTROL))
                 .cursor_pointer()
                 .text_sm()
-                .when(active, |d| d.bg(rgba(0x7C8CFF33)).text_color(rgb(0xFFFFFF)))
+                .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(rgb(0xFFFFFF)))
                 .when(!active, |d| d.text_color(rgb(TEXT)).hover(|s| s.bg(rgb(HOVER))))
-                .child(ui::icon(p.icon(), 15., rgb(if active { ACCENT } else { MUTED })))
+                .child(ui::icon(p.icon(), 15., if active { ui::accent() } else { rgb(MUTED).into() }))
                 .child(p.label())
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if this.recording.is_some() {
@@ -613,7 +616,7 @@ impl Render for Prefs {
             .track_focus(&self.focus)
             .size_full()
             .flex()
-            .bg(rgb(BG))
+            
             .font_family(FONT)
             .text_color(rgb(TEXT))
             .on_key_down(cx.listener(Self::on_key))
@@ -626,7 +629,7 @@ impl Render for Prefs {
                     .flex_col()
                     .gap_1()
                     .p_3()
-                    .bg(rgb(PANEL))
+                    .bg(rgba(0x1C1C2080))
                     .border_r_1()
                     .border_color(rgb(BORDER))
                     .children(nav),
@@ -634,7 +637,9 @@ impl Render for Prefs {
             .child(
                 div()
                     .id("pane")
+                    .bg(rgb(BG))
                     .flex_1()
+                    .min_w_0()
                     .h_full()
                     .overflow_y_scroll()
                     .child(

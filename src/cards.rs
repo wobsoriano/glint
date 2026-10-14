@@ -16,10 +16,11 @@ pub enum CardAction {
     CopyText,
     Delete,
     Dismiss,
+    More,
 }
 
 impl CardAction {
-    pub const ALL: [CardAction; 10] = [
+    pub const ALL: [CardAction; 11] = [
         CardAction::Copy,
         CardAction::Save,
         CardAction::SaveAs,
@@ -30,6 +31,7 @@ impl CardAction {
         CardAction::CopyText,
         CardAction::Delete,
         CardAction::Dismiss,
+        CardAction::More,
     ];
 
     pub fn label(self) -> &'static str {
@@ -44,6 +46,7 @@ impl CardAction {
             CardAction::CopyText => "Copy Text",
             CardAction::Delete => "Delete",
             CardAction::Dismiss => "Dismiss",
+            CardAction::More => "More",
         }
     }
 
@@ -59,6 +62,7 @@ impl CardAction {
             CardAction::CopyText => "scan",
             CardAction::Delete => "trash",
             CardAction::Dismiss => "close",
+            CardAction::More => "more",
         }
     }
 
@@ -74,6 +78,7 @@ impl CardAction {
             CardAction::CopyText => "Copy recognized text (on-device OCR)",
             CardAction::Delete => "Move the capture to the Recycle Bin",
             CardAction::Dismiss => "Close the card and keep the capture",
+            CardAction::More => "Show the hidden actions",
         }
     }
 }
@@ -108,9 +113,9 @@ pub struct CardLayout {
 impl Default for CardLayout {
     fn default() -> Self {
         Self {
-            corners: [Some(CardAction::Delete), Some(CardAction::Dismiss), Some(CardAction::Edit), Some(CardAction::QuickLook)],
-            center: vec![CardAction::Copy, CardAction::Save, CardAction::Pin],
-            hidden: vec![CardAction::SaveAs, CardAction::Compress, CardAction::CopyText],
+            corners: [Some(CardAction::Dismiss), Some(CardAction::Edit), Some(CardAction::Pin), Some(CardAction::More)],
+            center: vec![CardAction::Copy, CardAction::Save],
+            hidden: vec![CardAction::SaveAs, CardAction::Compress, CardAction::QuickLook, CardAction::CopyText, CardAction::Delete],
         }
     }
 }
@@ -205,26 +210,27 @@ mod tests {
     #[test]
     fn dropping_on_an_occupied_corner_swaps_with_the_origin() {
         let mut l = CardLayout::default();
-        l.place(Pin, Zone::Corner(Corner::TopLeft), None);
-        assert_eq!(l.corners, [Some(Pin), Some(Dismiss), Some(Edit), Some(QuickLook)]);
-        assert_eq!(l.center, vec![Copy, Save, Delete]);
+        l.place(Save, Zone::Corner(Corner::TopLeft), None);
+        assert_eq!(l.corners, [Some(Save), Some(Edit), Some(Pin), Some(More)]);
+        assert_eq!(l.center, vec![Copy, Dismiss]);
 
-        l.place(Pin, Zone::Corner(Corner::BottomRight), None);
-        assert_eq!(l.corners, [Some(QuickLook), Some(Dismiss), Some(Edit), Some(Pin)]);
+        l.place(Save, Zone::Corner(Corner::BottomRight), None);
+        assert_eq!(l.corners, [Some(More), Some(Edit), Some(Pin), Some(Save)]);
     }
 
     #[test]
     fn center_keeps_order_and_capacity() {
         let mut l = CardLayout::default();
         l.place(CopyText, Zone::Center, Some(0));
-        assert_eq!(l.center, vec![CopyText, Copy, Save]);
-        assert_eq!(l.hidden, vec![SaveAs, Compress, Pin]);
+        l.place(QuickLook, Zone::Center, Some(1));
+        assert_eq!(l.center, vec![CopyText, QuickLook, Copy]);
+        assert_eq!(l.hidden, vec![SaveAs, Compress, Delete, Save]);
 
-        l.place(Save, Zone::Center, Some(0));
-        assert_eq!(l.center, vec![Save, CopyText, Copy]);
+        l.place(Copy, Zone::Center, Some(0));
+        assert_eq!(l.center, vec![Copy, CopyText, QuickLook]);
 
         l.place(Copy, Zone::Tray, None);
-        assert_eq!(l.center, vec![Save, CopyText]);
+        assert_eq!(l.center, vec![CopyText, QuickLook]);
         assert_eq!(l.hidden.last(), Some(&Copy));
     }
 
@@ -234,6 +240,6 @@ mod tests {
         let n = broken.normalized();
         assert_eq!(n.corners, [Some(Copy), None, None, None]);
         assert_eq!(n.center, vec![Save, Pin, Edit]);
-        assert_eq!(n.hidden, vec![Delete, SaveAs, Compress, QuickLook, CopyText, Dismiss]);
+        assert_eq!(n.hidden, vec![Delete, SaveAs, Compress, QuickLook, CopyText, Dismiss, More]);
     }
 }
