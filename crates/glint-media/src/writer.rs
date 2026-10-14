@@ -169,9 +169,9 @@ pub fn shrink(src: &RgbaImage, w: u32, h: u32) -> RgbaImage {
 }
 
 fn trim_audio(mut a: crate::wav::WavData, start_ms: u64, end_ms: u64) -> crate::wav::WavData {
-    let per_ms = a.sample_rate as u64 * a.channels as u64 / 1000;
-    let from = ((start_ms * per_ms) as usize).min(a.samples.len());
-    let to = ((end_ms * per_ms) as usize).min(a.samples.len());
+    let sample_at = |ms: u64| ((ms * a.sample_rate as u64 + 500) / 1000 * a.channels as u64) as usize;
+    let from = sample_at(start_ms).min(a.samples.len());
+    let to = sample_at(end_ms).min(a.samples.len());
     a.samples = a.samples[from..to].to_vec();
     a
 }
