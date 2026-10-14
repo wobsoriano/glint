@@ -30,6 +30,9 @@ pub struct Project {
     pub click_highlights: bool,
     pub keystrokes: KeystrokeSettings,
     pub captions: CaptionSettings,
+    /// Caption lines in source time, made from the transcript and edited by hand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub caption_cues: Vec<CaptionCue>,
     pub audio: AudioSettings,
     pub export: ExportOptions,
 }
@@ -47,6 +50,7 @@ impl Default for Project {
             click_highlights: true,
             keystrokes: KeystrokeSettings::default(),
             captions: CaptionSettings::default(),
+            caption_cues: Vec::new(),
             audio: AudioSettings::default(),
             export: ExportOptions::default(),
         }
@@ -258,6 +262,15 @@ impl Default for KeystrokeSettings {
     }
 }
 
+/// One caption line on the source timeline. `text` is what shows; the transcript words that
+/// start inside the cue supply its karaoke timing, so editing the text keeps it in sync.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CaptionCue {
+    pub start_ms: f64,
+    pub end_ms: f64,
+    pub text: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CaptionSettings {
@@ -451,6 +464,7 @@ impl Project {
         self.clips = clips;
         self.zooms.retain(|z| z.end_ms > z.start_ms);
         self.zooms.sort_by(|a, b| a.start_ms.total_cmp(&b.start_ms));
+        self.caption_cues.sort_by(|a, b| a.start_ms.total_cmp(&b.start_ms));
     }
 
     /// Canvas size for export: the aspect preset applied to the cropped recording, scaled so

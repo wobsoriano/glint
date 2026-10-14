@@ -3,11 +3,11 @@
 
 use crate::compose::Assets;
 use crate::overlays::CaptionWord;
-use crate::project::Project;
+use crate::project::{CaptionCue, Project};
 use anyhow::Context;
 use glint_media::input::InputTimeline;
 use glint_media::VideoReader;
-use glint_transcribe::{Transcript, TRANSCRIPT_FILE};
+use glint_transcribe::{caption_lines, CaptionOptions, Transcript, TRANSCRIPT_FILE};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -56,13 +56,16 @@ impl Session {
         let transcript_path = dir.join(TRANSCRIPT_FILE);
         let transcript = transcript_path.is_file().then(|| Transcript::load(&transcript_path)).transpose()?;
         let assets = load_assets(dir, source_size, transcript.as_ref())?;
-        let project = if dir.join(Project::FILE).is_file() {
+        let mut project = if dir.join(Project::FILE).is_file() {
             Project::load(dir, source_duration_ms)?
         } else {
             let mut p = Project::new(source_duration_ms);
             p.apply_auto_zoom(assets.input(), source_duration_ms);
             p
         };
+        if let (true, Some(t)) = (project.caption_cues.is_empty(), &transcript) {
+            project.caption_cues = caption_cues(t);
+        }
         Ok(Self {
             dir: dir.to_path_buf(),
             project,
@@ -78,7 +81,8 @@ impl Session {
         self.project.save(&self.dir)
     }
 
-    /// Saves a new transcript and rebuilds the assets so captions use it. Hand the new
+    /// Saves a new transcript and rebuilds the assets so captions use it. Give the project
+    /// cues from [`caption_cues`] to show it, and hand the new
     /// `assets` to a running [`crate::Player`] with `set_assets`.
     pub fn set_transcript(&mut self, transcript: Transcript) -> anyhow::Result<()> {
         transcript.save(&self.dir.join(TRANSCRIPT_FILE))?;
@@ -99,6 +103,15 @@ pub fn caption_words(transcript: &Transcript) -> Vec<CaptionWord> {
         .words
         .iter()
         .map(|w| CaptionWord { text: w.text.clone(), start_ms: w.start_ms as f64, end_ms: w.end_ms as f64 })
+        .collect()
+}
+
+/// Caption lines for a fresh transcript: at most 42 characters or 4 s, and a new line after
+/// a 0.9 s pause, so each reads at a glance.
+pub fn caption_cues(transcript: &Transcript) -> Vec<CaptionCue> {
+    caption_lines(&transcript.words, &CaptionOptions::default())
+        .into_iter()
+        .map(|l| CaptionCue { start_ms: l.start_ms as f64, end_ms: l.end_ms as f64, text: l.text })
         .collect()
 }
 

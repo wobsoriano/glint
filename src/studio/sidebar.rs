@@ -22,7 +22,7 @@ fn value(weak: &WeakEntity<Studio>, group: &'static str, f: impl Fn(&mut Project
     })
 }
 
-fn hint(text: impl Into<SharedString>) -> gpui::Div {
+pub(super) fn hint(text: impl Into<SharedString>) -> gpui::Div {
     div().text_xs().text_color(ui::theme().muted).child(text.into())
 }
 
@@ -57,6 +57,7 @@ impl Studio {
             Tab::Camera => self.camera_tab(cx),
             Tab::Audio => self.audio_tab(cx),
             Tab::Zoom => self.zoom_tab(cx),
+            Tab::Captions => self.captions_tab(cx),
             Tab::Presets => self.presets_tab(cx),
         };
         div()

@@ -77,7 +77,7 @@ calls the real code. The evidence column points at that proof.
 - [x] Auto zoom from clicks; add, remove, enable, resize, retime zooms; follow pointer or fixed focus — W3 frames, W8b s13-s15
 - [x] Reconstructed cursor with adjustable size; click highlights; keystroke captions in six positions — W3 frame_03150, cursor test
 - [x] Camera track: show/hide, drag, size, roundness — W8b s19 (synthetic camera)
-- [ ] On-device transcription; captions editor with seek, position, size, karaoke highlight
-- [ ] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences
+- [x] On-device transcription; captions editor with seek, position, size, karaoke highlight — W9 s7-s12, s17, export frame1/2
+- [x] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences — W9 s20-s25, t6
 - [x] Export: quality, resolution, format, 30/60 fps, motion blur, audio; progress; cancel; cached renders — W8a proof.log, W8b s22/s23
-- [x] Trim-and-compress editor for regular video files
+- [x] Trim-and-compress editor for regular video files — W10 shots 10/11 (4K trim to 2 s 720p, ffprobe), 31-38

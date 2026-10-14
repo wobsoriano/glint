@@ -139,9 +139,6 @@ pub struct CaptionWord {
     pub end_ms: f64,
 }
 
-const LINE_MAX_CHARS: usize = 42;
-const LINE_MAX_MS: f64 = 4_000.0;
-const LINE_GAP_MS: f64 = 900.0;
 const LINE_MIN_MS: f64 = 800.0;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,34 +163,39 @@ pub struct CaptionTrack {
 }
 
 impl CaptionTrack {
-    /// Chunks words that survive the edit into short lines at pauses, so a caption reads at
-    /// a glance: at most 42 characters or 4 s, and a new line after a 0.9 s pause.
+    /// One line per caption cue, showing the cue's text. Each shown word takes its timing
+    /// from the transcript words inside the cue (see [`spread`]); words whose footage was
+    /// cut drop out and the rest move to output time.
     pub fn build(project: &Project, words: &[CaptionWord]) -> Self {
-        let mut lines: Vec<Line> = Vec::new();
+        let cues = &project.caption_cues;
+        let mut timed: Vec<Vec<(f64, f64)>> = vec![Vec::new(); cues.len()];
         for w in words {
-            let text = w.text.trim();
-            if text.is_empty() {
-                continue;
-            }
-            let Some(start) = project.event_output_time(w.start_ms) else { continue };
-            let end = project
-                .output_time(w.end_ms)
-                .filter(|&e| e >= start)
-                .unwrap_or(start + (w.end_ms - w.start_ms).max(0.0));
-            let fits = lines.last().is_some_and(|l| {
-                let chars: usize = l.words.iter().map(|w| w.0.chars().count() + 1).sum();
-                start - l.end < LINE_GAP_MS
-                    && end - l.start <= LINE_MAX_MS
-                    && chars + text.chars().count() <= LINE_MAX_CHARS
-            });
-            if fits {
-                let l = lines.last_mut().unwrap();
-                l.end = end;
-                l.words.push((text.to_string(), start, end));
-            } else {
-                lines.push(Line { start, end, words: vec![(text.to_string(), start, end)] });
+            let i = cues.partition_point(|c| c.start_ms <= w.start_ms).saturating_sub(1);
+            if let Some(t) = timed.get_mut(i) {
+                t.push((w.start_ms, w.end_ms.max(w.start_ms)));
             }
         }
+        let mut lines: Vec<Line> = Vec::new();
+        for (cue, mut spans) in cues.iter().zip(timed) {
+            if spans.is_empty() {
+                spans.push((cue.start_ms, cue.end_ms.max(cue.start_ms)));
+            }
+            let shown: Vec<&str> = cue.text.split_whitespace().collect();
+            let words: Vec<(String, f64, f64)> = shown
+                .iter()
+                .enumerate()
+                .filter_map(|(k, text)| {
+                    let (s, e) = spread(&spans, k, shown.len());
+                    let start = project.event_output_time(s)?;
+                    let end = project.output_time(e).filter(|&o| o >= start).unwrap_or(start + (e - s));
+                    Some((text.to_string(), start, end))
+                })
+                .collect();
+            if let (Some(first), Some(last)) = (words.first(), words.last()) {
+                lines.push(Line { start: first.1, end: last.2, words });
+            }
+        }
+        lines.sort_by(|a, b| a.start.total_cmp(&b.start));
         for i in 0..lines.len() {
             let next = lines.get(i + 1).map_or(f64::INFINITY, |l| l.start);
             let l = &mut lines[i];
@@ -214,6 +216,22 @@ impl CaptionTrack {
     }
 }
 
+/// Timing of shown word `k` of `count` over the timed words `spans`. Shown words split the
+/// timed words evenly by index, and a fraction of a timed word takes that fraction of its
+/// time, so a corrected spelling keeps every word's timing and a reworded line still follows
+/// the speaker's pace and pauses.
+fn spread(spans: &[(f64, f64)], k: usize, count: usize) -> (f64, f64) {
+    let n = spans.len();
+    let at = |x: f64, end: bool| {
+        let i = if end { (x.ceil() as usize).max(1) - 1 } else { (x.floor() as usize).min(n - 1) };
+        let (a, b) = spans[i];
+        a + (x - i as f64).clamp(0.0, 1.0) * (b - a)
+    };
+    let x0 = (k * n) as f64 / count as f64;
+    let x1 = ((k + 1) * n) as f64 / count as f64;
+    (at(x0, false), at(x1, true))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,9 +241,14 @@ mod tests {
         CaptionWord { text: text.into(), start_ms: start, end_ms: end }
     }
 
+    fn cue(text: &str, start: f64, end: f64) -> crate::project::CaptionCue {
+        crate::project::CaptionCue { text: text.into(), start_ms: start, end_ms: end }
+    }
+
     #[test]
-    fn captions_chunk_at_pauses_and_track_the_spoken_word() {
-        let p = Project::new(20_000.0);
+    fn captions_show_cue_lines_and_track_the_spoken_word() {
+        let mut p = Project::new(20_000.0);
+        p.caption_cues = vec![cue("Open the settings", 1_000.0, 2_000.0), cue("Then save", 4_000.0, 4_800.0)];
         let words = [
             word("Open", 1_000.0, 1_300.0),
             word("the", 1_300.0, 1_450.0),
@@ -245,10 +268,31 @@ mod tests {
     #[test]
     fn cut_words_disappear_from_captions() {
         let mut p = Project::new(10_000.0);
+        p.caption_cues = vec![cue("um hello", 1_200.0, 2_600.0)];
         p.cut_source_ranges(&[1_000.0..2_000.0]);
         let track = CaptionTrack::build(&p, &[word("um", 1_200.0, 1_500.0), word("hello", 2_100.0, 2_600.0)]);
         let f = track.at(1_200.0).unwrap();
         assert_eq!((f.words, f.active), (vec!["hello"], Some(0)));
+    }
+
+    #[test]
+    fn edited_cue_text_shows_with_timing_spread_over_its_words() {
+        let mut p = Project::new(10_000.0);
+        let words = [word("Glint", 1_000.0, 1_400.0), word("is", 1_400.0, 1_600.0), word("grate", 2_000.0, 2_400.0)];
+        p.caption_cues = vec![cue("Glint is great", 1_000.0, 2_400.0)];
+        let track = CaptionTrack::build(&p, &words);
+        assert_eq!(track.at(2_100.0).unwrap(), CaptionFrame { words: vec!["Glint", "is", "great"], active: Some(2), spoken: 3 });
+        assert_eq!(track.at(1_800.0).unwrap().active, None);
+
+        p.caption_cues[0].text = "Glint really is great".into();
+        let track = CaptionTrack::build(&p, &words);
+        let lit = |t: f64| track.at(t).unwrap().active;
+        assert_eq!((lit(1_100.0), lit(1_350.0), lit(1_550.0), lit(2_300.0)), (Some(0), Some(1), Some(2), Some(3)));
+
+        p.caption_cues[0].text = "Great".into();
+        let track = CaptionTrack::build(&p, &words);
+        assert_eq!(track.at(1_050.0).unwrap().words, vec!["Great"]);
+        assert_eq!(track.at(2_300.0).unwrap().active, Some(0));
     }
 
     #[test]

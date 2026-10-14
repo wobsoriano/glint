@@ -23,7 +23,7 @@ pub use overlays::CaptionWord;
 pub use player::Player;
 pub use preset::{Preset, PresetStore};
 pub use project::*;
-pub use session::{caption_words, Session, Tracks};
+pub use session::{caption_cues, caption_words, Session, Tracks};
 pub use thumbs::timeline_thumbnails;
 pub use timeline::History;
 pub use zoom::auto_zooms;

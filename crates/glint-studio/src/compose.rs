@@ -83,6 +83,7 @@ impl Assets {
             project.crop,
             project.design.padding,
             project.design.cursor.smoothing,
+            &project.caption_cues,
         ))
         .unwrap_or_default();
         let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
