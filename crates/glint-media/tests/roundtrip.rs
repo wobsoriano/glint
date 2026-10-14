@@ -1,8 +1,8 @@
 //! Writer → reader round trip with synthetic frames and an audio tone.
 
 use glint_media::{
-    available_codecs, decodable_codecs, read_mp4_audio, transcode, AudioParams, TranscodeOptions, VideoCodec, VideoParams,
-    VideoReader, VideoWriter,
+    available_codecs, decodable_codecs, read_mp4_audio, transcode, AudioParams, FrameReader, TranscodeOptions, VideoCodec,
+    VideoParams, VideoReader, VideoWriter,
 };
 use image::{Rgba, RgbaImage};
 use std::path::PathBuf;
@@ -141,4 +141,103 @@ fn transcode_trims_and_resizes() {
     assert_close(*first.image.get_pixel(150, 110), [255, 255, 0], "trimmed first frame bottom");
     let audio = read_mp4_audio(&dst).unwrap().expect("audio carried over");
     assert!((900..=1100).contains(&audio.duration_ms()), "trimmed audio {}", audio.duration_ms());
+}
+
+const BLOCKS: [[u8; 3]; 8] =
+    [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255], [128, 128, 128], [255, 255, 0], [224, 172, 105], [30, 60, 90]];
+
+/// Eight flat colour blocks in a 4x2 grid.
+fn colour_blocks(w: u32, h: u32) -> RgbaImage {
+    RgbaImage::from_fn(w, h, |x, y| {
+        let c = BLOCKS[(x * 4 / w) as usize + if y < h / 2 { 0 } else { 4 }];
+        Rgba([c[0], c[1], c[2], 255])
+    })
+}
+
+fn assert_blocks_survive(img: &RgbaImage, what: &str) {
+    let (w, h) = img.dimensions();
+    for (i, c) in BLOCKS.iter().enumerate() {
+        let (cx, cy) = ((i % 4) as u32 * w / 4 + w / 8, if i < 4 { h / 4 } else { 3 * h / 4 });
+        let mut mean = [0i32; 3];
+        for y in cy - 4..cy + 4 {
+            for x in cx - 4..cx + 4 {
+                let p = img.get_pixel(x, y);
+                for k in 0..3 {
+                    mean[k] += p[k] as i32;
+                }
+            }
+        }
+        let mean = mean.map(|v| v / 64);
+        for k in 0..3 {
+            let d = (mean[k] - c[k] as i32).abs();
+            assert!(d <= 8, "{what}: block {i} {c:?} came back as {mean:?}, channel {k} off by {d}");
+        }
+    }
+}
+
+#[test]
+fn colours_survive_the_round_trip_at_sd_and_hd() {
+    for (w, h) in [(640, 480), (1920, 1080)] {
+        let path = temp(&format!("colour_{w}x{h}.mp4"));
+        let video = VideoParams { width: w, height: h, fps: 30, bitrate: 20_000_000, codec: VideoCodec::H264 };
+        let mut writer = VideoWriter::create(&path, video, None).unwrap();
+        let frame = colour_blocks(w, h);
+        for _ in 0..10 {
+            writer.write_frame(&frame).unwrap();
+        }
+        writer.finish().unwrap();
+        let decoded = VideoReader::open(&path).unwrap().next_frame().unwrap().unwrap().image;
+        assert_blocks_survive(&decoded, &format!("{w}x{h} through VideoReader"));
+        let streamed = FrameReader::open(&path).unwrap().next_frame().unwrap().unwrap().to_rgba(Vec::new());
+        assert_blocks_survive(&streamed, &format!("{w}x{h} through FrameReader"));
+    }
+}
+
+/// Two screens of text-like dashes over white. Scrolled, they compress well but want more
+/// than 4 Mbps at 720p, so a working rate control lands on the requested average.
+fn text_page(w: u32, h: u32) -> RgbaImage {
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    RgbaImage::from_fn(w, h * 2, |x, y| {
+        let ink = y % 24 < 12 && x % 3 != 2 && next() % 5 < 2;
+        let v = if ink { (next() % 90) as u8 } else { 255 };
+        Rgba([v, v, v, 255])
+    })
+}
+
+#[test]
+fn sixty_fps_lands_on_the_requested_bitrate() {
+    const BITRATE: u32 = 4_000_000;
+    let (w, h) = (1280u32, 720u32);
+    let page = text_page(w, h);
+    for fps in [30u32, 60] {
+        let path = temp(&format!("bitrate_{fps}.mp4"));
+        let video = VideoParams { width: w, height: h, fps, bitrate: BITRATE, codec: VideoCodec::H264 };
+        let mut writer = VideoWriter::create(&path, video, None).unwrap();
+        let mut frame = RgbaImage::new(w, h);
+        let row = (w * 4) as usize;
+        for i in 0..fps * 3 {
+            let off = i * 180 / fps % h;
+            for y in 0..h as usize {
+                let src = (y + off as usize) % (2 * h as usize);
+                frame.as_mut()[y * row..(y + 1) * row].copy_from_slice(&page.as_raw()[src * row..(src + 1) * row]);
+            }
+            writer.write_frame(&frame).unwrap();
+        }
+        let s = writer.finish().unwrap();
+        let measured = s.bytes as f64 * 8.0 / (s.duration_ms as f64 / 1000.0);
+        let ratio = measured / BITRATE as f64;
+        assert!(
+            (0.8..=1.4).contains(&ratio),
+            "{fps} fps: {:.2} Mbps for {:.2} requested ({ratio:.2}x), hardware {}",
+            measured / 1e6,
+            BITRATE as f64 / 1e6,
+            s.hardware
+        );
+    }
 }
