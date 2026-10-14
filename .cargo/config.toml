@@ -1,8 +1,0 @@
-# Build-time tools for whisper-rs (glint-transcribe): cmake builds whisper.cpp, libclang feeds bindgen.
-# VS Build Tools ships cmake. Its Llvm folder has no libclang.dll unless the "C++ Clang tools"
-# component is installed, so libclang comes from the PyPI `libclang` 18.1.1 wheel:
-#   py -m pip download libclang==18.1.1 --only-binary :all: --no-deps
-# then copy clang/native/libclang.dll from the wheel into the folder below.
-[env]
-CMAKE = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
-LIBCLANG_PATH = 'C:\Users\wobsoriano\.glint-build\libclang-18.1.1'
