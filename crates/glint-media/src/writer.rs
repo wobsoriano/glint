@@ -3,7 +3,7 @@
 use crate::encoder::Mp4Sink;
 pub use crate::encoder::{available_codecs, decodable_codecs, AudioParams, VideoCodec, VideoParams};
 use crate::frames::FrameReader;
-use crate::reader::read_mp4_audio;
+use crate::reader::{frame_at, AudioReader};
 use anyhow::{bail, Context};
 use image::RgbaImage;
 use std::path::Path;
@@ -98,11 +98,10 @@ pub fn transcode(
         bitrate: opts.bitrate.unwrap_or_else(|| VideoParams::recording_bitrate(w, h, fps)),
         codec: opts.codec.unwrap_or(VideoCodec::H264),
     };
-    let audio = if opts.drop_audio { None } else { read_mp4_audio(src)?.map(|a| trim_audio(a, start, end)) };
-    let mut writer = VideoWriter::create(dst, video, audio.as_ref().map(|a| AudioParams { sample_rate: a.sample_rate, channels: a.channels }))?;
-    if let Some(a) = &audio {
-        writer.write_audio(&a.samples)?;
-    }
+    let audio = if opts.drop_audio { None } else { AudioReader::open(src)? };
+    let params = audio.as_ref().map(|a| AudioParams { sample_rate: a.sample_rate(), channels: a.channels() });
+    let mut writer = VideoWriter::create(dst, video, params)?;
+    let mut audio = audio.map(|a| AudioCopy::new(a, start, end)).transpose()?;
     reader.seek(start)?;
     let span = (end - start) as f32;
     let mut buffer = Vec::new();
@@ -124,10 +123,62 @@ pub fn transcode(
             writer.write_frame(&image::imageops::resize(&rgba, w, h, image::imageops::FilterType::Triangle))?;
         }
         buffer = rgba.into_raw();
+        if let Some(a) = &mut audio {
+            a.copy_until(&mut writer, frame.t_ms.saturating_sub(start) + 1000)?;
+        }
         progress((frame.t_ms.saturating_sub(start) as f32 / span).clamp(0.0, 1.0));
+    }
+    if let Some(a) = &mut audio {
+        a.finish(&mut writer)?;
     }
     progress(1.0);
     writer.finish().with_context(|| format!("finish {}", dst.display()))
+}
+
+/// Copies the audio inside the trim window into the writer about a second at a time, kept
+/// just ahead of the video so the muxer never holds a whole track in memory.
+struct AudioCopy {
+    reader: AudioReader,
+    /// Frames in the window, and how many of them are written.
+    frames: u64,
+    written: u64,
+    chunk: Vec<f32>,
+}
+
+impl AudioCopy {
+    fn new(mut reader: AudioReader, start_ms: u64, end_ms: u64) -> anyhow::Result<Self> {
+        reader.seek(start_ms)?;
+        let rate = reader.sample_rate();
+        let frames = frame_at(end_ms, rate) - frame_at(start_ms, rate);
+        Ok(Self { reader, frames, written: 0, chunk: Vec::new() })
+    }
+
+    /// Writes audio up to `ms` of output time.
+    fn copy_until(&mut self, writer: &mut VideoWriter, ms: u64) -> anyhow::Result<()> {
+        self.copy_frames(writer, frame_at(ms, self.reader.sample_rate()).min(self.frames))
+    }
+
+    /// Writes whatever remains of the window.
+    fn finish(&mut self, writer: &mut VideoWriter) -> anyhow::Result<()> {
+        self.copy_frames(writer, self.frames)
+    }
+
+    fn copy_frames(&mut self, writer: &mut VideoWriter, until: u64) -> anyhow::Result<()> {
+        let channels = self.reader.channels().max(1) as usize;
+        let per_second = self.reader.sample_rate() as usize * channels;
+        while self.written < until {
+            self.chunk.clear();
+            while self.chunk.len() < per_second && self.reader.next_chunk(&mut self.chunk)? {}
+            let keep = ((self.chunk.len() / channels) as u64).min(self.frames - self.written);
+            if keep == 0 {
+                return Ok(());
+            }
+            self.chunk.truncate(keep as usize * channels);
+            writer.write_audio(&self.chunk)?;
+            self.written += keep;
+        }
+        Ok(())
+    }
 }
 
 /// Area-average downscale to `w` x `h`, at most the source size, split across all cores.
@@ -168,14 +219,6 @@ pub fn shrink(src: &RgbaImage, w: u32, h: u32) -> RgbaImage {
     RgbaImage::from_raw(w as u32, h as u32, out).expect("buffer matches size")
 }
 
-fn trim_audio(mut a: crate::wav::WavData, start_ms: u64, end_ms: u64) -> crate::wav::WavData {
-    let sample_at = |ms: u64| ((ms * a.sample_rate as u64 + 500) / 1000 * a.channels as u64) as usize;
-    let from = sample_at(start_ms).min(a.samples.len());
-    let to = sample_at(end_ms).min(a.samples.len());
-    a.samples = a.samples[from..to].to_vec();
-    a
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,15 +235,5 @@ mod tests {
         assert_eq!(out.as_raw(), &vec![128, 128, 128, 255, 255, 0, 0, 255]);
         let odd = shrink(&RgbaImage::from_pixel(5, 3, image::Rgba([10, 20, 30, 255])), 2, 2);
         assert!(odd.pixels().all(|p| p.0 == [10, 20, 30, 255]));
-    }
-
-    #[test]
-    fn trim_starts_on_the_exact_frame_at_44100_hz() {
-        // Stereo 44.1 kHz, 61 s, every sample carries its frame index.
-        let frames = 61 * 44_100;
-        let samples = (0..frames).flat_map(|f| [f as f32, f as f32]).collect();
-        let trimmed = trim_audio(crate::wav::WavData { sample_rate: 44_100, channels: 2, samples }, 60_000, 61_000);
-        assert_eq!(trimmed.samples[0], 2_646_000.0, "first sample is frame 60 s * 44100");
-        assert_eq!(trimmed.samples.len(), 88_200, "one second of stereo frames");
     }
 }

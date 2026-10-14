@@ -29,7 +29,7 @@ pub use clock::MediaClock;
 pub use devices::{cameras, displays, microphones, AudioDevice, CameraDevice, DeviceId, DisplayInfo, Rect};
 pub use frames::FrameReader;
 pub use recorder::{CaptureSource, Fps, RecordOptions, RecordSummary, Recorder};
-pub use reader::{read_mp4_audio, VideoFrame, VideoReader};
+pub use reader::{read_mp4_audio, AudioReader, VideoFrame, VideoReader};
 pub use wav::{read_wav, WavData};
 pub use writer::{
     available_codecs, decodable_codecs, shrink, transcode, AudioParams, TranscodeOptions, VideoCodec, VideoParams, VideoWriter,

@@ -78,18 +78,7 @@ impl VideoReader {
 
     /// Positions the reader so the next frame is the first one at or after `ms`.
     pub fn seek(&mut self, ms: u64) -> anyhow::Result<()> {
-        let pos = PROPVARIANT {
-            Anonymous: PROPVARIANT_0 {
-                Anonymous: std::mem::ManuallyDrop::new(PROPVARIANT_0_0 {
-                    vt: VT_I8,
-                    wReserved1: 0,
-                    wReserved2: 0,
-                    wReserved3: 0,
-                    Anonymous: PROPVARIANT_0_0_0 { hVal: ms as i64 * 10_000 },
-                }),
-            },
-        };
-        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &pos).context("SetCurrentPosition")? };
+        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &media_position(ms)).context("SetCurrentPosition")? };
         self.skip_until_ms = Some(ms);
         Ok(())
     }
@@ -179,44 +168,136 @@ impl VideoReader {
     }
 }
 
-/// The first audio track of an MP4 as interleaved float PCM, or `None` when it has no audio.
-pub fn read_mp4_audio(path: &Path) -> anyhow::Result<Option<WavData>> {
-    mf::init()?;
-    unsafe {
-        let url = wide(&path.to_string_lossy());
-        let reader = MFCreateSourceReaderFromURL(pcwstr(&url), None).with_context(|| format!("open {}", path.display()))?;
-        reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)?;
-        let audio_stream = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
-        if reader.SetStreamSelection(audio_stream, true).is_err() {
-            return Ok(None);
+fn media_position(ms: u64) -> PROPVARIANT {
+    PROPVARIANT {
+        Anonymous: PROPVARIANT_0 {
+            Anonymous: std::mem::ManuallyDrop::new(PROPVARIANT_0_0 {
+                vt: VT_I8,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: PROPVARIANT_0_0_0 { hVal: ms as i64 * 10_000 },
+            }),
+        },
+    }
+}
+
+/// The sample frame that starts at media time `ms`, rounded to the nearest frame.
+pub(crate) fn frame_at(ms: u64, sample_rate: u32) -> u64 {
+    (ms * sample_rate as u64 + 500) / 1000
+}
+
+const AUDIO_STREAM: u32 = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
+
+/// Sequential and seekable access to the first audio track of an MP4, decoded to interleaved
+/// float PCM one decoder chunk at a time (about 21 ms for AAC).
+pub struct AudioReader {
+    reader: IMFSourceReader,
+    sample_rate: u32,
+    channels: u16,
+    /// After a seek, frames before this one are decoded and dropped.
+    skip_until: Option<u64>,
+}
+
+impl AudioReader {
+    /// Opens the first audio track of `path`, or `None` when the file has no audio.
+    pub fn open(path: &Path) -> anyhow::Result<Option<Self>> {
+        mf::init()?;
+        unsafe {
+            let url = wide(&path.to_string_lossy());
+            let reader = MFCreateSourceReaderFromURL(pcwstr(&url), None).with_context(|| format!("open {}", path.display()))?;
+            reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)?;
+            if reader.SetStreamSelection(AUDIO_STREAM, true).is_err() {
+                return Ok(None);
+            }
+            let out = MFCreateMediaType()?;
+            out.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+            out.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_Float)?;
+            reader.SetCurrentMediaType(AUDIO_STREAM, None, &out).context("SetCurrentMediaType float audio")?;
+            let current = reader.GetCurrentMediaType(AUDIO_STREAM)?;
+            let sample_rate = current.GetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND)?;
+            let channels = current.GetUINT32(&MF_MT_AUDIO_NUM_CHANNELS)? as u16;
+            if current.GetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE)? != 32 {
+                bail!("audio decoder did not produce 32-bit float");
+            }
+            Ok(Some(Self { reader, sample_rate, channels, skip_until: None }))
         }
-        let out = MFCreateMediaType()?;
-        out.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
-        out.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_Float)?;
-        reader.SetCurrentMediaType(audio_stream, None, &out).context("SetCurrentMediaType float audio")?;
-        let current = reader.GetCurrentMediaType(audio_stream)?;
-        let sample_rate = current.GetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND)?;
-        let channels = current.GetUINT32(&MF_MT_AUDIO_NUM_CHANNELS)? as u16;
-        if current.GetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE)? != 32 {
-            bail!("audio decoder did not produce 32-bit float");
-        }
-        let mut samples = Vec::new();
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    pub fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    /// Positions the reader so the next chunk starts on the frame at `ms`. Decoding resumes
+    /// a few blocks earlier: an AAC block decoded without its predecessor comes out faded
+    /// and the dropped run-up absorbs that.
+    pub fn seek(&mut self, ms: u64) -> anyhow::Result<()> {
+        let from = media_position(ms.saturating_sub(100));
+        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &from).context("SetCurrentPosition")? };
+        self.skip_until = Some(frame_at(ms, self.sample_rate));
+        Ok(())
+    }
+
+    /// Appends the next decoded chunk to `out`. False once the track has ended.
+    pub fn next_chunk(&mut self, out: &mut Vec<f32>) -> anyhow::Result<bool> {
+        let channels = self.channels.max(1) as usize;
         loop {
             let mut flags = 0u32;
+            let mut ts = 0i64;
             let mut sample = None;
-            reader.ReadSample(audio_stream, 0, None, Some(&mut flags), None, Some(&mut sample))?;
+            unsafe {
+                self.reader.ReadSample(AUDIO_STREAM, 0, None, Some(&mut flags), Some(&mut ts), Some(&mut sample)).context("ReadSample audio")?;
+            }
             if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
-                break;
+                return Ok(false);
             }
             let Some(sample) = sample else { continue };
-            let buffer = sample.ConvertToContiguousBuffer()?;
-            let mut ptr = std::ptr::null_mut();
-            let mut len = 0u32;
-            buffer.Lock(&mut ptr, None, Some(&mut len))?;
-            let bytes = std::slice::from_raw_parts(ptr, len as usize);
-            samples.extend(bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])));
-            buffer.Unlock()?;
+            let before = out.len();
+            unsafe {
+                let buffer = sample.ConvertToContiguousBuffer()?;
+                let mut ptr = std::ptr::null_mut();
+                let mut len = 0u32;
+                buffer.Lock(&mut ptr, None, Some(&mut len))?;
+                let bytes = std::slice::from_raw_parts(ptr, len as usize);
+                out.extend(bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])));
+                buffer.Unlock()?;
+            }
+            if let Some(target) = self.skip_until {
+                let at = (ts.max(0) as u64 * self.sample_rate as u64 + 5_000_000) / 10_000_000;
+                let skip = target.saturating_sub(at) as usize * channels;
+                if before + skip >= out.len() {
+                    out.truncate(before);
+                    continue;
+                }
+                out.drain(before..before + skip);
+                self.skip_until = None;
+            }
+            return Ok(true);
         }
-        Ok(Some(WavData { sample_rate, channels, samples }))
+    }
+}
+
+/// The whole first audio track of an MP4 as interleaved float PCM, or `None` when it has no
+/// audio. Tests and short clips use it; Studio and the Trim preview stream chunks instead.
+pub fn read_mp4_audio(path: &Path) -> anyhow::Result<Option<WavData>> {
+    let Some(mut reader) = AudioReader::open(path)? else { return Ok(None) };
+    let mut samples = Vec::new();
+    while reader.next_chunk(&mut samples)? {}
+    Ok(Some(WavData { sample_rate: reader.sample_rate, channels: reader.channels, samples }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frames_land_on_the_exact_sample_at_44100_hz() {
+        assert_eq!(frame_at(60_000, 44_100), 2_646_000);
+        assert_eq!(frame_at(61_000, 44_100) - frame_at(60_000, 44_100), 44_100);
+        assert_eq!(frame_at(60_000, 48_000), 2_880_000);
     }
 }
