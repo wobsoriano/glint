@@ -101,17 +101,10 @@ pub fn rebind(action: HotkeyAction, accel: &str, cx: &mut App) -> Result<(), Str
 pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     let key = match k.key.as_str() {
         "control" | "shift" | "alt" | "platform" | "function" | "" => return Ok(None),
-        "space" => "Space".to_string(),
-        "up" | "down" | "left" | "right" => {
-            let mut s = k.key.clone();
-            s[..1].make_ascii_uppercase();
-            s
-        }
-        key if key.len() == 1 => key.to_ascii_uppercase(),
+        key if !key.is_ascii() => return Err(format!("{key} cannot be used in a global shortcut")),
         key => {
-            let mut s = key.to_string();
-            s[..1].make_ascii_uppercase();
-            s
+            let mut chars = key.chars();
+            chars.next().into_iter().map(|c| c.to_ascii_uppercase()).chain(chars).collect::<String>()
         }
     };
     let m = &k.modifiers;
@@ -155,5 +148,17 @@ mod tests {
         assert_eq!(accelerator(&key("ctrl-alt-l")), Ok(Some("Ctrl+Alt+L".into())));
         assert_eq!(accelerator(&key("f9")), Ok(Some("F9".into())));
         assert_eq!(accelerator(&key("shift-k")), Err("Include Ctrl, Alt or Win in the shortcut".into()));
+        assert_eq!(accelerator(&key("ctrl-a")), Ok(Some("Ctrl+A".into())));
+        assert_eq!(accelerator(&key("ctrl-up")), Ok(Some("Ctrl+Up".into())));
+    }
+
+    #[test]
+    fn rejects_non_ascii_keys() {
+        let k = gpui::Keystroke {
+            modifiers: gpui::Modifiers { control: true, ..Default::default() },
+            key: "ä".into(),
+            key_char: None,
+        };
+        assert_eq!(accelerator(&k), Err("ä cannot be used in a global shortcut".into()));
     }
 }

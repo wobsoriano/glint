@@ -103,7 +103,16 @@ fn open(pane: Option<Pane>, cx: &mut App) {
         },
         move |window, cx| {
             shell::mica(window);
-            let view = cx.new(|cx| Prefs { pane: pane.unwrap_or(Pane::General), recording: None, shortcut_note: None, focus: cx.focus_handle() });
+            let view = cx.new(|cx| {
+                // Closing the window mid-capture must give back the shortcuts Change suspended.
+                cx.on_release(|this: &mut Prefs, cx| {
+                    if this.recording.is_some() {
+                        resume_hotkeys(cx);
+                    }
+                })
+                .detach();
+                Prefs { pane: pane.unwrap_or(Pane::General), recording: None, shortcut_note: None, focus: cx.focus_handle() }
+            });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
             win::bring_to_front(window);
@@ -111,6 +120,11 @@ fn open(pane: Option<Pane>, cx: &mut App) {
         },
     );
     cx.default_global::<PrefsState>().0 = handle.ok();
+}
+
+fn resume_hotkeys(cx: &mut App) {
+    let s = cx.global::<Settings>().clone();
+    cx.global_mut::<Hotkeys>().register_all(&s);
 }
 
 fn update(cx: &mut App, f: impl FnOnce(&mut Settings)) {
@@ -398,8 +412,7 @@ impl Prefs {
 
     fn stop_recording(&mut self, cx: &mut Context<Self>) {
         self.recording = None;
-        let s = cx.global::<Settings>().clone();
-        cx.global_mut::<Hotkeys>().register_all(&s);
+        resume_hotkeys(cx);
     }
 
     fn on_key(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
