@@ -133,13 +133,3 @@ pub fn render_image(img: &image::RgbaImage) -> std::sync::Arc<gpui::RenderImage>
     }
     std::sync::Arc::new(gpui::RenderImage::new(smallvec::smallvec![image::Frame::new(bgra)]))
 }
-
-pub fn render_image_from_pixmap(pm: &tiny_skia::Pixmap) -> std::sync::Arc<gpui::RenderImage> {
-    let mut out = Vec::with_capacity(pm.data().len());
-    for p in pm.pixels() {
-        let c = p.demultiply();
-        out.extend_from_slice(&[c.blue(), c.green(), c.red(), c.alpha()]);
-    }
-    let buf = image::RgbaImage::from_raw(pm.width(), pm.height(), out).unwrap();
-    std::sync::Arc::new(gpui::RenderImage::new(smallvec::smallvec![image::Frame::new(buf)]))
-}

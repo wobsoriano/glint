@@ -1,122 +1,21 @@
-//! CPU compositor: turns a screenshot + style + annotations into the final image.
-//! The editor preview uses this exact code at a reduced scale, so what you see is what you export.
+//! CPU compositor primitives: layout, backgrounds, shadow, window chrome, redaction and
+//! annotations. `compose` builds whole documents from these; Studio uses them directly.
 
-use crate::annotate::{pt, Annotation, Pt, Shape, TextStyle, R};
-use crate::annotate::RedactStyle;
+use crate::annotate::{pt, Annotation, Pt, RedactStyle, Shape, TextStyle, R};
+use crate::fonts::{self, Align};
 use crate::style::{Background, Chrome, Color, Style};
-use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
-use std::sync::LazyLock;
 use tiny_skia::{
-    FillRule, FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient,
-    Mask, Paint, Path, PathBuilder, Pattern, Pixmap, PixmapPaint, Point, Rect, Shader,
-    SpreadMode, Stroke, Transform,
+    FillRule, FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Mask, Paint, Path,
+    PathBuilder, Pattern, Pixmap, PixmapPaint, Point, Rect, Shader, SpreadMode, Stroke, Transform,
 };
 
-// ---------------------------------------------------------------------------------------------
-// Fonts
-
-fn load_font(names: &[&str]) -> Option<FontVec> {
-    let dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
-    names.iter().find_map(|n| {
-        let bytes = std::fs::read(format!("{dir}\\Fonts\\{n}")).ok()?;
-        FontVec::try_from_vec(bytes).ok()
-    })
-}
-
-static BOLD: LazyLock<Option<FontVec>> =
-    LazyLock::new(|| load_font(&["seguisb.ttf", "segoeuib.ttf", "arialbd.ttf"]));
-static REGULAR: LazyLock<Option<FontVec>> =
-    LazyLock::new(|| load_font(&["segoeui.ttf", "arial.ttf"]));
-
 pub fn measure_text(text: &str, size: f32) -> (f32, f32) {
-    measure_with(BOLD.as_ref(), text, size)
+    fonts::measure(fonts::default_font().as_deref(), text, size)
 }
 
-fn measure_with(font: Option<&FontVec>, text: &str, size: f32) -> (f32, f32) {
-    let Some(font) = font else {
-        return (text.len() as f32 * size * 0.55, size * 1.25);
-    };
-    let sf = font.as_scaled(PxScale::from(size));
-    let mut w: f32 = 0.0;
-    let mut lines = 0;
-    for line in text.split('\n') {
-        lines += 1;
-        let mut caret = 0.0;
-        let mut prev = None;
-        for c in line.chars() {
-            let id = font.glyph_id(c);
-            if let Some(p) = prev {
-                caret += sf.kern(p, id);
-            }
-            caret += sf.h_advance(id);
-            prev = Some(id);
-        }
-        w = w.max(caret);
-    }
-    (w, lines as f32 * size * 1.25)
-}
-
-/// Draws bold UI text (the face `measure_text` measures) with its top-left corner at (x, y).
+/// Draws text in the face `measure_text` measures, with its top-left corner at (x, y).
 pub fn draw_text(pm: &mut Pixmap, text: &str, x: f32, y: f32, size: f32, color: Color) {
-    draw_text_with(pm, BOLD.as_ref(), text, x, y, size, color);
-}
-
-/// Draws (possibly multi-line) text with its top-left corner at (x, y).
-fn draw_text_with(
-    pm: &mut Pixmap,
-    font: Option<&FontVec>,
-    text: &str,
-    x: f32,
-    y: f32,
-    size: f32,
-    color: Color,
-) {
-    let Some(font) = font else { return };
-    let sf = font.as_scaled(PxScale::from(size));
-    let line_h = size * 1.25;
-    let ascent = sf.ascent() + (line_h - (sf.ascent() - sf.descent())) / 2.0;
-    let (pw, ph) = (pm.width() as i32, pm.height() as i32);
-    let pixels = pm.pixels_mut();
-    for (li, line) in text.split('\n').enumerate() {
-        let baseline = y + ascent + li as f32 * line_h;
-        let mut caret = x;
-        let mut prev = None;
-        for c in line.chars() {
-            let id = font.glyph_id(c);
-            if let Some(p) = prev {
-                caret += sf.kern(p, id);
-            }
-            let glyph = id.with_scale_and_position(sf.scale(), ab_glyph::point(caret, baseline));
-            caret += sf.h_advance(id);
-            prev = Some(id);
-            if let Some(og) = font.outline_glyph(glyph) {
-                let b = og.px_bounds();
-                og.draw(|gx, gy, cov| {
-                    let px = b.min.x as i32 + gx as i32;
-                    let py = b.min.y as i32 + gy as i32;
-                    if px >= 0 && py >= 0 && px < pw && py < ph {
-                        blend_px(&mut pixels[(py * pw + px) as usize], color, cov);
-                    }
-                });
-            }
-        }
-    }
-}
-
-fn blend_px(dst: &mut tiny_skia::PremultipliedColorU8, c: Color, cov: f32) {
-    let a = (c.a() as f32 / 255.0) * cov.clamp(0.0, 1.0);
-    if a <= 0.0 {
-        return;
-    }
-    let inv = 1.0 - a;
-    let mix = |s: u8, d: u8| ((s as f32 * a) + d as f32 * inv).round().min(255.0) as u8;
-    let na = (255.0 * a + dst.alpha() as f32 * inv).round().min(255.0) as u8;
-    let r = mix(c.r(), dst.red()).min(na);
-    let g = mix(c.g(), dst.green()).min(na);
-    let b = mix(c.b(), dst.blue()).min(na);
-    if let Some(p) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, na) {
-        *dst = p;
-    }
+    fonts::draw(pm, fonts::default_font().as_deref(), text, x, y, size, Align::Left, color);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -159,22 +58,37 @@ impl Layout {
             h: r.h * self.scale,
         }
     }
+    /// The same layout with every canvas position moved by (dx, dy); used to render a region.
+    pub fn translated(&self, dx: f32, dy: f32) -> Layout {
+        Layout {
+            card: self.card.translate(dx, dy),
+            image: self.image.translate(dx, dy),
+            ..*self
+        }
+    }
 }
 
 /// `dpi` is the scale factor of the monitor the screenshot came from; `scale` is the render scale.
 pub fn layout(style: &Style, crop: R, dpi: f32, scale: f32) -> Layout {
+    layout_with_border(style, crop, dpi, scale, 0.0)
+}
+
+/// Like [`layout`], with room for a border of `border` points around the card. `card` stays the
+/// inner card; the border ring is `card.inflate(border * unit)` rounded to whole pixels.
+pub fn layout_with_border(style: &Style, crop: R, dpi: f32, scale: f32, border: f32) -> Layout {
     let unit = dpi * scale;
     let iw = (crop.w * scale).round().max(1.0);
     let ih = (crop.h * scale).round().max(1.0);
     let pad = (style.padding * unit).round();
     let inset = (style.inset * unit).round();
+    let b = border_px(border, unit);
     let chrome_h = match style.chrome {
         Chrome::None => 0.0,
         Chrome::MacLight | Chrome::MacDark => (30.0 * unit).round(),
         Chrome::WinLight | Chrome::WinDark => (32.0 * unit).round(),
     };
-    let card_w = iw + 2.0 * inset;
-    let card_h = ih + 2.0 * inset + chrome_h;
+    let card_w = iw + 2.0 * inset + 2.0 * b;
+    let card_h = ih + 2.0 * inset + chrome_h + 2.0 * b;
     let mut cw = card_w + 2.0 * pad;
     let mut ch = card_h + 2.0 * pad;
     if let Some(a) = style.aspect {
@@ -187,13 +101,13 @@ pub fn layout(style: &Style, crop: R, dpi: f32, scale: f32) -> Layout {
     }
     let col = (style.align % 3) as f32;
     let row = (style.align / 3) as f32;
-    let card_x = (pad + (cw - card_w - 2.0 * pad) * col / 2.0).round();
-    let card_y = (pad + (ch - card_h - 2.0 * pad) * row / 2.0).round();
+    let card_x = (pad + (cw - card_w - 2.0 * pad) * col / 2.0).round() + b;
+    let card_y = (pad + (ch - card_h - 2.0 * pad) * row / 2.0).round() + b;
     let card = R {
         x: card_x,
         y: card_y,
-        w: card_w,
-        h: card_h,
+        w: card_w - 2.0 * b,
+        h: card_h - 2.0 * b,
     };
     let image = R {
         x: card_x + inset,
@@ -210,6 +124,15 @@ pub fn layout(style: &Style, crop: R, dpi: f32, scale: f32) -> Layout {
         image,
         chrome_h,
         crop,
+    }
+}
+
+/// Border thickness in canvas pixels.
+pub fn border_px(border: f32, unit: f32) -> f32 {
+    if border <= 0.0 {
+        0.0
+    } else {
+        (border * unit).round().max(1.0)
     }
 }
 
@@ -312,7 +235,7 @@ fn box_pass(src: &[u8], dst: &mut [u8], w: usize, h: usize, r: usize, ch: usize,
     }
 }
 
-fn rect(r: &R) -> Option<Rect> {
+pub(crate) fn rect(r: &R) -> Option<Rect> {
     Rect::from_xywh(r.x, r.y, r.w.max(0.5), r.h.max(0.5))
 }
 
@@ -338,14 +261,14 @@ pub fn rounded_rect(r: &R, radius: f32) -> Option<Path> {
     pb.finish()
 }
 
-fn solid(c: Color) -> Paint<'static> {
+pub(crate) fn solid(c: Color) -> Paint<'static> {
     let mut p = Paint::default();
     p.set_color(c.to_skia());
     p.anti_alias = true;
     p
 }
 
-fn gradient_shader(stops: &[Color], angle: f32, w: f32, h: f32) -> Shader<'static> {
+fn gradient_shader(stops: &[Color], angle: f32, w: f32, h: f32, ts: Transform) -> Shader<'static> {
     let rad = angle.to_radians();
     let (dx, dy) = (rad.cos(), rad.sin());
     let half = (w * dx).abs() / 2.0 + (h * dy).abs() / 2.0;
@@ -361,14 +284,13 @@ fn gradient_shader(stops: &[Color], angle: f32, w: f32, h: f32) -> Shader<'stati
         Point::from_xy(cx + dx * half, cy + dy * half),
         gs,
         SpreadMode::Pad,
-        Transform::identity(),
+        ts,
     )
     .unwrap_or(Shader::SolidColor(stops[0].to_skia()))
 }
 
-/// Draws `img` scaled to cover the `w`×`h` canvas.
-fn draw_cover(pm: &mut Pixmap, img: &Pixmap, quality: FilterQuality) {
-    let (w, h) = (pm.width() as f32, pm.height() as f32);
+/// Draws `img` scaled to cover a `w`×`h` canvas placed in `pm` by `ts`.
+fn draw_cover(pm: &mut Pixmap, img: &Pixmap, w: f32, h: f32, ts: Transform, quality: FilterQuality) {
     let s = (w / img.width() as f32).max(h / img.height() as f32);
     let tx = (w - img.width() as f32 * s) / 2.0;
     let ty = (h - img.height() as f32 * s) / 2.0;
@@ -378,11 +300,47 @@ fn draw_cover(pm: &mut Pixmap, img: &Pixmap, quality: FilterQuality) {
             SpreadMode::Pad,
             quality,
             1.0,
-            Transform::from_scale(s, s).post_translate(tx, ty),
+            Transform::from_scale(s, s).post_translate(tx, ty).post_concat(ts),
         ),
         ..Default::default()
     };
-    pm.fill_rect(Rect::from_xywh(0.0, 0.0, w, h).unwrap(), &paint, Transform::identity(), None);
+    let full = Rect::from_xywh(0.0, 0.0, pm.width() as f32, pm.height() as f32).unwrap();
+    pm.fill_rect(full, &paint, Transform::identity(), None);
+}
+
+/// Fills `pm` with the background of a `w`×`h` canvas whose origin is at `origin` in `pm`.
+pub fn draw_background(
+    pm: &mut Pixmap,
+    bg: &Background,
+    w: f32,
+    h: f32,
+    origin: (f32, f32),
+    blur_bg: Option<&Pixmap>,
+    bg_image: Option<&Pixmap>,
+) {
+    let ts = Transform::from_translate(origin.0, origin.1);
+    let full = Rect::from_xywh(0.0, 0.0, pm.width() as f32, pm.height() as f32).unwrap();
+    match bg {
+        Background::None => {}
+        Background::Solid(c) => pm.fill(c.to_skia()),
+        Background::Gradient(g) => {
+            let paint = Paint {
+                shader: gradient_shader(&g.stops, g.angle, w, h, ts),
+                ..Default::default()
+            };
+            pm.fill_rect(full, &paint, Transform::identity(), None);
+        }
+        Background::Blurred => {
+            if let Some(b) = blur_bg {
+                draw_cover(pm, b, w, h, ts, FilterQuality::Bilinear);
+                pm.fill_rect(full, &solid(Color(0x0000001F)), Transform::identity(), None);
+            }
+        }
+        Background::Image(_) => match bg_image {
+            Some(b) => draw_cover(pm, b, w, h, ts, FilterQuality::Bicubic),
+            None => pm.fill(Color::rgb(0x27272A).to_skia()),
+        },
+    }
 }
 
 /// Average color around the image border, used for "auto balance" insets.
@@ -459,23 +417,32 @@ pub struct Inputs<'a> {
 pub fn render_base(inp: &Inputs, annotations: &[Annotation]) -> Pixmap {
     let l = &inp.layout;
     let mut pm = Pixmap::new(l.width, l.height).unwrap();
-    paint_background(&mut pm, &inp.style.background, inp.blur_bg, inp.bg_image);
-
-    let radius = inp.style.radius * l.unit;
-    let card_path = rounded_rect(&l.card, radius);
-
+    let (w, h) = (l.width as f32, l.height as f32);
+    draw_background(&mut pm, &inp.style.background, w, h, (0.0, 0.0), inp.blur_bg, inp.bg_image);
     if inp.style.shadow > 0.0 && inp.style.shadow_opacity > 0.0 {
-        draw_shadow(
-            &mut pm,
-            &l.card,
-            radius,
-            inp.style.shadow * l.unit * 0.5,
-            inp.style.shadow_opacity,
-        );
+        if let Some(p) = rounded_rect(&l.card, inp.style.radius * l.unit) {
+            draw_shadow(&mut pm, &p, inp.style.shadow * l.unit * 0.5, inp.style.shadow_opacity);
+        }
     }
+    let mask = draw_card(&mut pm, inp, 0.0, Color::TRANSPARENT);
+    let redactions: Vec<&Annotation> = annotations.iter().filter(|a| a.is_redaction()).collect();
+    apply_redactions(&mut pm, l, inp.image, &redactions, mask.as_ref());
+    pm
+}
 
-    let Some(card_path) = card_path else { return pm };
-    let mut card_mask = Mask::new(l.width, l.height).unwrap();
+/// Border ring, card fill, chrome and screenshot. `border` is in canvas pixels. Returns the
+/// mask of the visible screenshot (the image clipped to the rounded card).
+pub(crate) fn draw_card(pm: &mut Pixmap, inp: &Inputs, border: f32, border_color: Color) -> Option<Mask> {
+    let l = &inp.layout;
+    let radius = inp.style.radius * l.unit;
+    if border > 0.0 {
+        if let Some(p) = rounded_rect(&l.card.inflate(border), radius) {
+            pm.fill_path(&p, &solid(border_color), FillRule::Winding, Transform::identity(), None);
+        }
+    }
+    let inner_radius = (radius - border).max(0.0);
+    let card_path = rounded_rect(&l.card, inner_radius)?;
+    let mut card_mask = Mask::new(pm.width(), pm.height())?;
     card_mask.fill_path(&card_path, FillRule::Winding, true, Transform::identity());
 
     // Card background (visible through inset).
@@ -491,16 +458,13 @@ pub fn render_base(inp: &Inputs, annotations: &[Annotation]) -> Pixmap {
     }
 
     if l.chrome_h > 0.0 {
-        draw_chrome(&mut pm, l, inp.style.chrome, inp.title.filter(|_| inp.style.chrome_title), &card_mask);
+        draw_chrome(pm, l, inp.style.chrome, inp.title.filter(|_| inp.style.chrome_title), &card_mask);
     }
 
-    let mut image_mask = card_mask.clone();
-    image_mask.intersect_path(
-        &PathBuilder::from_rect(rect(&l.image).unwrap()),
-        FillRule::Winding,
-        true,
-        Transform::identity(),
-    );
+    let mut image_mask = card_mask;
+    if let Some(r) = rect(&l.image) {
+        image_mask.intersect_path(&PathBuilder::from_rect(r), FillRule::Winding, true, Transform::identity());
+    }
     pm.draw_pixmap(
         l.image.x as i32,
         l.image.y as i32,
@@ -509,70 +473,21 @@ pub fn render_base(inp: &Inputs, annotations: &[Annotation]) -> Pixmap {
         Transform::identity(),
         Some(&image_mask),
     );
-
-    for a in annotations.iter().filter(|a| a.is_redaction()) {
-        if let Shape::Redact { rect: r, kind } = &a.shape {
-            apply_redaction(&mut pm, l, r, *kind);
-        }
-    }
-    pm
+    Some(image_mask)
 }
 
-/// Fills the whole pixmap with a background. `blur_bg` and `bg_image` are the decoded
-/// sources for `Background::Blurred` and `Background::Image`.
-pub fn paint_background(
-    pm: &mut Pixmap,
-    background: &Background,
-    blur_bg: Option<&Pixmap>,
-    bg_image: Option<&Pixmap>,
-) {
-    let (w, h) = (pm.width() as f32, pm.height() as f32);
-    let full = Rect::from_xywh(0.0, 0.0, w, h).unwrap();
-    match background {
-        Background::None => {}
-        Background::Solid(c) => pm.fill(c.to_skia()),
-        Background::Gradient(g) => {
-            let paint = Paint {
-                shader: gradient_shader(&g.stops, g.angle, w, h),
-                ..Default::default()
-            };
-            pm.fill_rect(full, &paint, Transform::identity(), None);
-        }
-        Background::Blurred => {
-            if let Some(b) = blur_bg {
-                draw_cover(pm, b, FilterQuality::Bilinear);
-                pm.fill_rect(full, &solid(Color(0x0000001F)), Transform::identity(), None);
-            }
-        }
-        Background::Image(_) => match bg_image {
-            Some(b) => draw_cover(pm, b, FilterQuality::Bicubic),
-            None => pm.fill(Color::rgb(0x27272A).to_skia()),
-        },
-    }
-}
-
-/// Soft drop shadow under a rounded card, offset slightly downward.
-pub fn draw_shadow(pm: &mut Pixmap, card: &R, radius: f32, blur: f32, opacity: f32) {
+/// Blurred drop shadow of `shape`, offset slightly downwards.
+pub fn draw_shadow(pm: &mut Pixmap, shape: &Path, blur: f32, opacity: f32) {
     let blur_r = blur.max(1.0);
     let off_y = blur * 0.45;
     let margin = (blur_r * 3.0).ceil();
-    let region = R {
-        x: (card.x - margin).floor(),
-        y: (card.y - margin + off_y).floor(),
-        w: (card.w + margin * 2.0).ceil(),
-        h: (card.h + margin * 2.0).ceil(),
-    };
+    let b = shape.bounds();
+    let bounds = R::new(b.x(), b.y() + off_y, b.width(), b.height()).inflate(margin);
+    let screen = R::new(0.0, 0.0, pm.width() as f32, pm.height() as f32).inflate(margin);
+    let Some(region) = bounds.intersect(&screen).map(|r| r.round_out()) else { return };
     let (rw, rh) = (region.w as usize, region.h as usize);
     let Some(mut mask) = Mask::new(rw as u32, rh as u32) else { return };
-    let local = R {
-        x: card.x - region.x,
-        y: card.y + off_y - region.y,
-        w: card.w,
-        h: card.h,
-    };
-    if let Some(p) = rounded_rect(&local, radius) {
-        mask.fill_path(&p, FillRule::Winding, true, Transform::identity());
-    }
+    mask.fill_path(shape, FillRule::Winding, true, Transform::from_translate(-region.x, off_y - region.y));
     blur_alpha(mask.data_mut(), rw, rh, (blur_r / 1.7).round() as usize);
     let (pw, ph) = (pm.width() as i32, pm.height() as i32);
     let pixels = pm.pixels_mut();
@@ -589,7 +504,7 @@ pub fn draw_shadow(pm: &mut Pixmap, card: &R, radius: f32, blur: f32, opacity: f
             }
             let a = data[(y as usize) * rw + x as usize] as f32 / 255.0 * opacity;
             if a > 0.0 {
-                blend_px(&mut pixels[(py * pw + px) as usize], Color::BLACK, a);
+                fonts::blend_px(&mut pixels[(py * pw + px) as usize], Color::BLACK, a);
             }
         }
     }
@@ -639,7 +554,9 @@ fn draw_chrome(pm: &mut Pixmap, l: &Layout, chrome: Chrome, title: Option<&str>,
             pb.move_to(x0 + s, cy - s);
             pb.line_to(x0 - s, cy + s);
             let x1 = x0 - bw;
-            pb.push_rect(Rect::from_xywh(x1 - s, cy - s, s * 2.0, s * 2.0).unwrap());
+            if let Some(r) = Rect::from_xywh(x1 - s, cy - s, s * 2.0, s * 2.0) {
+                pb.push_rect(r);
+            }
             let x2 = x1 - bw;
             pb.move_to(x2 - s, cy);
             pb.line_to(x2 + s, cy);
@@ -650,61 +567,101 @@ fn draw_chrome(pm: &mut Pixmap, l: &Layout, chrome: Chrome, title: Option<&str>,
     }
     if let Some(t) = title {
         let size = 12.5 * u;
-        let font = REGULAR.as_ref();
+        let font = fonts::font("Segoe UI", fonts::Weight::Regular);
+        let font = font.as_deref();
         let max_w = bar.w - 200.0 * u;
         let mut t = t.to_string();
-        while !t.is_empty() && measure_with(font, &t, size).0 > max_w {
+        while !t.is_empty() && fonts::measure(font, &t, size).0 > max_w {
             t.pop();
         }
-        let (tw, th) = measure_with(font, &t, size);
-        draw_text_with(pm, font, &t, bar.x + (bar.w - tw) / 2.0, cy - th / 2.0, size, fg);
+        let (tw, th) = fonts::measure(font, &t, size);
+        fonts::draw(pm, font, &t, bar.x + (bar.w - tw) / 2.0, cy - th / 2.0, size, Align::Left, fg);
     }
 }
 
-fn apply_redaction(pm: &mut Pixmap, l: &Layout, r: &R, kind: RedactStyle) {
-    let Some(area) = l.rect_to_canvas(r).intersect(&l.image) else { return };
-    let x0 = area.x.floor().max(0.0) as usize;
-    let y0 = area.y.floor().max(0.0) as usize;
-    let x1 = (area.right().ceil() as usize).min(pm.width() as usize);
-    let y1 = (area.bottom().ceil() as usize).min(pm.height() as usize);
+/// Applies redactions to `pm`. Pixels come from `image` (the screenshot drawn at `l.image`), so
+/// the result does not depend on which part of the canvas `pm` covers.
+pub(crate) fn apply_redactions(pm: &mut Pixmap, l: &Layout, image: &Pixmap, redactions: &[&Annotation], mask: Option<&Mask>) {
+    let screen = R::new(0.0, 0.0, pm.width() as f32, pm.height() as f32);
+    for a in redactions {
+        let Shape::Redact { rect: r, kind, strength } = &a.shape else { continue };
+        let full = l.rect_to_canvas(r);
+        let Some(area) = full.intersect(&l.image).map(|a| a.round_out()) else { continue };
+        if area.intersect(&screen).is_none() {
+            continue;
+        }
+        let block = (strength * l.scale).max(2.0);
+        let local = area.translate(-l.image.x, -l.image.y);
+        let anchor = full.translate(-l.image.x, -l.image.y);
+        let Some(patch) = redact_patch(image, local, anchor, *kind, block) else { continue };
+        pm.draw_pixmap(area.x as i32, area.y as i32, patch.as_ref(), &PixmapPaint::default(), Transform::identity(), mask);
+    }
+}
+
+/// The redacted pixels of `area` (image coordinates). Pixel cells are aligned to `anchor`.
+fn redact_patch(image: &Pixmap, area: R, anchor: R, kind: RedactStyle, strength: f32) -> Option<Pixmap> {
+    let iw = image.width() as i32;
+    let ih = image.height() as i32;
+    let x0 = (area.x as i32).clamp(0, iw);
+    let y0 = (area.y as i32).clamp(0, ih);
+    let x1 = (area.right() as i32).clamp(0, iw);
+    let y1 = (area.bottom() as i32).clamp(0, ih);
     if x1 <= x0 + 1 || y1 <= y0 + 1 {
-        return;
+        return None;
     }
-    let (rw, rh) = (x1 - x0, y1 - y0);
-    let pw = pm.width() as usize;
-    let data = pm.data_mut();
-    let mut region = vec![0u8; rw * rh * 4];
-    for y in 0..rh {
-        let s = ((y0 + y) * pw + x0) * 4;
-        region[y * rw * 4..(y + 1) * rw * 4].copy_from_slice(&data[s..s + rw * 4]);
+    let (rw, rh) = ((x1 - x0) as usize, (y1 - y0) as usize);
+    let mut out = Pixmap::new(rw as u32, rh as u32)?;
+    let src = image.data();
+    {
+        let dst = out.data_mut();
+        for y in 0..rh {
+            let s = (((y0 as usize) + y) * iw as usize + x0 as usize) * 4;
+            dst[y * rw * 4..(y + 1) * rw * 4].copy_from_slice(&src[s..s + rw * 4]);
+        }
     }
+    let offset = |start: i32, anchor: f32, block: usize| ((start as f32 - anchor.round()).max(0.0) as usize) % block;
+    let data = out.data_mut();
     match kind {
         RedactStyle::Solid => {
-            for px in region.chunks_exact_mut(4) {
+            for px in data.chunks_exact_mut(4) {
                 px.copy_from_slice(&[24, 24, 27, 255]);
             }
         }
         RedactStyle::Pixelate => {
-            let block = ((10.0 * l.unit).round() as usize).max(4);
-            pixelate(&mut region, rw, rh, block);
+            let block = strength.round().max(2.0) as usize;
+            pixelate(data, rw, rh, block, offset(x0, anchor.x, block), offset(y0, anchor.y, block));
         }
         RedactStyle::Blur => {
             // Pixelate first so that the blur cannot be reversed, then smooth it out.
-            let block = ((6.0 * l.unit).round() as usize).max(3);
-            pixelate(&mut region, rw, rh, block);
-            blur_rgba(&mut region, rw, rh, ((8.0 * l.unit).round() as usize).max(2));
+            let block = (strength * 0.5).round().max(2.0) as usize;
+            pixelate(data, rw, rh, block, offset(x0, anchor.x, block), offset(y0, anchor.y, block));
+            blur_rgba(data, rw, rh, (strength * 0.7).round().max(2.0) as usize);
         }
     }
-    for y in 0..rh {
-        let s = ((y0 + y) * pw + x0) * 4;
-        data[s..s + rw * 4].copy_from_slice(&region[y * rw * 4..(y + 1) * rw * 4]);
-    }
+    Some(out)
 }
 
-fn pixelate(data: &mut [u8], w: usize, h: usize, block: usize) {
-    for by in (0..h).step_by(block) {
-        for bx in (0..w).step_by(block) {
-            let (ex, ey) = ((bx + block).min(w), (by + block).min(h));
+/// Starts of `block`-sized cells along `len` pixels when the region begins `off` pixels into a cell.
+fn cell_starts(len: usize, block: usize, off: usize) -> Vec<usize> {
+    let mut v = vec![0];
+    let mut s = (block - off % block) % block;
+    if s == 0 {
+        s = block;
+    }
+    while s < len {
+        v.push(s);
+        s += block;
+    }
+    v
+}
+
+fn pixelate(data: &mut [u8], w: usize, h: usize, block: usize, ox: usize, oy: usize) {
+    let ys = cell_starts(h, block, oy);
+    let xs = cell_starts(w, block, ox);
+    for (yi, &by) in ys.iter().enumerate() {
+        let ey = ys.get(yi + 1).copied().unwrap_or(h);
+        for (xi, &bx) in xs.iter().enumerate() {
+            let ex = xs.get(xi + 1).copied().unwrap_or(w);
             let mut sum = [0u32; 4];
             for y in by..ey {
                 for x in bx..ex {
@@ -714,7 +671,7 @@ fn pixelate(data: &mut [u8], w: usize, h: usize, block: usize) {
                     }
                 }
             }
-            let n = ((ex - bx) * (ey - by)) as u32;
+            let n = ((ex - bx) * (ey - by)).max(1) as u32;
             let avg = sum.map(|s| (s / n) as u8);
             for y in by..ey {
                 for x in bx..ex {
@@ -726,11 +683,51 @@ fn pixelate(data: &mut [u8], w: usize, h: usize, block: usize) {
     }
 }
 
-/// Draws all non-redaction annotations on top of a base render.
+/// Draws all non-redaction annotations on top of a base render. Highlights dim the screenshot
+/// outside the union of their rectangles.
 pub fn render_annotations(pm: &mut Pixmap, l: &Layout, annotations: &[Annotation]) {
+    draw_highlights(pm, l, annotations, None);
     for a in annotations.iter().filter(|a| !a.is_redaction()) {
         draw_annotation(pm, l, a);
     }
+}
+
+pub(crate) fn draw_highlights(pm: &mut Pixmap, l: &Layout, annotations: &[Annotation], image_mask: Option<&Mask>) {
+    let holes: Vec<R> = annotations
+        .iter()
+        .filter_map(|a| match &a.shape {
+            Shape::Highlight { rect } => Some(l.rect_to_canvas(rect)),
+            _ => None,
+        })
+        .collect();
+    if holes.is_empty() {
+        return;
+    }
+    let (w, h) = (pm.width(), pm.height());
+    let mut dim = match image_mask {
+        Some(m) => m.clone(),
+        None => {
+            let Some(mut m) = Mask::new(w, h) else { return };
+            if let Some(r) = rect(&l.image) {
+                m.fill_path(&PathBuilder::from_rect(r), FillRule::Winding, true, Transform::identity());
+            }
+            m
+        }
+    };
+    let mut pb = PathBuilder::new();
+    for hole in &holes {
+        if let Some(r) = rect(hole) {
+            pb.push_rect(r);
+        }
+    }
+    let Some(path) = pb.finish() else { return };
+    let Some(mut cut) = Mask::new(w, h) else { return };
+    cut.fill_path(&path, FillRule::Winding, true, Transform::identity());
+    for (d, c) in dim.data_mut().iter_mut().zip(cut.data()) {
+        *d = ((*d as u16 * (255 - *c as u16)) / 255) as u8;
+    }
+    let full = Rect::from_xywh(0.0, 0.0, w as f32, h as f32).unwrap();
+    pm.fill_rect(full, &solid(Color(0x00000099)), Transform::identity(), Some(&dim));
 }
 
 fn contrast(c: Color) -> Color {
@@ -741,7 +738,7 @@ fn contrast(c: Color) -> Color {
     }
 }
 
-fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
+pub(crate) fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
     let s = l.scale;
     let w = (a.width * s).max(1.0);
     let paint = solid(a.color);
@@ -794,12 +791,6 @@ fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
                 }
             }
         }
-        Shape::Highlight { rect: r } => {
-            if let Some(rr) = rect(&l.rect_to_canvas(r)) {
-                // Translucent so it reads on both light and dark UIs.
-                pm.fill_rect(rr, &solid(a.color.with_alpha(110)), id, None);
-            }
-        }
         Shape::Pen { points } => {
             if points.len() < 2 {
                 return;
@@ -822,25 +813,28 @@ fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
             text,
             size,
             style,
+            font,
         } => {
             if text.is_empty() {
                 return;
             }
             let p = l.to_canvas(*pos);
             let size = size * s;
-            let font = BOLD.as_ref();
+            let face = fonts::font(&font.family, font.weight);
+            let face = face.as_deref();
+            let align = font.align;
             match style {
-                TextStyle::Plain => draw_text_with(pm, font, text, p.x, p.y, size, a.color),
+                TextStyle::Plain => fonts::draw(pm, face, text, p.x, p.y, size, align, a.color),
                 TextStyle::Outline => {
                     let o = (size * 0.07).max(1.0);
                     let oc = contrast(a.color);
                     for (dx, dy) in [(-o, 0.0), (o, 0.0), (0.0, -o), (0.0, o), (-o, -o), (o, o), (-o, o), (o, -o)] {
-                        draw_text_with(pm, font, text, p.x + dx, p.y + dy, size, oc);
+                        fonts::draw(pm, face, text, p.x + dx, p.y + dy, size, align, oc);
                     }
-                    draw_text_with(pm, font, text, p.x, p.y, size, a.color);
+                    fonts::draw(pm, face, text, p.x, p.y, size, align, a.color);
                 }
                 TextStyle::Pill => {
-                    let (tw, th) = measure_with(font, text, size);
+                    let (tw, th) = fonts::measure(face, text, size);
                     let pad = size * 0.35;
                     let bg = R {
                         x: p.x - pad,
@@ -851,7 +845,7 @@ fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
                     if let Some(path) = rounded_rect(&bg, size * 0.4) {
                         pm.fill_path(&path, &paint, FillRule::Winding, id, None);
                     }
-                    draw_text_with(pm, font, text, p.x, p.y, size, contrast(a.color));
+                    fonts::draw(pm, face, text, p.x, p.y, size, align, contrast(a.color));
                 }
             }
         }
@@ -868,21 +862,11 @@ fn draw_annotation(pm: &mut Pixmap, l: &Layout, a: &Annotation) {
             }
             let label = n.to_string();
             let fs = r * 1.05;
-            let (tw, th) = measure_text(&label, fs);
-            draw_text_with(pm, BOLD.as_ref(), &label, c.x - tw / 2.0, c.y - th / 2.0, fs, contrast(a.color));
+            let face = fonts::font("Segoe UI", fonts::Weight::Semibold);
+            let (tw, th) = fonts::measure(face.as_deref(), &label, fs);
+            fonts::draw(pm, face.as_deref(), &label, c.x - tw / 2.0, c.y - th / 2.0, fs, Align::Left, contrast(a.color));
         }
-        Shape::Spotlight { rect: r } => {
-            let hole = l.rect_to_canvas(r);
-            let mut pb = PathBuilder::new();
-            pb.push_rect(rect(&l.image).unwrap());
-            if let Some(h) = rect(&hole) {
-                pb.push_rect(h);
-            }
-            if let Some(p) = pb.finish() {
-                pm.fill_path(&p, &solid(Color(0x0000008C)), FillRule::EvenOdd, id, None);
-            }
-        }
-        Shape::Redact { .. } => {}
+        Shape::Redact { .. } | Shape::Highlight { .. } => {}
     }
 }
 

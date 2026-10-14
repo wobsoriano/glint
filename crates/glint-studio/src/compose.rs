@@ -13,7 +13,7 @@ use anyhow::Context;
 use glint_media::input::InputTimeline;
 use glint_render::annotate::R;
 use glint_render::render::{
-    draw_shadow, draw_text, make_blur_bg, measure_text, paint_background, pixmap_from_rgba,
+    draw_background, draw_shadow, draw_text, make_blur_bg, measure_text, pixmap_from_rgba,
     rounded_rect,
 };
 use glint_render::style::{Background, Color};
@@ -184,13 +184,15 @@ impl Stage {
             Background::Image(p) => image::open(p).ok().map(|i| pixmap_from_rgba(&i.to_rgba8())),
             _ => None,
         };
-        paint_background(&mut base, bg, blur.as_ref(), image.as_ref());
+        draw_background(&mut base, bg, out.0 as f32, out.1 as f32, (0.0, 0.0), blur.as_ref(), image.as_ref());
         let short = out.0.min(out.1) as f32;
         let shadow = project.design.shadow.clamp(0.0, 1.0);
         if shadow > 0.0 {
-            draw_shadow(&mut base, &layout.card, layout.radius, short * 0.035, shadow);
-            if let Some((b, r)) = layout.bubble.filter(|_| has_camera) {
-                draw_shadow(&mut base, &b, r, short * 0.02, shadow);
+            if let Some(p) = rounded_rect(&layout.card, layout.radius) {
+                draw_shadow(&mut base, &p, short * 0.035, shadow);
+            }
+            if let Some(p) = layout.bubble.filter(|_| has_camera).and_then(|(b, r)| rounded_rect(&b, r)) {
+                draw_shadow(&mut base, &p, short * 0.02, shadow);
             }
         }
         let mut card_mask = Mask::new(out.0, out.1).expect("non-zero output size");
