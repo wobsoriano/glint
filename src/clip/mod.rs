@@ -600,11 +600,8 @@ impl ClipEditor {
                             .text_sm()
                             .child(format!("Saved {name} · {} ({:+.0}%)", crate::actions::human_bytes(*bytes), -saved * 100.0)),
                     )
-                    .child(ui::button("reveal", "Show in Explorer", Some("folder"), false, move |_, _, cx| {
-                        // The shell call pumps messages; run it once the click handler has
-                        // released the app, or a repaint arriving meanwhile re-enters GPUI.
-                        let path = reveal.clone();
-                        cx.spawn(async move |_| shell::reveal(std::slice::from_ref(&path))).detach();
+                    .child(ui::button("reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
+                        shell::reveal(std::slice::from_ref(&reveal))
                     }))
                     .child(ui::button("copy", "Copy", Some("copy"), false, move |_, _, cx| match shell::copy_files(std::slice::from_ref(&copy), None) {
                         Ok(()) => toast::show("Copied the video", cx),

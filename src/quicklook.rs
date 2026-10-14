@@ -132,16 +132,13 @@ impl Render for QuickLook {
                     .border_t_1()
                     .border_color(ui::theme().border)
                     .child(div().flex_1().text_sm().text_color(ui::theme().muted).child(info))
-                    .when(recording, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Playback arrives with Studio")))
                     .child(ui::button("ql-reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
                         shell::reveal(std::slice::from_ref(&reveal_item.dir))
                     }))
                     .child(ui::button("ql-copy", "Copy", Some("copy"), false, move |_, _, cx| actions::copy(&copy_item, cx)))
-                    .child(ui::button("ql-edit", "Edit", Some("edit"), true, move |_, window, cx| {
+                    .child(ui::button("ql-edit", if recording { "Open in Studio" } else { "Edit" }, Some("edit"), true, move |_, window, cx| {
                         actions::edit(&edit_item, cx);
-                        if edit_item.kind() == CaptureKind::Screenshot {
-                            window.remove_window();
-                        }
+                        window.remove_window();
                     })),
             )
     }

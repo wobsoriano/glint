@@ -518,7 +518,8 @@ impl Render for Prefs {
             Pane::Screenshots => {
                 let timer = |secs: u32| {
                     ui::chip(SharedString::from(format!("timer-{secs}")), format!("{secs} s"), s.timer_seconds == secs, move |_, _, cx| {
-                        update(cx, |s| s.timer_seconds = secs)
+                        update(cx, |s| s.timer_seconds = secs);
+                        crate::refresh_tray(cx);
                     })
                 };
                 let quality = s.jpeg_quality;

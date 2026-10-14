@@ -152,7 +152,8 @@ pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow
 }
 
 /// Runs a modal OLE drag of one file, with its pixels attached for apps that take bitmaps.
-/// Call it while no GPUI borrow is held: the drag loop pumps window messages.
+/// Call it while no GPUI borrow is held: the drag loop pumps window messages. The window the
+/// drag starts from must not be a drop target (see `refuse_drops`).
 pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>) -> anyhow::Result<bool> {
     unsafe {
         let item: IShellItem = SHCreateItemFromParsingName(&HSTRING::from(path.as_os_str()), None)
@@ -178,26 +179,45 @@ pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>) -> anyhow::Result
     }
 }
 
-/// Opens Explorer with the given items selected. They must share a parent folder.
-pub fn reveal(paths: &[PathBuf]) {
-    let Some(parent) = paths.first().and_then(|p| p.parent()) else { return };
+/// Unregisters the OLE drop target GPUI gives every window. A drag that starts over a GPUI
+/// drop target runs GPUI's DragEnter against the shell data object, which crashes in
+/// windows.storage.dll, so windows that start drags must not accept drops.
+pub fn refuse_drops(window: &gpui::Window) {
+    let Some(h) = crate::win::hwnd(window) else { return };
     unsafe {
-        let folder = ILCreateFromPathW(&HSTRING::from(parent.as_os_str()));
-        if folder.is_null() {
-            return;
-        }
-        let items: Vec<*mut ITEMIDLIST> = paths
-            .iter()
-            .map(|p| ILCreateFromPathW(&HSTRING::from(p.as_os_str())))
-            .filter(|p| !p.is_null())
-            .collect();
-        let children: Vec<*const ITEMIDLIST> = items.iter().map(|p| ILFindLastID(*p) as *const _).collect();
-        let _ = SHOpenFolderAndSelectItems(folder, Some(&children), 0);
-        for p in items {
-            ILFree(Some(p));
-        }
-        ILFree(Some(folder));
+        let _ = windows::Win32::System::Ole::RevokeDragDrop(h);
     }
+}
+
+/// Opens Explorer with the given items selected. They must share a parent folder.
+/// Runs on its own COM thread: the shell call waits on Explorer and pumps messages, which
+/// would re-enter GPUI (and abort) if it ran inside a click handler on the UI thread.
+pub fn reveal(paths: &[PathBuf]) {
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    let paths = paths.to_vec();
+    std::thread::spawn(move || {
+        let Some(parent) = paths.first().and_then(|p| p.parent()) else { return };
+        unsafe {
+            let inited = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+            let folder = ILCreateFromPathW(&HSTRING::from(parent.as_os_str()));
+            if !folder.is_null() {
+                let items: Vec<*mut ITEMIDLIST> = paths
+                    .iter()
+                    .map(|p| ILCreateFromPathW(&HSTRING::from(p.as_os_str())))
+                    .filter(|p| !p.is_null())
+                    .collect();
+                let children: Vec<*const ITEMIDLIST> = items.iter().map(|p| ILFindLastID(*p) as *const _).collect();
+                let _ = SHOpenFolderAndSelectItems(folder, Some(&children), 0);
+                for p in items {
+                    ILFree(Some(p));
+                }
+                ILFree(Some(folder));
+            }
+            if inited {
+                CoUninitialize();
+            }
+        }
+    });
 }
 
 /// The physical work area (without the taskbar) and DPI scale of the monitor under the cursor.
