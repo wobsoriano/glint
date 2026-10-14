@@ -20,6 +20,7 @@ mod settings;
 mod shell;
 mod stack;
 mod store;
+mod studio;
 mod toast;
 mod ui;
 mod win;
@@ -83,6 +84,7 @@ fn handle_requests(requests: Vec<Request>, cx: &mut App) {
             Request::Capture(c) => run_command(Command::Capture(c), cx),
             Request::Library => library_window::show(cx),
             Request::Open(path) => images.push(path),
+            Request::Studio(dir) => studio::open(cx, dir),
         }
     }
     if !images.is_empty() {

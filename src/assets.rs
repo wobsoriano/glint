@@ -55,6 +55,13 @@ fn body(name: &str) -> Option<&'static str> {
         "library" => r##"<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>"##,
         "stack" => r##"<rect x="5" y="9" width="14" height="11" rx="2"/><path d="M7 6h10M9 3h6"/>"##,
         "more" => r##"<circle cx="5" cy="12" r="1.2" fill="#000"/><circle cx="12" cy="12" r="1.2" fill="#000"/><circle cx="19" cy="12" r="1.2" fill="#000"/>"##,
+        "play" => r##"<path d="M7 4.5v15l12-7.5z" fill="#000"/>"##,
+        "pause" => r##"<rect x="6" y="4.5" width="4" height="15" rx="1" fill="#000"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="#000"/>"##,
+        "scissors" => r##"<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/>"##,
+        "zoom" => r##"<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M11 8v6M8 11h6"/>"##,
+        "volume" => r##"<path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>"##,
+        "plus" => r##"<path d="M12 5v14M5 12h14"/>"##,
+        "minus" => r##"<path d="M5 12h14"/>"##,
         _ => return None,
     })
 }
