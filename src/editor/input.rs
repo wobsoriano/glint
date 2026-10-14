@@ -1,6 +1,6 @@
 //! Pointer and keyboard handling.
 
-use super::{next_id, Drag, Editor, Typing};
+use super::{next_id, AfterSave, Drag, Editor, Typing};
 use crate::annotate::{pt, Annotation, Pt, Shape, Tool, R};
 use gpui::{Context, KeyDownEvent, Modifiers, MouseDownEvent, Pixels, Point, Window};
 
@@ -350,9 +350,9 @@ impl Editor {
 
         match (ctrl, shift, key) {
             (true, false, "c") => self.copy(cx),
-            (true, false, "s") => self.save(false, window, cx),
-            (true, true, "s") => self.save_as(cx),
-            (true, false, "enter") => self.save(true, window, cx),
+            (true, false, "s") => self.commit(AfterSave::Export { ask: false }, window, cx),
+            (true, true, "s") => self.commit(AfterSave::Export { ask: true }, window, cx),
+            (true, false, "enter") => self.commit(AfterSave::Close, window, cx),
             (true, false, "z") => self.undo(),
             (true, true, "z") | (true, _, "y") => self.redo(),
             (true, false, "p") => self.pin(cx),
@@ -366,7 +366,7 @@ impl Editor {
             (true, _, "-") => self.zoom_step(false),
             (true, _, "0") => self.zoom_to(Some(1.0), None),
             (true, _, "1") => self.zoom_to(None, None),
-            (true, false, "w") => window.remove_window(),
+            (true, false, "w") => self.request_close(window, cx),
             (false, _, "delete" | "backspace") => self.delete_selected(),
             (false, _, "escape") => {
                 if self.crop.is_some() {

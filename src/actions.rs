@@ -1,15 +1,16 @@
 //! What you can do with a Library capture, shared by preview cards, the Library window
 //! and Quick Look. Heavy work (decode, encode, OCR, file moves) runs off the main thread.
 
-use crate::capture::Capture;
-use crate::library::{CaptureKind, Item};
+use crate::library::{self, CaptureKind, Item};
 use crate::settings::{ExportFormat, Settings};
 use crate::shell::{self, SaveChoice};
-use crate::{editor, ocr, store, toast, win};
+use crate::{editor, ocr, stack, store, toast, win};
 use anyhow::Context as _;
-use gpui::{App, AppContext as _, PathPromptOptions};
+use glint_render::doc::EditDoc;
+use gpui::{App, AppContext as _, PathPromptOptions, Task};
 use image::RgbaImage;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub type Done = Box<dyn FnOnce(anyhow::Result<PathBuf>, &mut App)>;
@@ -60,11 +61,49 @@ pub fn copy_files(items: &[Item], cx: &mut App) {
     }
 }
 
+/// Opens a screenshot in the editor on its untouched base.png, restoring edit.json when
+/// present. Done and Save write the edit back into the capture and refresh every view of it.
 pub fn edit(item: &Item, cx: &mut App) {
-    let title = item.meta.source.clone();
-    with_pixels(item, cx, move |img, cx| {
-        editor::open(Capture::new((*img).clone(), display_scale(), title), cx);
-    });
+    if item.kind() != CaptureKind::Screenshot {
+        toast::show("Recordings open in Studio, which is not part of this build yet", cx);
+        return;
+    }
+    let loaded = item.clone();
+    let task = cx.background_spawn(async move { library::load_edit(&loaded) });
+    let item = item.clone();
+    cx.spawn(async move |cx| {
+        let result = task.await;
+        let _ = cx.update(|cx| match result {
+            Ok((base, doc)) => {
+                let doc = doc.unwrap_or_else(|| {
+                    EditDoc::new(cx.global::<Settings>().style.clone(), display_scale(), item.meta.source.clone())
+                });
+                let title = item.meta.title.clone();
+                editor::open_doc(Arc::new(base), doc, title, save_edit_into(item.dir), cx);
+            }
+            Err(e) => toast::show(format!("{e:#}"), cx),
+        });
+    })
+    .detach();
+}
+
+fn save_edit_into(dir: PathBuf) -> editor::OnSave {
+    Rc::new(move |req, cx| {
+        let Some(item) = store::get(&dir, cx) else {
+            return Task::ready(Err(anyhow::anyhow!("this capture is no longer in the Library")));
+        };
+        let write = cx.background_spawn(async move {
+            let saved = library::save_edit(&item, &req.image, &req.doc)?;
+            anyhow::Ok((saved, req.image))
+        });
+        cx.spawn(async move |cx| {
+            let (saved, image) = write.await?;
+            cx.update(|cx| {
+                stack::show_edit(&saved, image, cx);
+                store::upsert(saved, cx);
+            })
+        })
+    })
 }
 
 pub fn copy_text(item: &Item, cx: &mut App) {
@@ -127,15 +166,19 @@ pub enum SaveTarget {
 /// Saves to the export folder or through a dialog, per `ask` and settings. A failed write
 /// shows a dialog offering Retry or another folder; `done` sees the final outcome.
 pub fn save(item: &Item, ask: bool, cx: &mut App, done: Done) {
-    let s = cx.global::<Settings>();
-    let target = if ask || !s.save_without_dialog { SaveTarget::Ask } else { SaveTarget::Folder(s.save_dir.clone()) };
-    let item = item.clone();
-    with_pixels(&item.clone(), cx, move |img, cx| save_to(item, img, target, cx, done));
+    let title = item.meta.title.clone();
+    with_pixels(item, cx, move |img, cx| save_image(title, img, ask, cx, done));
 }
 
-fn save_to(item: Item, img: Arc<RgbaImage>, target: SaveTarget, cx: &mut App, done: Done) {
+/// Saves pixels named after `title`, with the same rules as [`save`].
+pub fn save_image(title: String, img: Arc<RgbaImage>, ask: bool, cx: &mut App, done: Done) {
+    let s = cx.global::<Settings>();
+    let target = if ask || !s.save_without_dialog { SaveTarget::Ask } else { SaveTarget::Folder(s.save_dir.clone()) };
+    save_to(title, img, target, cx, done);
+}
+
+fn save_to(stem: String, img: Arc<RgbaImage>, target: SaveTarget, cx: &mut App, done: Done) {
     let s = cx.global::<Settings>().clone();
-    let stem = item.meta.title.clone();
     match target {
         SaveTarget::Ask => {
             let name = format!("{}.{}", shell::sanitize(&stem), s.format.extension());
@@ -163,24 +206,24 @@ fn save_to(item: Item, img: Arc<RgbaImage>, target: SaveTarget, cx: &mut App, do
                     })
                     .await;
                 let folder = path.parent().map(PathBuf::from).unwrap_or_default();
-                let _ = cx.update(|cx| finish_save(item, img, write, SaveTarget::Folder(folder), cx, done));
+                let _ = cx.update(|cx| finish_save(stem, img, write, SaveTarget::Folder(folder), cx, done));
             })
             .detach();
         }
         SaveTarget::Folder(dir) => {
             let pixels = img.clone();
-            let task_dir = dir.clone();
-            let write = cx.background_spawn(async move { shell::export(&pixels, &task_dir, &stem, s.format, s.jpeg_quality) });
+            let (task_dir, task_stem) = (dir.clone(), stem.clone());
+            let write = cx.background_spawn(async move { shell::export(&pixels, &task_dir, &task_stem, s.format, s.jpeg_quality) });
             cx.spawn(async move |cx| {
                 let result = write.await;
-                let _ = cx.update(|cx| finish_save(item, img, result, SaveTarget::Folder(dir), cx, done));
+                let _ = cx.update(|cx| finish_save(stem, img, result, SaveTarget::Folder(dir), cx, done));
             })
             .detach();
         }
     }
 }
 
-fn finish_save(item: Item, img: Arc<RgbaImage>, result: anyhow::Result<PathBuf>, retry: SaveTarget, cx: &mut App, done: Done) {
+fn finish_save(stem: String, img: Arc<RgbaImage>, result: anyhow::Result<PathBuf>, retry: SaveTarget, cx: &mut App, done: Done) {
     let err = match result {
         Ok(path) => return done(Ok(path), cx),
         Err(e) => e,
@@ -190,7 +233,7 @@ fn finish_save(item: Item, img: Arc<RgbaImage>, result: anyhow::Result<PathBuf>,
     cx.spawn(async move |cx| {
         let choice = ask.await;
         let _ = cx.update(|cx| match choice {
-            SaveChoice::Retry => save_to(item, img, retry, cx, done),
+            SaveChoice::Retry => save_to(stem, img, retry, cx, done),
             SaveChoice::ChooseFolder => {
                 let rx = cx.prompt_for_paths(PathPromptOptions {
                     files: false,
@@ -204,7 +247,7 @@ fn finish_save(item: Item, img: Arc<RgbaImage>, result: anyhow::Result<PathBuf>,
                         _ => None,
                     };
                     let _ = cx.update(|cx| match picked {
-                        Some(dir) => save_to(item, img, SaveTarget::Folder(dir), cx, done),
+                        Some(dir) => save_to(stem, img, SaveTarget::Folder(dir), cx, done),
                         None => done(Err(err), cx),
                     });
                 })

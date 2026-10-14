@@ -8,22 +8,20 @@ mod inspector;
 mod viewport;
 
 use crate::annotate::{Annotation, Shape, TextStyle, Tool, R, REDACT_STRENGTH};
-use crate::capture::Capture;
 use crate::settings::{RedactStyle, Settings};
 use crate::style::{Background, Chrome, Color, Style, INK};
-use crate::{ocr, pin, redact, win};
-use anyhow::Context as _;
+use crate::{actions, ocr, pin, redact, win};
 use glint_render::compose::{self, Compositor, Frame};
 use glint_render::doc::EditDoc;
 use glint_render::fonts::TextFont;
 use glint_render::preset::{self, Preset};
 use gpui::prelude::*;
 use gpui::{
-    px, size, App, Bounds, Context, FocusHandle, Pixels, SharedString, Timer, TitlebarOptions, WeakEntity, Window,
-    WindowBounds, WindowOptions,
+    px, size, App, Bounds, Context, FocusHandle, Pixels, PromptLevel, SharedString, Task, Timer, TitlebarOptions,
+    WeakEntity, Window, WindowBounds, WindowOptions,
 };
 use std::cell::Cell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -39,12 +37,12 @@ fn next_id() -> u64 {
 /// What a save hands to its owner: the flattened full-resolution image and the document that
 /// reproduces it from the base image.
 pub struct SaveRequest {
-    pub image: image::RgbaImage,
+    pub image: Arc<image::RgbaImage>,
     pub doc: EditDoc,
 }
 
-/// Persists a save. Returns the message to show; an error keeps the editor open with its edits.
-pub type OnSave = Rc<dyn Fn(&SaveRequest, &mut App) -> anyhow::Result<String>>;
+/// Commits an edit to its owner. When the task fails the editor stays open with its edits.
+pub type OnSave = Rc<dyn Fn(SaveRequest, &mut App) -> Task<anyhow::Result<()>>>;
 
 pub fn redactions_from(findings: &[redact::Finding], kind: RedactStyle) -> Vec<Annotation> {
     findings
@@ -58,11 +56,9 @@ pub fn redactions_from(findings: &[redact::Finding], kind: RedactStyle) -> Vec<A
         .collect()
 }
 
-/// The raw screenshot with only redactions applied (no frame), for quick copy/save.
-pub fn flatten_redactions(cap: &Capture, annotations: &[Annotation]) -> image::RgbaImage {
-    if annotations.is_empty() {
-        return (*cap.image).clone();
-    }
+/// A document holding only automatic redactions and no frame, so it renders to the
+/// screenshot with the findings hidden and reopens with them still editable.
+pub fn redaction_doc(findings: &[redact::Finding], kind: RedactStyle, dpi: f32) -> EditDoc {
     let style = Style {
         background: Background::None,
         padding: 0.0,
@@ -73,62 +69,14 @@ pub fn flatten_redactions(cap: &Capture, annotations: &[Annotation]) -> image::R
         aspect: None,
         ..Style::default()
     };
-    let mut doc = EditDoc::new(style, cap.dpi, None);
-    doc.annotations = annotations.to_vec();
-    compose::render_doc(&cap.image, &doc)
+    let mut doc = EditDoc::new(style, dpi, None);
+    doc.annotations = redactions_from(findings, kind);
+    doc
 }
 
-pub fn open(cap: Capture, cx: &mut App) {
-    open_with(cap, Vec::new(), cx);
-}
-
-/// Opens a fresh capture. Saving writes a PNG to the save folder.
-pub fn open_with(cap: Capture, annotations: Vec<Annotation>, cx: &mut App) {
-    let mut doc = EditDoc::new(cx.global::<Settings>().style.clone(), cap.dpi, cap.title.clone());
-    doc.annotations = annotations;
-    let created = cap.created;
-    let title = format!("Screenshot {}", created.format("%Y-%m-%d at %H.%M.%S"));
-    let on_save: OnSave = Rc::new(move |req, cx| {
-        let path = cx.global::<Settings>().save_dir.join(win::file_name(&created));
-        win::save_png(&req.image, &path)?;
-        Ok(format!("Saved to {}", path.display()))
-    });
-    open_doc(cap.image, Some(doc), title, on_save, cx);
-}
-
-/// Opens a capture directory laid out like a Library entry (`base.png`, optional `edit.json`).
-/// Saving writes `image.png` and `edit.json` next to the base.
-pub fn open_dir(dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
-    let base_path = [dir.join("base.png"), dir.join("image.png")]
-        .into_iter()
-        .find(|p| p.exists())
-        .with_context(|| format!("no base.png in {}", dir.display()))?;
-    let base = image::open(&base_path).with_context(|| format!("reading {}", base_path.display()))?.to_rgba8();
-    let doc = match std::fs::read_to_string(dir.join("edit.json")) {
-        Ok(json) => Some(EditDoc::from_json(&json)?),
-        Err(_) => None,
-    };
-    let title = dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let on_save: OnSave = Rc::new(move |req, _| {
-        write_atomic(&dir.join("edit.json"), req.doc.to_json().as_bytes())?;
-        let tmp = dir.join("image.png.tmp");
-        win::save_png(&req.image, &tmp)?;
-        std::fs::rename(&tmp, dir.join("image.png")).context("replacing image.png")?;
-        Ok("Saved".into())
-    });
-    open_doc(Arc::new(base), doc, title, on_save, cx);
-    Ok(())
-}
-
-fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))
-}
-
-/// Opens the editor on `base` with `doc` (a new document when `None`).
-pub fn open_doc(base: Arc<image::RgbaImage>, doc: Option<EditDoc>, title: String, on_save: OnSave, cx: &mut App) {
-    let doc = doc.unwrap_or_else(|| EditDoc::new(cx.global::<Settings>().style.clone(), 1.0, None));
+/// Opens the editor on `base` with `doc`. Done, Save and Save As commit through `on_save`;
+/// closing with uncommitted edits asks first.
+pub fn open_doc(base: Arc<image::RgbaImage>, doc: EditDoc, title: String, on_save: OnSave, cx: &mut App) {
     let bounds = Bounds::centered(None, size(px(1360.), px(880.)), cx);
     let _ = cx.open_window(
         WindowOptions {
@@ -145,13 +93,32 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: Option<EditDoc>, title: String
         },
         move |window, cx| {
             let view = cx.new(|cx| Editor::new(base, doc, title, on_save, cx));
+            let weak = view.downgrade();
+            window.on_window_should_close(cx, move |window, cx| {
+                let dirty = weak.update(cx, |e, _| e.is_dirty()).unwrap_or(false);
+                if dirty {
+                    let weak = weak.clone();
+                    window.defer(cx, move |window, cx| {
+                        let _ = weak.update(cx, |e, cx| e.request_close(window, cx));
+                    });
+                }
+                !dirty
+            });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            crate::ui::fluent::apply_mica(window);
+            crate::shell::mica(window);
             win::bring_to_front(window);
             view
         },
     );
+}
+
+/// What follows a successful commit.
+#[derive(Clone, Copy, PartialEq)]
+enum AfterSave {
+    Close,
+    /// Also export a copy: to the export folder per settings, or through a dialog when `ask`.
+    Export { ask: bool },
 }
 
 /// Drawing defaults for new annotations, in points.
@@ -218,6 +185,8 @@ pub struct Editor {
     base: Arc<image::RgbaImage>,
     title: String,
     doc: EditDoc,
+    /// The document as last committed; closing with a different one asks first.
+    saved: EditDoc,
     on_save: OnSave,
     tool: Tool,
     ink: Ink,
@@ -255,6 +224,7 @@ impl Editor {
         for a in &mut doc.annotations {
             a.id = next_id();
         }
+        let saved = doc.clone();
         gallery::scan();
         let presets = preset::load_store(&presets_path()).unwrap_or_default();
         let auto_colors = crate::render::auto_gradient(&base);
@@ -276,6 +246,7 @@ impl Editor {
             base,
             title,
             doc,
+            saved,
             on_save,
             tool: Tool::Arrow,
             ink: Ink {
@@ -525,42 +496,81 @@ impl Editor {
         }
     }
 
-    /// Saves through the owner's callback. A failure keeps the editor open with its changes.
-    fn save(&mut self, close: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn is_dirty(&self) -> bool {
+        self.doc != self.saved
+    }
+
+    /// Commits the edit through the owner's callback, then closes or exports a copy. A failure
+    /// keeps the editor open with its changes.
+    fn commit(&mut self, then: AfterSave, window: &mut Window, cx: &mut Context<Self>) {
         if self.crop.is_some() {
             self.apply_crop();
         }
-        let req = SaveRequest { image: self.export(), doc: self.doc.clone() };
-        let on_save = self.on_save.clone();
-        match on_save(&req, cx) {
-            Ok(_) if close => window.remove_window(),
-            Ok(msg) => self.show_toast(msg, cx),
-            Err(e) => self.show_toast(format!("Save failed: {e:#}"), cx),
-        }
+        let image = Arc::new(self.export());
+        let doc = self.doc.clone();
+        let task = (self.on_save)(SaveRequest { image: image.clone(), doc: doc.clone() }, cx);
+        let handle = window.window_handle();
+        cx.spawn(async move |this: WeakEntity<Editor>, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |this, cx| match result {
+                Err(e) => this.show_toast(format!("Couldn't save the edit: {e:#}"), cx),
+                Ok(()) => {
+                    this.saved = doc;
+                    match then {
+                        AfterSave::Close => {
+                            cx.defer(move |cx| {
+                                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                            });
+                        }
+                        AfterSave::Export { ask } => this.export_copy(image, ask, cx),
+                    }
+                }
+            });
+        })
+        .detach();
     }
 
-    fn save_as(&mut self, cx: &mut Context<Self>) {
-        let img = self.export();
-        let dir = cx.global::<Settings>().save_dir.clone();
-        let _ = std::fs::create_dir_all(&dir);
-        let name = format!("{}.png", self.title.replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "-"));
-        let rx = cx.prompt_for_new_path(&dir, Some(&name));
+    fn export_copy(&mut self, image: Arc<image::RgbaImage>, ask: bool, cx: &mut Context<Self>) {
+        let this = cx.entity().downgrade();
+        actions::save_image(
+            self.title.clone(),
+            image,
+            ask,
+            cx,
+            Box::new(move |result, cx| {
+                let msg = match result {
+                    Ok(path) => format!("Saved to {}", path.display()),
+                    Err(e) if e.to_string() == "cancelled" => return,
+                    Err(e) => format!("Not saved: {e:#}"),
+                };
+                let _ = this.update(cx, |this, cx| this.show_toast(msg, cx));
+            }),
+        );
+    }
+
+    /// Closes the window, asking to save first when there are uncommitted edits.
+    fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_text();
+        if !self.is_dirty() {
+            window.remove_window();
+            return;
+        }
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            "Save your changes to this screenshot?",
+            Some("Your edits are lost if you don't save them."),
+            &["Save", "Discard", "Cancel"],
+            cx,
+        );
+        let handle = window.window_handle();
         cx.spawn(async move |this: WeakEntity<Editor>, cx| {
-            let Ok(Ok(Some(mut path))) = rx.await else { return };
-            let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-            let result = match ext.as_str() {
-                "jpg" | "jpeg" => image::DynamicImage::ImageRgba8(img).to_rgb8().save(&path).map_err(anyhow::Error::from),
-                "webp" => img.save(&path).map_err(anyhow::Error::from),
-                _ => {
-                    if ext != "png" {
-                        path.set_extension("png");
-                    }
-                    win::save_png(&img, &path)
+            let Ok(choice) = answer.await else { return };
+            let _ = handle.update(cx, |_, window, cx| match choice {
+                0 => {
+                    let _ = this.update(cx, |this, cx| this.commit(AfterSave::Close, window, cx));
                 }
-            };
-            let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => this.show_toast(format!("Saved to {}", path.display()), cx),
-                Err(e) => this.show_toast(format!("Save failed: {e}"), cx),
+                1 => window.remove_window(),
+                _ => {}
             });
         })
         .detach();

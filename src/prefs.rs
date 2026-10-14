@@ -4,7 +4,7 @@ use crate::cards::{CardAction, CardLayout, Corner, Zone};
 use crate::hotkeys::{self, Hotkeys};
 use crate::library::Library;
 use crate::settings::{ExportFormat, HotkeyAction, RedactRules, RedactStyle, Settings, Side};
-use crate::ui::{self, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::{self, FONT};
 use crate::{shell, stack, win};
 use gpui::prelude::*;
 use gpui::{
@@ -131,14 +131,14 @@ fn group(title: &str) -> gpui::Div {
         .gap_3()
         .p_4()
         .rounded(px(ui::RADIUS_WINDOW))
-        .bg(rgb(PANEL))
+        .bg(ui::theme().layer)
         .border_1()
-        .border_color(rgb(BORDER))
-        .child(div().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child(title.to_uppercase()))
+        .border_color(ui::theme().border)
+        .child(div().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(ui::theme().muted).child(title.to_uppercase()))
 }
 
 fn note(text: impl Into<SharedString>) -> impl IntoElement {
-    div().text_xs().text_color(rgb(MUTED)).child(text.into())
+    div().text_xs().text_color(ui::theme().muted).child(text.into())
 }
 
 fn labeled(label: &'static str, control: impl IntoElement) -> impl IntoElement {
@@ -153,12 +153,12 @@ fn action_chip(a: CardAction) -> gpui::Div {
         .items_center()
         .gap_1p5()
         .rounded_full()
-        .bg(rgb(ELEV))
+        .bg(ui::theme().control)
         .border_1()
-        .border_color(rgb(BORDER))
+        .border_color(ui::theme().border)
         .text_xs()
-        .text_color(rgb(TEXT))
-        .child(ui::icon(a.icon(), 13., rgb(TEXT)))
+        .text_color(ui::theme().text)
+        .child(ui::icon(a.icon(), 13., ui::theme().text))
         .child(a.label())
 }
 
@@ -210,7 +210,7 @@ impl Prefs {
         };
         match layout.corner(corner) {
             Some(a) => slot.child(self.draggable(a, "corner", cx)),
-            None => slot.child(div().text_xs().text_color(rgb(MUTED)).child("Empty")),
+            None => slot.child(div().text_xs().text_color(ui::theme().muted).child("Empty")),
         }
     }
 
@@ -228,7 +228,7 @@ impl Prefs {
             .h(px(250.))
             .rounded(px(ui::RADIUS_WINDOW))
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(ui::theme().border)
             .bg(gpui::linear_gradient(135., gpui::linear_color_stop(rgb(0x3B3F7A), 0.), gpui::linear_color_stop(rgb(0x7A3B66), 1.)))
             .child(
                 div()
@@ -264,8 +264,8 @@ impl Prefs {
             .rounded(px(ui::RADIUS_WINDOW))
             .border_1()
             .border_dashed()
-            .border_color(rgb(BORDER))
-            .bg(rgb(0x18181B))
+            .border_color(ui::theme().border)
+            .bg(ui::theme().layer)
             .drag_over::<DragAction>(|s, _, _, _| s.bg(ui::accent_alpha(0x33)).border_color(ui::accent()))
             .on_drop(cx.listener(|this, d: &DragAction, _, cx| this.place(d.0, Zone::Tray, None, cx)))
             .children(layout.hidden.iter().map(|&a| self.draggable(a, "tray", cx).into_any_element()))
@@ -310,7 +310,7 @@ impl Prefs {
                 group("Card actions")
                     .child(note("Drag actions between the four corners, the center buttons and the hidden tray."))
                     .child(div().flex().justify_center().py_2().child(card))
-                    .child(div().text_xs().text_color(rgb(MUTED)).child("Hidden"))
+                    .child(div().text_xs().text_color(ui::theme().muted).child("Hidden"))
                     .child(tray)
                     .child(div().flex().child(ui::button("layout-reset", "Reset Layout", None, false, |_, _, cx| {
                         update(cx, |s| s.overlay.layout = CardLayout::default());
@@ -437,7 +437,7 @@ fn folder_row(id: &'static str, label: &'static str, path: std::path::PathBuf, c
                 .flex_col()
                 .min_w_0()
                 .child(div().text_sm().child(label))
-                .child(div().text_xs().text_color(rgb(MUTED)).truncate().child(path.display().to_string())),
+                .child(div().text_xs().text_color(ui::theme().muted).truncate().child(path.display().to_string())),
         )
         .child(
             div()
@@ -478,9 +478,9 @@ impl Render for Prefs {
                 .rounded(px(ui::RADIUS_CONTROL))
                 .cursor_pointer()
                 .text_sm()
-                .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(rgb(0xFFFFFF)))
-                .when(!active, |d| d.text_color(rgb(TEXT)).hover(|s| s.bg(rgb(HOVER))))
-                .child(ui::icon(p.icon(), 15., if active { ui::accent() } else { rgb(MUTED).into() }))
+                .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(ui::theme().text))
+                .when(!active, |d| d.text_color(ui::theme().text).hover(|s| s.bg(ui::theme().control_hover)))
+                .child(ui::icon(p.icon(), 15., if active { ui::accent() } else { ui::theme().muted.into() }))
                 .child(p.label())
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if this.recording.is_some() {
@@ -618,7 +618,7 @@ impl Render for Prefs {
             .flex()
             
             .font_family(FONT)
-            .text_color(rgb(TEXT))
+            .text_color(ui::theme().text)
             .on_key_down(cx.listener(Self::on_key))
             .child(
                 div()
@@ -629,15 +629,15 @@ impl Render for Prefs {
                     .flex_col()
                     .gap_1()
                     .p_3()
-                    .bg(rgba(0x1C1C20E0))
+                    .bg(ui::theme().layer)
                     .border_r_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(ui::theme().border)
                     .children(nav),
             )
             .child(
                 div()
                     .id("pane")
-                    .bg(rgb(BG))
+                    .bg(ui::theme().base)
                     .flex_1()
                     .min_w_0()
                     .h_full()

@@ -2,9 +2,10 @@
 //! into the Library first, then the after-capture automation runs on the imported item.
 
 use crate::capture::{self, Capture};
-use crate::library::Item;
+use crate::library::{self, Item};
 use crate::settings::Settings;
 use crate::{actions, editor, ocr, overlay, pin, redact, stack, store, toast, win};
+use glint_render::compose;
 use gpui::{AnyWindowHandle, App, AppContext as _, Global};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -100,31 +101,38 @@ pub fn finish(cap: Capture, cx: &mut App) {
     }
 }
 
-/// A capture that is in the Library, plus what the editor needs to keep redactions editable.
+/// A capture that is in the Library, with its current deliverable pixels.
 #[derive(Clone)]
 pub struct Shot {
     pub item: Item,
-    pub cap: Capture,
-    pub redactions: Vec<crate::annotate::Annotation>,
     pub image: Arc<image::RgbaImage>,
+    pub dpi: f32,
 }
 
+/// Adds the capture to the Library. Automatic redactions become its first edit, so they
+/// stay editable in the editor.
 fn import(cap: Capture, findings: Vec<redact::Finding>, cx: &mut App) {
-    let redactions = editor::redactions_from(&findings, cx.global::<Settings>().redact_style);
-    let image = Arc::new(editor::flatten_redactions(&cap, &redactions));
+    let doc = (!findings.is_empty()).then(|| editor::redaction_doc(&findings, cx.global::<Settings>().redact_style, cap.dpi));
     let lib = store::library(cx);
-    let (base, deliverable, created, source) = (cap.image.clone(), image.clone(), cap.created, cap.title.clone());
-    let task = cx.background_spawn(async move { lib.import_screenshot(&base, &deliverable, created, source, None, None) });
+    let (base, created, source, dpi) = (cap.image.clone(), cap.created, cap.title.clone(), cap.dpi);
+    let task = cx.background_spawn(async move {
+        let image = match &doc {
+            Some(doc) => Arc::new(compose::render_doc(&base, doc)),
+            None => base.clone(),
+        };
+        let item = lib.import_screenshot(&base, doc.as_ref().map(|d| (image.as_ref(), d)), created, source, None, None)?;
+        anyhow::Ok((item, image))
+    });
     cx.spawn(async move |cx| {
         let result = task.await;
         let _ = cx.update(|cx| match result {
-            Ok(item) => {
+            Ok((item, image)) => {
                 store::upsert(item.clone(), cx);
                 cx.global_mut::<AppState>().last = Some(item.dir.clone());
                 if !findings.is_empty() {
                     toast::show(format!("Hid {} sensitive item(s)", findings.len()), cx);
                 }
-                automate(Shot { item, cap, redactions, image }, cx);
+                automate(Shot { item, image, dpi }, cx);
             }
             Err(e) => toast::show(format!("Could not add the capture to the Library: {e:#}"), cx),
         });
@@ -143,10 +151,10 @@ fn automate(shot: Shot, cx: &mut App) {
         actions::save(&shot.item, false, cx, Box::new(|r, cx| actions::report_save(&r, cx)));
     }
     if a.pin {
-        pin::open(shot.image.clone(), shot.cap.dpi, cx);
+        pin::open(shot.image.clone(), shot.dpi, cx);
     }
     if a.edit {
-        editor::open_with(shot.cap.clone(), shot.redactions.clone(), cx);
+        actions::edit(&shot.item, cx);
     }
     if a.preview {
         stack::push(shot, cx);
@@ -173,23 +181,25 @@ pub fn finish_text(cap: Capture, cx: &mut App) {
     .detach();
 }
 
-/// Validates and imports images opened from Explorer, each in its own editor window.
+/// Opens images from Explorer or the command line in the editor. A capture already in the
+/// Library (its folder or a file inside it) opens as it is; anything else is validated and
+/// imported as a copy first.
 pub fn open_images(paths: Vec<PathBuf>, cx: &mut App) {
     let lib = store::library(cx);
     for path in paths {
         let lib = lib.clone();
         let task = cx.background_spawn(async move {
-            let item = lib.import_file(&path)?;
-            let img = actions::load_pixels(&item)?;
-            anyhow::Ok((item, img))
+            match lib.item_dir(&path) {
+                Some(dir) => library::load(&dir),
+                None => lib.import_file(&path),
+            }
         });
         cx.spawn(async move |cx| {
             let result = task.await;
             let _ = cx.update(|cx| match result {
-                Ok((item, img)) => {
+                Ok(item) => {
                     store::upsert(item.clone(), cx);
-                    let scale = crate::shell::work_area_at_cursor().1;
-                    editor::open(Capture::new(img, scale, None), cx);
+                    actions::edit(&item, cx);
                 }
                 Err(e) => toast::show(format!("{e:#}"), cx),
             });

@@ -4,7 +4,7 @@
 use crate::library::{CaptureKind, Item};
 use crate::settings::{LibraryView, Settings, SortKey};
 use crate::store::{self, Store};
-use crate::ui::{self, Edit, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::{self, Edit, FONT};
 use crate::{actions, flow, overlay, prefs, quicklook, shell, toast, win};
 use gpui::prelude::*;
 use gpui::{
@@ -383,11 +383,11 @@ fn sidebar_entry(id: &'static str, icon: &'static str, label: &'static str, coun
         .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
-        .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(rgb(0xFFFFFF)))
-        .when(!active, |d| d.text_color(rgb(TEXT)).hover(|s| s.bg(rgb(HOVER))))
-        .child(ui::icon(icon, 15., if active { ui::accent() } else { rgb(MUTED).into() }))
+        .when(active, |d| d.bg(ui::accent_alpha(0x33)).text_color(ui::theme().text))
+        .when(!active, |d| d.text_color(ui::theme().text).hover(|s| s.bg(ui::theme().control_hover)))
+        .child(ui::icon(icon, 15., if active { ui::accent() } else { ui::theme().muted.into() }))
         .child(div().flex_1().child(label))
-        .child(div().text_xs().text_color(rgb(MUTED)).child(count.to_string()))
+        .child(div().text_xs().text_color(ui::theme().muted).child(count.to_string()))
 }
 
 /// A label over a long value that wraps, for paths.
@@ -396,8 +396,8 @@ fn block(label: &str, value: String) -> impl IntoElement {
         .flex()
         .flex_col()
         .gap_1()
-        .child(div().text_xs().text_color(rgb(MUTED)).child(label.to_string()))
-        .child(div().text_xs().text_color(rgb(TEXT)).child(value))
+        .child(div().text_xs().text_color(ui::theme().muted).child(label.to_string()))
+        .child(div().text_xs().text_color(ui::theme().text).child(value))
 }
 
 fn row(label: &str, value: String) -> impl IntoElement {
@@ -406,8 +406,8 @@ fn row(label: &str, value: String) -> impl IntoElement {
         .justify_between()
         .gap_3()
         .text_xs()
-        .child(div().text_color(rgb(MUTED)).child(label.to_string()))
-        .child(div().text_color(rgb(TEXT)).text_right().child(value))
+        .child(div().text_color(ui::theme().muted).child(label.to_string()))
+        .child(div().text_color(ui::theme().text).text_right().child(value))
 }
 
 impl LibraryWindow {
@@ -429,7 +429,7 @@ impl LibraryWindow {
             .rounded(px(ui::RADIUS_WINDOW))
             .cursor_pointer()
             .when(selected, |d| d.bg(ui::accent_alpha(0x2E)))
-            .when(!selected, |d| d.hover(|s| s.bg(rgb(PANEL))))
+            .when(!selected, |d| d.hover(|s| s.bg(ui::theme().layer)))
             .group(SharedString::from(format!("tile-{}", item.id())))
             .child(
                 div()
@@ -438,15 +438,15 @@ impl LibraryWindow {
                     .h(px(110.))
                     .rounded(px(ui::RADIUS_CONTROL))
                     .overflow_hidden()
-                    .bg(rgb(0x0E0E10))
+                    .bg(ui::theme().canvas)
                     .border_2()
-                    .border_color(if selected { ui::accent() } else { rgb(BORDER) })
+                    .border_color(if selected { ui::accent() } else { ui::theme().border })
                     .flex()
                     .items_center()
                     .justify_center()
                     .child(match thumb {
                         Some(t) => img(ImageSource::Render(t)).size_full().object_fit(ObjectFit::Contain).into_any_element(),
-                        None => ui::icon(if recording { "film" } else { "image" }, 26., rgb(MUTED)).into_any_element(),
+                        None => ui::icon(if recording { "film" } else { "image" }, 26., ui::theme().muted).into_any_element(),
                     })
                     .child(
                         div()
@@ -481,7 +481,7 @@ impl LibraryWindow {
                 None => div()
                     .px_1()
                     .text_xs()
-                    .text_color(rgb(TEXT))
+                    .text_color(ui::theme().text)
                     .truncate()
                     .child(item.meta.title.clone())
                     .into_any_element(),
@@ -506,9 +506,9 @@ impl LibraryWindow {
             .cursor_pointer()
             .text_sm()
             .border_b_1()
-            .border_color(rgb(0x1F1F23))
+            .border_color(ui::theme().border)
             .when(selected, |d| d.bg(ui::accent_alpha(0x2E)))
-            .when(!selected, |d| d.hover(|s| s.bg(rgb(PANEL))))
+            .when(!selected, |d| d.hover(|s| s.bg(ui::theme().layer)))
             .child(
                 div()
                     .w(px(52.))
@@ -516,30 +516,30 @@ impl LibraryWindow {
                     .flex_none()
                     .rounded(px(ui::RADIUS_CONTROL))
                     .overflow_hidden()
-                    .bg(rgb(0x0E0E10))
+                    .bg(ui::theme().canvas)
                     .flex()
                     .items_center()
                     .justify_center()
                     .child(match thumb {
                         Some(t) => img(ImageSource::Render(t)).size_full().object_fit(ObjectFit::Cover).into_any_element(),
-                        None => ui::icon(if recording { "film" } else { "image" }, 14., rgb(MUTED)).into_any_element(),
+                        None => ui::icon(if recording { "film" } else { "image" }, 14., ui::theme().muted).into_any_element(),
                     }),
             )
             .child(match renaming {
                 Some(t) => div().flex_1().child(ui::text_box(&t, "", true)).into_any_element(),
-                None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(rgb(TEXT)).child(item.meta.title.clone()).into_any_element(),
+                None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(ui::theme().text).child(item.meta.title.clone()).into_any_element(),
             })
-            .child(div().w(px(90.)).text_xs().text_color(rgb(MUTED)).child(if recording { "Recording" } else { "Screenshot" }))
-            .child(div().w(px(96.)).text_xs().text_color(rgb(MUTED)).child(format!("{} × {}", item.meta.width, item.meta.height)))
-            .child(div().w(px(170.)).text_xs().text_color(rgb(MUTED)).child(date(&item.meta.created)))
-            .child(div().w(px(70.)).text_xs().text_color(rgb(MUTED)).text_right().child(actions::human_bytes(item.bytes)))
+            .child(div().w(px(90.)).text_xs().text_color(ui::theme().muted).child(if recording { "Recording" } else { "Screenshot" }))
+            .child(div().w(px(96.)).text_xs().text_color(ui::theme().muted).child(format!("{} × {}", item.meta.width, item.meta.height)))
+            .child(div().w(px(170.)).text_xs().text_color(ui::theme().muted).child(date(&item.meta.created)))
+            .child(div().w(px(70.)).text_xs().text_color(ui::theme().muted).text_right().child(actions::human_bytes(item.bytes)))
             .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| this.click(dir.clone(), e, window, cx)))
     }
 
     fn inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let items = self.selected_items(cx);
         let body = match items.as_slice() {
-            [] => div().text_sm().text_color(rgb(MUTED)).child("Select a capture to see its details.").into_any_element(),
+            [] => div().text_sm().text_color(ui::theme().muted).child("Select a capture to see its details.").into_any_element(),
             [item] => {
                 let recording = item.kind() == CaptureKind::Recording;
                 let edited = match (item.is_edited(), recording) {
@@ -553,8 +553,8 @@ impl LibraryWindow {
                     .flex_col()
                     .gap_2()
                     .child(div().text_base().font_weight(gpui::FontWeight::SEMIBOLD).child(item.meta.title.clone()))
-                    .child(div().text_xs().text_color(rgb(MUTED)).child(if recording { "Recording" } else { "Screenshot" }))
-                    .child(div().h(px(1.)).bg(rgb(BORDER)))
+                    .child(div().text_xs().text_color(ui::theme().muted).child(if recording { "Recording" } else { "Screenshot" }))
+                    .child(div().h(px(1.)).bg(ui::theme().border))
                     .child(row("Dimensions", format!("{} × {}", item.meta.width, item.meta.height)))
                     .child(row("Captured", date(&item.meta.created)))
                     .child(row("Modified", date(&item.meta.modified)))
@@ -585,9 +585,9 @@ impl LibraryWindow {
             .flex_col()
             .gap_4()
             .p_4()
-            .bg(rgba(0x1C1C20E0))
+            .bg(ui::theme().layer)
             .border_l_1()
-            .border_color(rgb(BORDER))
+            .border_color(ui::theme().border)
             .child(div().flex_1().min_h_0().child(body))
             .when(has, |d| {
                 d.child(
@@ -640,10 +640,10 @@ impl Render for LibraryWindow {
             .flex_col()
             .gap_1()
             .p_3()
-            .bg(rgba(0x1C1C20E0))
+            .bg(ui::theme().layer)
             .border_r_1()
-            .border_color(rgb(BORDER))
-            .child(div().px_2().pb_2().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child("LIBRARY"))
+            .border_color(ui::theme().border)
+            .child(div().px_2().pb_2().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(ui::theme().muted).child("LIBRARY"))
             .child(sidebar_entry("f-all", "library", "All Captures", count(None), self.filter == Filter::All).on_click(cx.listener(|this, _, _, cx| {
                 this.filter = Filter::All;
                 cx.notify();
@@ -657,7 +657,7 @@ impl Render for LibraryWindow {
                 cx.notify();
             })))
             .child(div().flex_1())
-            .child(div().px_2().pb_1().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child("NEW CAPTURE"))
+            .child(div().px_2().pb_1().text_xs().font_weight(gpui::FontWeight::SEMIBOLD).text_color(ui::theme().muted).child("NEW CAPTURE"))
             .child(capture_entry("n-area", "area", "Area", |cx| flow::start_area(overlay::Mode::Image, cx)))
             .child(capture_entry("n-window", "window", "Window", flow::capture_window))
             .child(capture_entry("n-screen", "monitor", "Full Screen", flow::capture_fullscreen))
@@ -676,7 +676,7 @@ impl Render for LibraryWindow {
             .items_center()
             .gap_2()
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(ui::theme().border)
             .child(
                 div()
                     .id("search")
@@ -690,7 +690,7 @@ impl Render for LibraryWindow {
                     })),
             )
             .child(div().flex_1())
-            .child(div().text_xs().text_color(rgb(MUTED)).child("Sort"))
+            .child(div().text_xs().text_color(ui::theme().muted).child("Sort"))
             .child(sort_chip("s-date", "Capture Date", SortKey::Captured))
             .child(sort_chip("s-name", "Name", SortKey::Name))
             .child(sort_chip("s-mod", "Modified", SortKey::Modified))
@@ -708,7 +708,7 @@ impl Render for LibraryWindow {
             } else {
                 "No captures yet. Press Ctrl+Shift+4 to capture an area."
             };
-            div().flex_1().flex().items_center().justify_center().text_sm().text_color(rgb(MUTED)).child(msg).into_any_element()
+            div().flex_1().flex().items_center().justify_center().text_sm().text_color(ui::theme().muted).child(msg).into_any_element()
         } else {
             match prefs.view {
                 LibraryView::Grid => {
@@ -757,9 +757,9 @@ impl Render for LibraryWindow {
             .flex()
             .items_center()
             .text_xs()
-            .text_color(rgb(MUTED))
+            .text_color(ui::theme().muted)
             .border_t_1()
-            .border_color(rgb(BORDER))
+            .border_color(ui::theme().border)
             .child(match selected {
                 0 => format!("{n} capture(s)"),
                 s => format!("{s} of {n} selected"),
@@ -773,10 +773,10 @@ impl Render for LibraryWindow {
             .flex()
             
             .font_family(FONT)
-            .text_color(rgb(TEXT))
+            .text_color(ui::theme().text)
             .on_key_down(cx.listener(Self::on_key))
             .child(sidebar)
-            .child(div().flex_1().min_w_0().h_full().flex().flex_col().bg(rgb(BG)).child(toolbar).child(content).child(status))
+            .child(div().flex_1().min_w_0().h_full().flex().flex_col().bg(ui::theme().base).child(toolbar).child(content).child(status))
             .when(prefs.inspector, |d| d.child(self.inspector(cx)))
     }
 }
@@ -813,9 +813,9 @@ fn capture_entry(id: &'static str, icon: &'static str, label: &'static str, f: f
         .rounded(px(ui::RADIUS_CONTROL))
         .cursor_pointer()
         .text_sm()
-        .text_color(rgb(TEXT))
-        .hover(|s| s.bg(rgb(ELEV)))
-        .child(ui::icon(icon, 15., rgb(MUTED)))
+        .text_color(ui::theme().text)
+        .hover(|s| s.bg(ui::theme().control))
+        .child(ui::icon(icon, 15., ui::theme().muted))
         .child(label)
         .on_click(move |_, _, cx| cx.defer(f))
 }

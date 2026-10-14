@@ -1,10 +1,10 @@
 //! Transient toast notifications at the bottom of the active display.
 
-use crate::ui::{self, FONT, TEXT};
+use crate::ui::{self, FONT};
 use crate::win;
 use gpui::prelude::*;
 use gpui::{
-    div, point, px, rgb, rgba, size, AnyWindowHandle, App, Bounds, Context, Global, SharedString, Timer, Window,
+    div, point, px, size, AnyWindowHandle, App, Bounds, Context, Global, SharedString, Timer, Window,
     WindowBounds, WindowKind, WindowOptions,
 };
 use std::time::Duration;
@@ -26,12 +26,12 @@ impl Render for Toast {
                 .gap_2()
                 .px_4()
                 .rounded_full()
-                .bg(rgba(0x1C1C1FF2))
+                .bg(ui::theme().flyout)
                 .border_1()
-                .border_color(rgba(0xFFFFFF1F))
+                .border_color(ui::theme().border)
                 .shadow_lg()
                 .text_sm()
-                .text_color(rgb(TEXT))
+                .text_color(ui::theme().text)
                 .child(ui::icon("sparkles", 15., ui::accent()))
                 .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(self.0.clone())),
         )

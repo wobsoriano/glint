@@ -1,11 +1,11 @@
 //! Quick Look: a large preview of one capture. Space or Esc closes it.
 
 use crate::library::{CaptureKind, Item};
-use crate::ui::{self, BG, BORDER, FONT, MUTED, PANEL, TEXT};
+use crate::ui::{self, FONT};
 use crate::{actions, shell, win};
 use gpui::prelude::*;
 use gpui::{
-    div, img, px, rgb, size, App, Bounds, Context, FocusHandle, Global, ImageSource, KeyDownEvent, ObjectFit,
+    div, img, px, size, App, Bounds, Context, FocusHandle, Global, ImageSource, KeyDownEvent, ObjectFit,
     RenderImage, TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions,
 };
 use std::sync::Arc;
@@ -102,8 +102,8 @@ impl Render for QuickLook {
         };
         let body = match (&self.image, &self.error) {
             (Some(image), _) => img(ImageSource::Render(image.clone())).size_full().object_fit(ObjectFit::Contain).into_any_element(),
-            (None, Some(e)) => div().text_color(rgb(MUTED)).child(e.clone()).into_any_element(),
-            (None, None) => div().text_color(rgb(MUTED)).child("Loading…").into_any_element(),
+            (None, Some(e)) => div().text_color(ui::theme().muted).child(e.clone()).into_any_element(),
+            (None, None) => div().text_color(ui::theme().muted).child("Loading…").into_any_element(),
         };
         let (edit_item, copy_item, reveal_item) = (item.clone(), item.clone(), item.clone());
         div()
@@ -112,9 +112,9 @@ impl Render for QuickLook {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(BG))
+            .bg(ui::theme().base)
             .font_family(FONT)
-            .text_color(rgb(TEXT))
+            .text_color(ui::theme().text)
             .on_key_down(cx.listener(|_, e: &KeyDownEvent, window, _| {
                 if matches!(e.keystroke.key.as_str(), "escape" | "space") {
                     window.remove_window();
@@ -128,11 +128,11 @@ impl Render for QuickLook {
                     .gap_2()
                     .px_4()
                     .py_2()
-                    .bg(rgb(PANEL))
+                    .bg(ui::theme().layer)
                     .border_t_1()
-                    .border_color(rgb(BORDER))
-                    .child(div().flex_1().text_sm().text_color(rgb(MUTED)).child(info))
-                    .when(recording, |d| d.child(div().text_xs().text_color(rgb(MUTED)).child("Playback arrives with Studio")))
+                    .border_color(ui::theme().border)
+                    .child(div().flex_1().text_sm().text_color(ui::theme().muted).child(info))
+                    .when(recording, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Playback arrives with Studio")))
                     .child(ui::button("ql-reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
                         shell::reveal(std::slice::from_ref(&reveal_item.dir))
                     }))

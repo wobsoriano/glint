@@ -204,7 +204,22 @@ fn main() {
                 titlebar: None,
                 ..Default::default()
             },
-            |_, cx| cx.new(|_| KeepAlive),
+            |window, cx| {
+                cx.new(|cx| {
+                    // Every top-level window hears the system theme change; this one lives as
+                    // long as the app, so it re-reads the theme for all of them.
+                    cx.observe_window_appearance(window, |_, _, cx| {
+                        if ui::refresh_theme() {
+                            for w in cx.windows() {
+                                let _ = w.update(cx, |_, window, _| shell::caption_text(window));
+                            }
+                            cx.refresh_windows();
+                        }
+                    })
+                    .detach();
+                    KeepAlive
+                })
+            },
         );
 
         if launch.requests.is_empty() && !launch.background {

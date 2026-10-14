@@ -113,18 +113,6 @@ pub fn copy_text(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn file_name(created: &chrono::DateTime<chrono::Local>) -> String {
-    format!("Glint {}.png", created.format("%Y-%m-%d at %H.%M.%S"))
-}
-
-pub fn save_png(img: &image::RgbaImage, path: &std::path::Path) -> anyhow::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    img.save_with_format(path, image::ImageFormat::Png)?;
-    Ok(())
-}
-
 /// Converts straight RGBA into the BGRA frame GPUI expects.
 pub fn render_image(img: &image::RgbaImage) -> std::sync::Arc<gpui::RenderImage> {
     let mut bgra = img.clone();

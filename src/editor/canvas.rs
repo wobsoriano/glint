@@ -5,7 +5,7 @@ use super::viewport::View;
 use super::{Editor, Typing};
 use crate::annotate::{pt, Pt, Shape, Tool, R};
 use crate::style::Background;
-use crate::ui::{self, fluent::{c, theme}};
+use crate::ui::{self, theme};
 use glint_render::compose::Frame;
 use glint_render::doc::EditDoc;
 use gpui::prelude::*;
@@ -214,7 +214,7 @@ impl Editor {
                 .rounded_full()
                 .bg(rgb(0xFFFFFF))
                 .border_2()
-                .border_color(c(theme().accent))
+                .border_color(theme().accent)
         };
         if let Some(c) = &self.crop {
             let (w, h) = self.base_size();
@@ -255,7 +255,7 @@ impl Editor {
                     .w(px(b.w + 6.))
                     .h(px(b.h + 6.))
                     .border_1()
-                    .border_color(c(theme().accent))
+                    .border_color(theme().accent)
                     .rounded_sm(),
             );
         }
@@ -271,9 +271,9 @@ impl Editor {
                     .top(px(m.y))
                     .w(px(m.w))
                     .h(px(m.h))
-                    .bg(c((theme().accent & 0xFFFFFF00) | 0x26))
+                    .bg(ui::accent_alpha(0x26))
                     .border_1()
-                    .border_color(c(theme().accent)),
+                    .border_color(theme().accent),
             );
         }
         layer
@@ -304,7 +304,7 @@ impl Editor {
             .h_full()
             .relative()
             .overflow_hidden()
-            .bg(c(theme().canvas))
+            .bg(theme().canvas)
             .cursor(cursor)
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
@@ -358,8 +358,8 @@ impl Editor {
                             .border_color(rgba(0xFFFFFF1F))
                             .shadow_lg()
                             .text_sm()
-                            .text_color(c(theme().text))
-                            .child(ui::icon(if self.busy.is_some() { "scan" } else { "check" }, 15., c(theme().accent)))
+                            .text_color(theme().text)
+                            .child(ui::icon(if self.busy.is_some() { "scan" } else { "check" }, 15., theme().accent))
                             .max_w(px(620.))
                             .child(div().truncate().child(msg)),
                     ),
