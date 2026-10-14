@@ -2,7 +2,7 @@
 //! frames get redder over time, plus a 440 Hz system-audio tone.
 
 use glint_media::{read_mp4_audio, VideoCodec, VideoParams, VideoReader, VideoWriter};
-use glint_studio::{export, Clip, Format, Fps, Session};
+use glint_studio::{export, Clip, Format, Fps, Project, Session};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
@@ -113,5 +113,52 @@ fn export_follows_the_clip_map_and_caches() {
     let gif = export(&s, &opts, |_| {}, &AtomicBool::new(false)).unwrap();
     let bytes = std::fs::read(&gif).unwrap();
     assert_eq!(&bytes[..6], b"GIF89a");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Writes `bytes` as `file` in a fresh session that already holds an older `<file>.broken`,
+/// opens it, and returns the session, its directory and what `<file>.broken` holds afterwards.
+fn open_with_broken(name: &str, file: &str, bytes: &[u8]) -> (Session, PathBuf, Vec<u8>) {
+    let dir = make_session(name);
+    let broken = dir.join(format!("{file}.broken"));
+    std::fs::write(&broken, b"an older broken copy").unwrap();
+    std::fs::write(dir.join(file), bytes).unwrap();
+    let s = Session::open(&dir).unwrap();
+    assert!(!dir.join(file).exists(), "the bad {file} was moved aside");
+    let kept = std::fs::read(&broken).unwrap();
+    (s, dir, kept)
+}
+
+#[test]
+fn unparsable_project_is_set_aside() {
+    let (s, dir, kept) = open_with_broken("bad-project", "project.json", b"{ not json");
+    assert_eq!(kept, b"{ not json");
+    assert_eq!(s.project, Project::new(s.source_duration_ms));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn project_from_a_newer_version_is_set_aside() {
+    let json = br#"{ "version": 99, "clips": [{ "start_ms": 0, "end_ms": 1000 }] }"#;
+    let (s, dir, kept) = open_with_broken("new-project", "project.json", json);
+    assert_eq!(kept, json);
+    assert_eq!(s.project, Project::new(s.source_duration_ms));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn unparsable_transcript_is_set_aside() {
+    let (s, dir, kept) = open_with_broken("bad-transcript", "transcript.json", b"{ not json");
+    assert_eq!(kept, b"{ not json");
+    assert!(s.transcript.is_none());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn transcript_from_a_newer_version_is_set_aside() {
+    let json = br#"{ "version": 99, "language": "en", "words": [] }"#;
+    let (s, dir, kept) = open_with_broken("new-transcript", "transcript.json", json);
+    assert_eq!(kept, json);
+    assert!(s.transcript.is_none());
     std::fs::remove_dir_all(&dir).unwrap();
 }
