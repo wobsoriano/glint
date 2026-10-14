@@ -40,6 +40,8 @@ pub enum Request {
     /// An image to open in the editor: a Library capture as it is, any other file imported
     /// as a copy first. Always absolute.
     Open(PathBuf),
+    /// A recording session directory to open in Studio. Always absolute.
+    Studio(PathBuf),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -48,7 +50,7 @@ pub struct Launch {
     pub requests: Vec<Request>,
 }
 
-pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [--trim video] [image, video or Library capture...]";
+pub const USAGE: &str = "usage: glint.exe [--background] [--library] [--record] [--capture area|window|screen|text|previous] [--studio <session dir>] [--trim <video>] [image, video or Library capture...]";
 
 pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
     let mut launch = Launch { background: false, requests: Vec::new() };
@@ -73,6 +75,10 @@ pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
             "--trim" => match it.next() {
                 Some(path) => launch.requests.push(Request::Trim(cwd.join(path))),
                 None => bail!("--trim needs a video file\n{USAGE}"),
+            },
+            "--studio" => match it.next() {
+                Some(dir) => launch.requests.push(Request::Studio(cwd.join(dir))),
+                None => bail!("--studio needs a session directory\n{USAGE}"),
             },
             flag if flag.starts_with("--") => bail!("unknown option {flag}\n{USAGE}"),
             path if crate::clip::is_video(Path::new(path)) => launch.requests.push(Request::Trim(cwd.join(path))),
@@ -179,7 +185,7 @@ mod tests {
     #[test]
     fn parses_flags_captures_and_relative_paths() {
         let cwd = Path::new(r"C:\Users\me\Pictures");
-        let l = parse(&args(&["--background", "--capture", "window", "shot.png", r"D:\x\y.jpg", "--library", "--record"]), cwd).unwrap();
+        let l = parse(&args(&["--background", "--capture", "window", "shot.png", r"D:\x\y.jpg", "--library", "--record", "--studio", "rec.glintrec"]), cwd).unwrap();
         assert_eq!(
             l,
             Launch {
@@ -190,6 +196,7 @@ mod tests {
                     Request::Open(PathBuf::from(r"D:\x\y.jpg")),
                     Request::Library,
                     Request::Record,
+                    Request::Studio(PathBuf::from(r"C:\Users\me\Pictures\rec.glintrec")),
                 ],
             }
         );
@@ -215,6 +222,7 @@ mod tests {
         let cwd = Path::new(r"C:\");
         assert!(parse(&args(&["--capture", "video"]), cwd).unwrap_err().to_string().starts_with("unknown capture kind \"video\""));
         assert!(parse(&args(&["--capture"]), cwd).unwrap_err().to_string().starts_with("unknown capture kind \"\""));
+        assert!(parse(&args(&["--studio"]), cwd).unwrap_err().to_string().starts_with("--studio needs a session directory"));
         assert!(parse(&args(&["--nope"]), cwd).unwrap_err().to_string().starts_with("unknown option --nope"));
     }
 }

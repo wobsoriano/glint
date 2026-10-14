@@ -73,6 +73,10 @@ fn body(name: &str) -> Option<&'static str> {
         "camera-off" => r##"<path d="M2 2l20 20"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v8.3M15.2 15.2A3 3 0 0 1 11 11M4 7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14"/>"##,
         "prompter" => r##"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>"##,
         "chevron-down" => r##"<path d="M6 9l6 6 6-6"/>"##,
+        "scissors" => r##"<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/>"##,
+        "zoom" => r##"<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M11 8v6M8 11h6"/>"##,
+        "plus" => r##"<path d="M12 5v14M5 12h14"/>"##,
+        "minus" => r##"<path d="M5 12h14"/>"##,
         _ => return None,
     })
 }
