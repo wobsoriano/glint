@@ -138,7 +138,8 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: Option<EditDoc>, title: String
                 appears_transparent: true,
                 traffic_light_position: None,
             }),
-            window_min_size: Some(size(px(980.), px(640.))),
+            window_min_size: Some(size(px(1040.), px(660.))),
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
             focus: true,
             ..Default::default()
         },
@@ -146,6 +147,7 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: Option<EditDoc>, title: String
             let view = cx.new(|cx| Editor::new(base, doc, title, on_save, cx));
             let f = view.read(cx).focus.clone();
             window.focus(&f);
+            crate::ui::fluent::apply_mica(window);
             win::bring_to_front(window);
             view
         },
@@ -168,13 +170,6 @@ struct Ink {
 enum Typing {
     Text(u64),
     Watermark,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Tab {
-    Style,
-    Effects,
-    Annotate,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -232,7 +227,8 @@ pub struct Editor {
     drag: Option<Drag>,
     crop: Option<CropEdit>,
     viewport: viewport::Viewport,
-    tab: Tab,
+    /// The font family list is open.
+    font_menu: bool,
     focus: FocusHandle,
     auto_colors: Vec<Color>,
     hue: f32,
@@ -296,7 +292,7 @@ impl Editor {
             drag: None,
             crop: None,
             viewport: viewport::Viewport::default(),
-            tab: Tab::Style,
+            font_menu: false,
             focus: cx.focus_handle(),
             auto_colors,
             hue: 220.0,
@@ -431,9 +427,6 @@ impl Editor {
             self.crop = None;
         }
         self.tool = tool;
-        if tool != Tool::Select && tool != Tool::Crop {
-            self.tab = Tab::Annotate;
-        }
     }
 
     fn apply_crop(&mut self) {
@@ -642,7 +635,6 @@ impl Editor {
         self.selected = added.iter().map(|a| a.id).collect();
         self.doc.annotations.splice(0..0, added);
         self.tool = Tool::Select;
-        self.tab = Tab::Annotate;
         let summary = counts
             .iter()
             .map(|(k, n)| format!("{n} {k}{}", if *n > 1 { "s" } else { "" }))

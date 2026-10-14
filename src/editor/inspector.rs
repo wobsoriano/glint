@@ -1,15 +1,16 @@
-//! Title bar, tool strip and the inspector panels.
+//! Window chrome: the tool bar, the contextual style bar, the right sidebar and the bottom bar.
 
-use super::{gallery, Editor, Tab, Typing};
+use super::{gallery, Editor, Typing};
 use crate::annotate::{RedactStyle, Shape, TextStyle, Tool};
 use crate::settings::Settings;
 use crate::style::{Background, Chrome, Color, Gradient, Style, ASPECTS, GRADIENTS, INK, SOLIDS};
-use crate::ui::{self, OnValue, ToRgba, ACCENT, BG, BORDER, ELEV, FONT, HOVER, MUTED, PANEL, TEXT};
+use crate::ui::fluent::{self as fl, c, theme};
+use crate::ui::{self, OnValue, ToRgba};
 use glint_render::doc::{BlurEdge, BlurMode, EditDoc, Placement};
 use glint_render::fonts::{self, Align, Weight};
 use gpui::prelude::*;
 use gpui::{
-    div, img, px, rgb, rgba, App, ClickEvent, Context, ElementId, ImageSource, ObjectFit, PathPromptOptions, SharedString,
+    deferred, div, img, px, rgba, App, ClickEvent, Context, ElementId, ImageSource, ObjectFit, PathPromptOptions, SharedString,
     WeakEntity, Window, WindowControlArea,
 };
 use std::rc::Rc;
@@ -21,6 +22,16 @@ pub(super) fn on(weak: &WeakEntity<Editor>, f: impl Fn(&mut Editor, &mut Context
     Box::new(move |_, _, cx| {
         let _ = weak.update(cx, |this, cx| {
             f(this, cx);
+            cx.notify();
+        });
+    })
+}
+
+fn on_window(weak: &WeakEntity<Editor>, f: impl Fn(&mut Editor, &mut Window, &mut Context<Editor>) + 'static) -> Listener {
+    let weak = weak.clone();
+    Box::new(move |_, window, cx| {
+        let _ = weak.update(cx, |this, cx| {
+            f(this, window, cx);
             cx.notify();
         });
     })
@@ -46,7 +57,7 @@ fn doc_slider(
     display: String,
     set: impl Fn(&mut EditDoc, f32) + 'static,
 ) -> impl IntoElement {
-    ui::slider(key, label, value, range.0, range.1, display, on_value(weak, move |e, v| e.edit(key, |d| set(d, v))))
+    fl::slider(key, label, value, range.0, range.1, display, on_value(weak, move |e, v| e.edit(key, |d| set(d, v))))
 }
 
 pub(super) fn eid(prefix: &str, i: usize) -> ElementId {
@@ -54,36 +65,45 @@ pub(super) fn eid(prefix: &str, i: usize) -> ElementId {
 }
 
 fn row(label: &str) -> gpui::Div {
-    div().flex().flex_wrap().items_center().gap_1().child(div().text_xs().w(px(64.)).text_color(rgb(MUTED)).child(label.to_string()))
+    div().flex().flex_wrap().items_center().gap_1().child(div().text_xs().w(px(64.)).text_color(c(theme().muted)).child(label.to_string()))
 }
 
 fn note(text: &str) -> impl IntoElement {
-    div().text_xs().text_color(rgb(MUTED)).child(text.to_string())
+    div().text_xs().text_color(c(theme().muted)).child(text.to_string())
+}
+
+fn divider() -> impl IntoElement {
+    div().w(px(1.)).h(px(20.)).mx_1().flex_none().bg(c(theme().border))
+}
+
+fn label(text: &str) -> impl IntoElement {
+    div().text_xs().flex_none().text_color(c(theme().muted)).child(text.to_string())
 }
 
 fn grid9(weak: &WeakEntity<Editor>, prefix: &'static str, selected: Option<u8>, set: impl Fn(&mut Editor, u8) + Clone + 'static) -> impl IntoElement {
+    let t = theme();
     div().grid().grid_cols(3).gap(px(3.)).children((0..9u8).map(move |i| {
         let set = set.clone();
         let sel = selected == Some(i);
         div()
             .id(eid(prefix, i as usize))
             .size(px(16.))
-            .rounded_sm()
+            .rounded(px(3.))
             .cursor_pointer()
             .border_1()
-            .border_color(rgb(BORDER))
-            .when(sel, |d| d.bg(rgb(ACCENT)).border_color(rgb(ACCENT)))
-            .when(!sel, |d| d.bg(rgb(ELEV)).hover(|s| s.bg(rgb(HOVER))))
+            .border_color(c(t.border))
+            .when(sel, |d| d.bg(c(t.accent)).border_color(c(t.accent)))
+            .when(!sel, |d| d.bg(c(t.control)).hover(|s| s.bg(c(t.control_hover))))
             .on_click(on(weak, move |e, _| set(e, i)))
     }))
 }
 
-fn color_row(weak: &WeakEntity<Editor>, prefix: &'static str, current: Color, set: impl Fn(&mut Editor, Color) + Clone + 'static) -> impl IntoElement {
-    let colors = [0xFFFFFF, 0x000000].into_iter().chain(INK.into_iter().take(8));
-    div().flex().flex_wrap().gap_1().children(colors.enumerate().map(move |(i, hex)| {
+fn color_row(weak: &WeakEntity<Editor>, prefix: &'static str, current: Color, size: f32, set: impl Fn(&mut Editor, Color) + Clone + 'static) -> gpui::Div {
+    let colors = INK.into_iter().chain([0x000000]);
+    div().flex().flex_wrap().gap(px(2.)).children(colors.enumerate().map(move |(i, hex)| {
         let col = Color::rgb(hex);
         let set = set.clone();
-        ui::swatch(eid(prefix, i), &[col.rgba()], current.with_alpha(255) == col, 24., on(weak, move |e, _| set(e, col)))
+        fl::swatch(eid(prefix, i), &[col.rgba()], current.with_alpha(255) == col, size, on(weak, move |e, _| set(e, col)))
     }))
 }
 
@@ -96,12 +116,74 @@ enum BgMode {
     None,
 }
 
+/// What the style bar offers for the current tool or selection.
+#[derive(Default)]
+struct Context_ {
+    color: bool,
+    stroke: bool,
+    fill: Option<bool>,
+    text: bool,
+    size: bool,
+    redact: bool,
+}
+
 impl Editor {
-    pub(super) fn titlebar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
+    fn style_context(&self) -> Context_ {
+        let mut cx = Context_::default();
+        let mut add = |shape: &Shape| match shape {
+            Shape::Arrow { .. } | Shape::Line { .. } | Shape::Pen { .. } => {
+                cx.color = true;
+                cx.stroke = true;
+            }
+            Shape::Rect { filled, .. } | Shape::Ellipse { filled, .. } => {
+                cx.color = true;
+                cx.stroke |= !filled;
+                cx.fill = Some(*filled);
+            }
+            Shape::Text { .. } => {
+                cx.color = true;
+                cx.text = true;
+                cx.size = true;
+            }
+            Shape::Counter { .. } => {
+                cx.color = true;
+                cx.size = true;
+            }
+            Shape::Redact { .. } => cx.redact = true,
+            Shape::Highlight { .. } => {}
+        };
+        if self.selected.is_empty() {
+            let probe = match self.tool {
+                Tool::Arrow | Tool::Line | Tool::Pen => Some(Shape::Pen { points: vec![] }),
+                Tool::Rect | Tool::Ellipse => Some(Shape::Rect { rect: Default::default(), filled: false }),
+                Tool::FilledRect => Some(Shape::Rect { rect: Default::default(), filled: true }),
+                Tool::Text => Some(Shape::Text { pos: Default::default(), text: String::new(), size: 0.0, style: TextStyle::Plain, font: Default::default() }),
+                Tool::Counter => Some(Shape::Counter { center: Default::default(), n: 0, size: 0.0 }),
+                Tool::Pixelate | Tool::Blur => Some(Shape::Redact { rect: Default::default(), kind: RedactStyle::Blur, strength: 0.0 }),
+                _ => None,
+            };
+            if let Some(s) = probe {
+                add(&s);
+            }
+        } else {
+            for a in self.selected_anns() {
+                add(&a.shape);
+            }
+        }
+        cx
+    }
+
+    pub(super) fn toolbar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
+        let t = theme();
         let active = if self.crop.is_some() { Tool::Crop } else { self.tool };
-        let tools = Tool::ALL.iter().enumerate().map(|(i, t)| {
-            let t = *t;
-            ui::icon_button(eid("tool", i), t.icon(), active == t, t.name(), on(weak, move |e, _| e.set_tool(t)))
+        let tools = Tool::ALL.iter().enumerate().map(|(i, tool)| {
+            let tool = *tool;
+            let gap = matches!(tool, Tool::Rect | Tool::Counter | Tool::Highlight | Tool::Crop);
+            div()
+                .flex()
+                .items_center()
+                .when(gap, |d| d.child(divider()))
+                .child(fl::tool_button(eid("tool", i), tool.icon(), active == tool, tool.name(), on(weak, move |e, _| e.set_tool(tool))))
         });
         let caption = |id: &'static str, icon: &'static str, area: WindowControlArea, close: bool| {
             div()
@@ -112,23 +194,20 @@ impl Editor {
                 .items_center()
                 .justify_center()
                 .window_control_area(area)
-                .when(close, |d| d.hover(|s| s.bg(rgb(0xC42B1C))))
-                .when(!close, |d| d.hover(|s| s.bg(rgb(HOVER))))
-                .child(ui::icon(icon, 14., rgb(TEXT)))
+                .when(close, |d| d.hover(|s| s.bg(gpui::rgb(0xC42B1C))))
+                .when(!close, |d| d.hover(|s| s.bg(c(t.control_hover))))
+                .child(ui::icon(icon, 13., c(t.text)))
         };
         div()
             .h(px(48.))
             .flex_none()
             .flex()
             .items_center()
-            .bg(rgb(PANEL))
-            .border_b_1()
-            .border_color(rgb(BORDER))
             .child(
                 div()
                     .id("drag-l")
                     .h_full()
-                    .w(px(200.))
+                    .w(px(220.))
                     .flex_none()
                     .flex()
                     .items_center()
@@ -137,48 +216,41 @@ impl Editor {
                     .window_control_area(WindowControlArea::Drag)
                     .child(
                         div()
-                            .size(px(22.))
-                            .rounded_md()
+                            .size(px(20.))
+                            .rounded(px(5.))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .bg(gpui::linear_gradient(
-                                135.,
-                                gpui::linear_color_stop(rgb(0x6366F1), 0.),
-                                gpui::linear_color_stop(rgb(0xEC4899), 1.),
-                            ))
-                            .child(ui::icon("area", 13., rgb(0xFFFFFF))),
+                            .bg(c(t.accent))
+                            .child(ui::icon("area", 12., c(t.on_accent))),
                     )
-                    .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).truncate().child(self.title.clone())),
+                    .child(div().text_sm().truncate().text_color(c(t.text)).child(self.title.clone())),
             )
             .child(div().id("drag-m1").h_full().flex_1().window_control_area(WindowControlArea::Drag))
-            .child(div().flex().items_center().gap_0p5().p_1().rounded_lg().bg(rgb(BG)).border_1().border_color(rgb(BORDER)).children(tools))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_0p5()
+                    .p_1()
+                    .rounded(px(8.))
+                    .bg(c(t.card))
+                    .border_1()
+                    .border_color(c(t.border))
+                    .children(tools),
+            )
             .child(div().id("drag-m2").h_full().flex_1().window_control_area(WindowControlArea::Drag))
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap_1()
+                    .gap_0p5()
                     .pr_2()
-                    .child(ui::icon_button("undo", "undo", false, "Undo (Ctrl+Z)", on(weak, |e, _| e.undo())))
-                    .child(ui::icon_button("redo", "redo", false, "Redo (Ctrl+Y)", on(weak, |e, _| e.redo())))
-                    .child(div().w(px(1.)).h(px(20.)).mx_1().bg(rgb(BORDER)))
-                    .child(ui::icon_button("pin", "pin", false, "Pin to screen (Ctrl+P)", on(weak, |e, cx| e.pin(cx))))
-                    .child(ui::icon_button("saveas", "folder", false, "Save as… (Ctrl+Shift+S)", on(weak, |e, cx| e.save_as(cx))))
-                    .child(ui::icon_button("copy", "copy", false, "Copy (Ctrl+C)", on(weak, |e, cx| e.copy(cx))))
-                    .child(div().w(px(6.)))
-                    .child(ui::button("save", "Save", Some("save"), false, {
-                        let w = weak.clone();
-                        move |_, window, cx| {
-                            let _ = w.update(cx, |e, cx| e.save(false, window, cx));
-                        }
-                    }))
-                    .child(ui::button("done", "Done", Some("check"), true, {
-                        let w = weak.clone();
-                        move |_, window, cx| {
-                            let _ = w.update(cx, |e, cx| e.save(true, window, cx));
-                        }
-                    })),
+                    .child(fl::tool_button("undo", "undo", false, "Undo (Ctrl+Z)", on(weak, |e, _| e.undo())))
+                    .child(fl::tool_button("redo", "redo", false, "Redo (Ctrl+Y)", on(weak, |e, _| e.redo())))
+                    .child(divider())
+                    .child(fl::tool_button("redact", "shield", false, "Smart redaction (Ctrl+Shift+R)", on(weak, |e, cx| e.auto_redact(cx))))
+                    .child(fl::tool_button("ocr", "scan", false, "Copy text from image (Ctrl+Shift+T)", on(weak, |e, cx| e.copy_text(cx)))),
             )
             .child(
                 div()
@@ -190,55 +262,290 @@ impl Editor {
             )
     }
 
+    /// Options for the current tool or selection, under the tool bar.
+    pub(super) fn style_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
+        let t = theme();
+        let bar = div()
+            .h(px(44.))
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap_2()
+            .px_4()
+            .bg(c(t.layer))
+            .border_t_1()
+            .border_b_1()
+            .border_color(c(t.border))
+            .text_color(c(t.text));
+        if let Some(crop) = self.crop {
+            return bar
+                .child(label(&format!("Crop {} × {}", crop.rect.w as i32, crop.rect.h as i32)))
+                .child(divider())
+                .children(super::CROP_PRESETS.iter().enumerate().map(|(i, (name, preset))| {
+                    let preset = *preset;
+                    fl::chip(eid("crop-p", i), *name, crop.preset == preset, on(weak, move |e, _| e.set_crop_preset(preset)))
+                }))
+                .child(div().flex_1())
+                .child(fl::button("crop-cancel", "Cancel", None, false, on(weak, |e, _| e.set_tool(Tool::Select))))
+                .child(fl::button("crop-apply", "Apply crop", Some("check"), true, on(weak, |e, _| e.apply_crop())));
+        }
+        let ctx = self.style_context();
+        let sel_text = self.selected_anns().find_map(|a| match &a.shape {
+            Shape::Text { font, style, .. } => Some((font.clone(), *style)),
+            _ => None,
+        });
+        let sel_redact = self.selected_anns().find_map(|a| match &a.shape {
+            Shape::Redact { strength, kind, .. } => Some((*strength / self.doc.dpi, *kind)),
+            _ => None,
+        });
+        let (font, text_style) = sel_text.unwrap_or((self.ink.font.clone(), self.ink.text_style));
+        let strength = sel_redact.map_or(self.ink.redact_strength, |r| r.0);
+        let mut bar = bar;
+        let empty = !(ctx.color || ctx.redact);
+        if empty {
+            bar = bar.child(label(match self.tool {
+                Tool::Highlight => "Drag over what matters; everything else dims",
+                _ if self.selected.is_empty() => "Click an annotation to select it. Shift-click or drag a box to select several",
+                _ => "Highlight keeps the selected area bright",
+            }));
+        }
+        if ctx.color {
+            bar = bar.child(color_row(weak, "ink", self.ink.color, 22., |e, col| {
+                e.ink.color = col;
+                e.modify_selected("ink", |a| {
+                    if !a.is_redaction() {
+                        a.color = col
+                    }
+                });
+            }));
+        }
+        if ctx.stroke {
+            bar = bar.child(divider()).child(label("Width")).child(
+                div().w(px(110.)).child(fl::slider_track("stroke", self.ink.stroke, 1., 24., on_value(weak, |e, v| {
+                    e.ink.stroke = v.round();
+                    let w = e.ink.stroke * e.doc.dpi;
+                    e.modify_selected("stroke", |a| a.width = w);
+                }))),
+            ).child(label(&format!("{:.0}", self.ink.stroke)));
+        }
+        if let Some(filled) = ctx.fill {
+            bar = bar.child(divider()).child(fl::chip("fill", "Fill", filled, on(weak, move |e, _| {
+                let f = !filled;
+                if e.selected.is_empty() {
+                    e.tool = if f { Tool::FilledRect } else { Tool::Rect };
+                }
+                e.modify_selected("fill", |a| match &mut a.shape {
+                    Shape::Rect { filled, .. } | Shape::Ellipse { filled, .. } => *filled = f,
+                    _ => {}
+                });
+            })));
+        }
+        if ctx.text {
+            let set_font = |f: fonts::TextFont| {
+                move |e: &mut Editor, _: &mut Context<Editor>| {
+                    e.ink.font = f.clone();
+                    e.font_menu = false;
+                    let f = f.clone();
+                    e.modify_selected("tx-font", move |a| {
+                        if let Shape::Text { font, .. } = &mut a.shape {
+                            *font = f.clone();
+                        }
+                    });
+                }
+            };
+            let menu = self.font_menu.then(|| {
+                deferred(
+                    div()
+                        .id("font-menu")
+                        .absolute()
+                        .top(px(34.))
+                        .left_0()
+                        .w(px(220.))
+                        .max_h(px(360.))
+                        .overflow_y_scroll()
+                        .p_1()
+                        .rounded(px(8.))
+                        .bg(c(if t.dark { 0x2C2C2CFF } else { 0xF9F9F9FF }))
+                        .border_1()
+                        .border_color(c(t.border))
+                        .shadow_lg()
+                        .occlude()
+                        .children(fonts::families().iter().enumerate().map(|(i, fam)| {
+                            let mut f = font.clone();
+                            f.family = fam.to_string();
+                            let weights = fonts::weights(fam);
+                            if !weights.contains(&f.weight) {
+                                f.weight = *weights.iter().min_by_key(|w| (**w as i32 - font.weight as i32).abs()).unwrap_or(&Weight::Regular);
+                            }
+                            let selected = font.family == *fam;
+                            div()
+                                .id(eid("fam", i))
+                                .px_2()
+                                .h(px(30.))
+                                .flex()
+                                .items_center()
+                                .rounded(px(4.))
+                                .cursor_pointer()
+                                .text_sm()
+                                .font_family(SharedString::from(fam.to_string()))
+                                .when(selected, |d| d.bg(c(t.control_hover)))
+                                .hover(|s| s.bg(c(t.control_hover)))
+                                .child(fam.to_string())
+                                .on_click(on(weak, set_font(f)))
+                        })),
+                )
+            });
+            let font_button = div()
+                .relative()
+                .child(
+                    div()
+                        .id("font-btn")
+                        .h(px(28.))
+                        .w(px(150.))
+                        .px_2()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .rounded(px(4.))
+                        .bg(c(t.control))
+                        .border_1()
+                        .border_color(c(t.border))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(t.control_hover)))
+                        .text_sm()
+                        .child(div().truncate().font_family(SharedString::from(font.family.clone())).child(font.family.clone()))
+                        .child(div().text_xs().text_color(c(t.muted)).child("▾"))
+                        .on_click(on(weak, |e, _| e.font_menu = !e.font_menu)),
+                )
+                .children(menu);
+            let weights = fonts::weights(&font.family).into_iter().map(|w| {
+                let mut f = font.clone();
+                f.weight = w;
+                fl::chip(SharedString::from(format!("w-{}", w.label())), w.label(), font.weight == w, on(weak, set_font(f)))
+            });
+            let aligns = [(Align::Left, "align-left"), (Align::Center, "align-center"), (Align::Right, "align-right")].map(|(a, icon)| {
+                let mut f = font.clone();
+                f.align = a;
+                fl::tool_button(SharedString::from(icon), icon, font.align == a, format!("Align {:?}", a).to_lowercase(), on(weak, set_font(f)))
+            });
+            let styles = [(TextStyle::Plain, "Plain"), (TextStyle::Outline, "Outline"), (TextStyle::Pill, "Label")].map(|(ts, name)| {
+                fl::chip(SharedString::from(format!("ts-{name}")), name, text_style == ts, on(weak, move |e, _| {
+                    e.ink.text_style = ts;
+                    e.modify_selected("ts", |a| {
+                        if let Shape::Text { style, .. } = &mut a.shape {
+                            *style = ts;
+                        }
+                    });
+                }))
+            });
+            bar = bar.child(divider()).child(font_button).children(weights).child(divider()).children(aligns).child(divider()).children(styles);
+        }
+        if ctx.size {
+            bar = bar.child(divider()).child(label("Size")).child(
+                div().w(px(100.)).child(fl::slider_track("tsize", self.ink.text_size, 10., 160., on_value(weak, |e, v| {
+                    e.ink.text_size = v.round();
+                    let s = e.ink.text_size * e.doc.dpi;
+                    e.modify_selected("tsize", |a| match &mut a.shape {
+                        Shape::Text { size, .. } => *size = s,
+                        Shape::Counter { size, .. } => *size = s * 0.5,
+                        _ => {}
+                    });
+                }))),
+            ).child(label(&format!("{:.0}", self.ink.text_size)));
+        }
+        if ctx.redact {
+            if let Some((_, kind)) = sel_redact {
+                bar = bar.children(RedactStyle::ALL.map(|k| {
+                    fl::chip(SharedString::from(format!("rk-{}", k.label())), k.label(), kind == k, on(weak, move |e, _| {
+                        e.modify_selected("rk", |a| {
+                            if let Shape::Redact { kind, .. } = &mut a.shape {
+                                *kind = k;
+                            }
+                        });
+                    }))
+                })).child(divider());
+            }
+            bar = bar.child(label("Strength")).child(
+                div().w(px(140.)).child(fl::slider_track("strength", strength, 2., 48., on_value(weak, |e, v| {
+                    e.ink.redact_strength = v.round();
+                    let s = e.ink.redact_strength * e.doc.dpi;
+                    e.modify_selected("strength", |a| {
+                        if let Shape::Redact { strength, .. } = &mut a.shape {
+                            *strength = s;
+                        }
+                    });
+                }))),
+            ).child(label(&format!("{strength:.0}")));
+        }
+        bar.child(div().flex_1()).when(!self.selected.is_empty(), |d| {
+            let n = self.selected.len();
+            d.child(label(&format!("{n} selected"))).child(fl::tool_button("del", "trash", false, "Delete (Del)", on(weak, |e, _| e.delete_selected())))
+        })
+    }
+
     pub(super) fn sidebar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
-        let tab = |id: &'static str, label: &'static str, t: Tab| ui::chip(id, label, self.tab == t, on(weak, move |e, _| e.tab = t));
-        let body = match self.tab {
-            Tab::Style => self.style_panel(weak).into_any_element(),
-            Tab::Effects => self.effects_panel(weak).into_any_element(),
-            Tab::Annotate => self.annotate_panel(weak).into_any_element(),
-        };
+        let t = theme();
         div()
-            .w(px(320.))
+            .id("sidebar")
+            .w(px(312.))
             .flex_none()
             .h_full()
-            .flex()
-            .flex_col()
-            .bg(rgb(PANEL))
+            .overflow_y_scroll()
+            .bg(c(t.layer))
             .border_l_1()
-            .border_color(rgb(BORDER))
+            .border_color(c(t.border))
             .child(
                 div()
-                    .flex()
-                    .gap_1()
                     .p_3()
-                    .border_b_1()
-                    .border_color(rgb(BORDER))
-                    .child(tab("tab-style", "Style", Tab::Style))
-                    .child(tab("tab-fx", "Effects", Tab::Effects))
-                    .child(tab("tab-ann", "Annotate", Tab::Annotate)),
+                    .flex()
+                    .flex_col()
+                    .text_color(c(t.text))
+                    .child(self.presets_section(weak))
+                    .child(self.background_section(weak))
+                    .child(self.frame_sections(weak))
+                    .child(self.effects_sections(weak))
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .pb_2()
+                            .child(fl::button("def", "Save as default", None, false, on(weak, |e, cx| {
+                                let style = e.doc.style.clone();
+                                cx.update_global::<Settings, _>(|s, _| {
+                                    s.style = style;
+                                    s.save();
+                                });
+                                e.show_toast("Saved as your default style", cx);
+                            })))
+                            .child(fl::button("reset", "Reset look", None, false, on(weak, |e, _| e.edit("reset", |d| {
+                                d.style = Style::default();
+                                d.effects = Default::default();
+                            })))),
+                    ),
             )
-            .child(div().id("sidebar").flex_1().min_h_0().overflow_y_scroll().child(div().p_4().flex().flex_col().text_color(rgb(TEXT)).child(body)))
     }
 
     fn presets_section(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+        let t = theme();
         let list = div().flex().flex_wrap().gap_1().children(self.presets.iter().enumerate().map(|(i, p)| {
             div()
                 .flex()
                 .items_center()
-                .rounded_md()
-                .bg(rgb(ELEV))
+                .rounded(px(4.))
+                .bg(c(t.control))
                 .border_1()
-                .border_color(rgb(BORDER))
+                .border_color(c(t.border))
                 .child(
                     div()
                         .id(eid("preset", i))
-                        .px_2()
-                        .h(px(24.))
+                        .pl_2()
+                        .pr_1()
+                        .h(px(26.))
                         .flex()
                         .items_center()
                         .text_xs()
                         .cursor_pointer()
-                        .hover(|s| s.bg(rgb(HOVER)))
+                        .hover(|s| s.bg(c(t.control_hover)))
                         .child(p.name.clone())
                         .on_click(on(weak, move |e, _| e.apply_preset(i))),
                 )
@@ -246,31 +553,31 @@ impl Editor {
                     div()
                         .id(eid("preset-del", i))
                         .px_1()
-                        .h(px(24.))
+                        .h(px(26.))
                         .flex()
                         .items_center()
                         .cursor_pointer()
-                        .text_color(rgb(MUTED))
-                        .hover(|s| s.text_color(rgb(0xFF6B6B)))
-                        .child(ui::icon("close", 10., rgb(MUTED)))
+                        .hover(|s| s.bg(c(t.control_hover)))
+                        .child(ui::icon("close", 10., c(t.muted)))
                         .tooltip(ui::tooltip(format!("Delete “{}”", p.name)))
                         .on_click(on(weak, move |e, cx| e.delete_preset(i, cx))),
                 )
         }));
-        ui::section("Presets")
+        fl::section("Presets")
             .when(self.presets.is_empty(), |d| d.child(note("Save the current look to reuse it on other screenshots.")))
             .child(list)
             .child(
                 div()
                     .flex()
                     .gap_1()
-                    .child(ui::button("pr-save", "Save current", Some("check"), false, on(weak, |e, cx| e.add_preset(cx))))
-                    .child(ui::button("pr-import", "Import…", None, false, on(weak, |e, cx| e.import_presets(cx))))
-                    .child(ui::button("pr-export", "Export…", None, false, on(weak, |e, cx| e.export_presets(cx)))),
+                    .child(fl::button("pr-save", "Save look", Some("check"), false, on(weak, |e, cx| e.add_preset(cx))))
+                    .child(fl::button("pr-import", "Import…", None, false, on(weak, |e, cx| e.import_presets(cx))))
+                    .child(fl::button("pr-export", "Export…", None, false, on(weak, |e, cx| e.export_presets(cx)))),
             )
     }
 
-    fn style_panel(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+    fn background_section(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+        let t = theme();
         let st = &self.doc.style;
         let mode = match st.background {
             Background::Gradient(_) => BgMode::Gradient,
@@ -281,10 +588,10 @@ impl Editor {
         };
         let auto = self.auto_colors.clone();
         let wallpaper0 = self.wallpapers.first().map(|w| w.path.clone());
-        let mode_chip = |id: &'static str, label: &'static str, m: BgMode| {
+        let mode_chip = |id: &'static str, name: &'static str, m: BgMode| {
             let auto = auto.clone();
             let wallpaper0 = wallpaper0.clone();
-            ui::chip(id, label, mode == m, on(weak, move |e, _| {
+            fl::chip(id, name, mode == m, on(weak, move |e, _| {
                 let bg = match m {
                     BgMode::Gradient => Background::Gradient(Gradient { stops: auto.clone(), angle: 135.0 }),
                     BgMode::Solid => Background::Solid(Color::rgb(0xF4F4F5)),
@@ -298,7 +605,7 @@ impl Editor {
                 e.edit("bg", |d| d.style.background = bg);
             }))
         };
-        let mut bg = ui::section("Background").child(
+        let mut bg = fl::section("Background").child(
             div()
                 .flex()
                 .flex_wrap()
@@ -316,31 +623,19 @@ impl Editor {
                 let mut grid = div().flex().flex_wrap().gap_1().child(
                     div()
                         .relative()
-                        .child(ui::swatch(
-                            "g-auto",
-                            &auto.iter().map(|c| c.rgba()).collect::<Vec<_>>(),
-                            current.stops == auto,
-                            34.,
-                            on(weak, move |e, _| {
-                                let g = auto_g.clone();
-                                e.edit("bg", |d| d.style.background = Background::Gradient(g));
-                            }),
-                        ))
-                        .child(div().absolute().top(px(9.)).left(px(9.)).child(ui::icon("sparkles", 16., rgb(0xFFFFFF)))),
+                        .child(fl::swatch("g-auto", &auto.iter().map(|c| c.rgba()).collect::<Vec<_>>(), current.stops == auto, 32., on(weak, move |e, _| {
+                            let g = auto_g.clone();
+                            e.edit("bg", |d| d.style.background = Background::Gradient(g));
+                        })))
+                        .child(div().absolute().top(px(8.)).left(px(8.)).child(ui::icon("sparkles", 16., gpui::rgb(0xFFFFFF)))),
                 );
                 for (i, (_, preset)) in GRADIENTS.iter().enumerate() {
                     let stops = preset.stops.clone();
                     let angle = current.angle;
-                    grid = grid.child(ui::swatch(
-                        eid("grad", i),
-                        &preset.stops.iter().map(|c| c.rgba()).collect::<Vec<_>>(),
-                        preset.stops == current.stops,
-                        34.,
-                        on(weak, move |e, _| {
-                            let g = Gradient { stops: stops.clone(), angle };
-                            e.edit("bg", |d| d.style.background = Background::Gradient(g));
-                        }),
-                    ));
+                    grid = grid.child(fl::swatch(eid("grad", i), &preset.stops.iter().map(|c| c.rgba()).collect::<Vec<_>>(), preset.stops == current.stops, 32., on(weak, move |e, _| {
+                        let g = Gradient { stops: stops.clone(), angle };
+                        e.edit("bg", |d| d.style.background = Background::Gradient(g));
+                    })));
                 }
                 bg = bg.child(grid).child(doc_slider(weak, "angle", "Angle", current.angle, (0., 360.), format!("{:.0}°", current.angle), |d, v| {
                     if let Background::Gradient(g) = &mut d.style.background {
@@ -348,13 +643,13 @@ impl Editor {
                     }
                 }));
             }
-            Background::Solid(c) => {
-                let current = *c;
+            Background::Solid(col) => {
+                let current = *col;
                 let grid = div().flex().flex_wrap().gap_1().children(SOLIDS.iter().enumerate().map(|(i, hex)| {
                     let col = Color::rgb(*hex);
-                    ui::swatch(eid("solid", i), &[col.rgba()], current == col, 30., on(weak, move |e, _| e.edit("bg", |d| d.style.background = Background::Solid(col))))
+                    fl::swatch(eid("solid", i), &[col.rgba()], current == col, 30., on(weak, move |e, _| e.edit("bg", |d| d.style.background = Background::Solid(col))))
                 }));
-                bg = bg.child(grid).child(ui::slider("hue", "Custom hue", self.hue, 0., 360., current.hex(), on_value(weak, |e, v| {
+                bg = bg.child(grid).child(fl::slider("hue", "Custom hue", self.hue, 0., 360., current.hex(), on_value(weak, |e, v| {
                     e.hue = v;
                     e.edit("hue", |d| d.style.background = Background::Solid(Color::from_hsl(v, 0.7, 0.62)));
                 })));
@@ -366,15 +661,15 @@ impl Editor {
                     let selected = w.path == current;
                     div()
                         .id(eid("wall", i))
-                        .w(px(88.))
-                        .h(px(55.))
-                        .rounded_md()
+                        .w(px(WALL_W))
+                        .h(px(WALL_W * 0.625))
+                        .rounded(px(6.))
                         .overflow_hidden()
                         .cursor_pointer()
                         .border_2()
-                        .border_color(if selected { rgb(ACCENT) } else { rgba(0x00000000) })
-                        .hover(|s| s.border_color(rgb(HOVER)))
-                        .child(img(ImageSource::Render(w.thumb.clone())).size_full().object_fit(ObjectFit::Cover))
+                        .border_color(if selected { c(t.accent) } else { rgba(0) })
+                        .hover(|s| s.border_color(c(t.muted)))
+                        .child(img(ImageSource::Render(w.thumb.clone())).size_full().rounded(px(4.)).object_fit(ObjectFit::Cover))
                         .tooltip(ui::tooltip(w.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
                         .on_click(on(weak, move |e, _| {
                             let p = p.clone();
@@ -385,7 +680,7 @@ impl Editor {
                 bg = bg
                     .when(self.wallpapers.is_empty(), |d| d.child(note("Loading wallpapers…")))
                     .child(div().flex().flex_wrap().gap_1().children(tiles))
-                    .child(ui::button("bg-add", "Add image…", Some("image"), false, move |_, _, cx| {
+                    .child(fl::button("bg-add", "Add image…", Some("image"), false, move |_, _, cx| {
                         let rx = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some("Add background image".into()) });
                         let w = w1.clone();
                         cx.spawn(async move |cx| {
@@ -405,89 +700,76 @@ impl Editor {
                         })
                         .detach();
                     }))
-                    .child(note("Your desktop wallpaper, Windows wallpapers and images you add. Nothing is downloaded."));
+                    .child(note("Your desktop wallpaper, the Windows wallpapers and images you add. Nothing is downloaded."));
             }
-            Background::Blurred => bg = bg.child(note("A soft, blurred copy of your screenshot; it always matches its colors.")),
-            Background::None => bg = bg.child(note("Transparent background, great for docs and slides.")),
+            Background::Blurred => bg = bg.child(note("A soft, blurred copy of your screenshot, so it always matches its colors.")),
+            Background::None => bg = bg.child(note("Transparent background, for docs and slides.")),
         }
+        bg
+    }
 
-        let frame = ui::section("Frame")
+    fn frame_sections(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+        let st = &self.doc.style;
+        let frame = fl::section("Layout")
             .child(doc_slider(weak, "pad", "Padding", st.padding, (0., 240.), format!("{:.0}", st.padding), |d, v| d.style.padding = v.round()))
             .child(doc_slider(weak, "inset", "Inset", st.inset, (0., 120.), format!("{:.0}", st.inset), |d, v| d.style.inset = v.round()))
             .child(doc_slider(weak, "radius", "Corner radius", st.radius, (0., 48.), format!("{:.0}", st.radius), |d, v| d.style.radius = v.round()))
             .child(doc_slider(weak, "shadow", "Shadow", st.shadow, (0., 120.), format!("{:.0}", st.shadow), |d, v| d.style.shadow = v.round()))
             .child(doc_slider(weak, "shadow-o", "Shadow opacity", st.shadow_opacity, (0., 1.), format!("{:.0}%", st.shadow_opacity * 100.), |d, v| d.style.shadow_opacity = v))
-            .child(ui::toggle("balance", "Auto-balance inset color", st.auto_balance, on(weak, |e, _| e.edit("balance", |d| d.style.auto_balance = !d.style.auto_balance))));
-
-        let chrome = ui::section("Window frame")
-            .child(div().flex().flex_wrap().gap_1().children(Chrome::ALL.iter().enumerate().map(|(i, c)| {
-                let c = *c;
-                ui::chip(eid("chrome", i), c.label(), st.chrome == c, on(weak, move |e, _| e.edit("chrome", |d| d.style.chrome = c)))
-            })))
-            .when(st.chrome != Chrome::None, |d| {
-                d.child(ui::toggle("ctitle", "Show window title", st.chrome_title, on(weak, |e, _| e.edit("ctitle", |d| d.style.chrome_title = !d.style.chrome_title))))
-            });
-
-        let canvas = ui::section("Canvas")
-            .child(div().flex().flex_wrap().gap_1().children(ASPECTS.iter().enumerate().map(|(i, (label, a))| {
+            .child(fl::toggle("balance", "Auto-balance inset color", st.auto_balance, on(weak, |e, _| e.edit("balance", |d| d.style.auto_balance = !d.style.auto_balance))))
+            .child(div().text_xs().text_color(c(theme().muted)).child("Aspect ratio"))
+            .child(div().flex().flex_wrap().gap_1().children(ASPECTS.iter().enumerate().map(|(i, (name, a))| {
                 let a = *a;
-                ui::chip(eid("aspect", i), *label, st.aspect == a, on(weak, move |e, _| e.edit("aspect", |d| d.style.aspect = a)))
+                fl::chip(eid("aspect", i), *name, st.aspect == a, on(weak, move |e, _| e.edit("aspect", |d| d.style.aspect = a)))
             })))
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_3()
-                    .child(div().text_xs().text_color(rgb(TEXT)).child("Position"))
+                    .child(div().text_xs().text_color(c(theme().muted)).child("Position"))
                     .child(grid9(weak, "align", Some(st.align), |e, i| e.edit("align", |d| d.style.align = i))),
             );
-
-        let footer = div()
-            .flex()
-            .gap_2()
-            .child(ui::button("def", "Save as default", Some("check"), false, on(weak, |e, cx| {
-                let style = e.doc.style.clone();
-                cx.update_global::<Settings, _>(|s, _| {
-                    s.style = style;
-                    s.save();
-                });
-                e.show_toast("Saved as your default style", cx);
+        let chrome = fl::section("Window frame")
+            .child(div().flex().flex_wrap().gap_1().children(Chrome::ALL.iter().enumerate().map(|(i, ch)| {
+                let ch = *ch;
+                fl::chip(eid("chrome", i), ch.label(), st.chrome == ch, on(weak, move |e, _| e.edit("chrome", |d| d.style.chrome = ch)))
             })))
-            .child(ui::button("reset", "Reset", None, false, on(weak, |e, _| e.edit("reset", |d| {
-                d.style = Style::default();
-                d.effects = Default::default();
-            }))));
-
-        div().flex().flex_col().child(self.presets_section(weak)).child(bg).child(frame).child(chrome).child(canvas).child(footer)
+            .when(st.chrome != Chrome::None, |d| {
+                d.child(fl::toggle("ctitle", "Show window title", st.chrome_title, on(weak, |e, _| e.edit("ctitle", |d| d.style.chrome_title = !d.style.chrome_title))))
+            });
+        div().flex().flex_col().child(frame).child(chrome)
     }
 
-    fn effects_panel(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+    fn effects_sections(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
+        let t = theme();
         let fx = &self.doc.effects;
 
         let b = &fx.border;
-        let border = ui::section("Border")
-            .child(ui::toggle("border-on", "Border around screenshot", b.enabled, on(weak, |e, _| e.edit("border-on", |d| d.effects.border.enabled = !d.effects.border.enabled))))
+        let border = fl::section("Border")
+            .child(fl::toggle("border-on", "Border around screenshot", b.enabled, on(weak, |e, _| e.edit("border-on", |d| d.effects.border.enabled = !d.effects.border.enabled))))
             .when(b.enabled, |d| {
                 d.child(doc_slider(weak, "border-w", "Width", b.width, (1., 40.), format!("{:.0}", b.width), |d, v| d.effects.border.width = v.round()))
-                    .child(color_row(weak, "border-c", b.color, |e, c| e.edit("border-c", |d| d.effects.border.color = c)))
+                    .child(color_row(weak, "border-c", b.color, 22., |e, col| e.edit("border-c", |d| d.effects.border.color = col)))
             });
 
         let wm = &fx.watermark;
         let typing = self.typing == Some(Typing::Watermark);
         let field = div()
             .id("wm-text")
-            .h(px(30.))
+            .h(px(32.))
             .px_2()
             .flex()
             .items_center()
-            .rounded_md()
-            .bg(rgb(BG))
+            .rounded(px(4.))
+            .bg(c(t.control))
             .border_1()
-            .border_color(if typing { rgb(ACCENT) } else { rgb(BORDER) })
+            .border_color(c(t.border))
+            .when(typing, |d| d.border_b_2().border_color(c(t.accent)))
             .cursor(gpui::CursorStyle::IBeam)
             .text_sm()
             .child(if wm.text.is_empty() && !typing {
-                div().text_color(rgb(MUTED)).child("Watermark text")
+                div().text_color(c(t.muted)).child("Watermark text")
             } else {
                 div().child(format!("{}{}", wm.text, if typing { "|" } else { "" }))
             })
@@ -499,8 +781,29 @@ impl Editor {
             Placement::Grid(i) => Some(i),
             Placement::Tiled => None,
         };
-        let watermark = ui::section("Watermark")
-            .child(ui::toggle("wm-on", "Text watermark", wm.enabled, on(weak, |e, _| {
+        let wm_font = wm.font.clone();
+        let fonts_row = div().flex().flex_wrap().gap_1().children(fonts::families().iter().take(10).enumerate().map(|(i, fam)| {
+            let mut f = wm_font.clone();
+            f.family = fam.to_string();
+            if !fonts::weights(fam).contains(&f.weight) {
+                f.weight = Weight::Regular;
+            }
+            fl::chip(eid("wm-fam", i), fam.to_string(), wm_font.family == *fam, on(weak, move |e, _| {
+                let f = f.clone();
+                e.edit("wm-font", |d| d.effects.watermark.font = f)
+            }))
+            .font_family(SharedString::from(fam.to_string()))
+        }));
+        let weights = fonts::weights(&wm_font.family).into_iter().map(|w| {
+            let mut f = wm_font.clone();
+            f.weight = w;
+            fl::chip(SharedString::from(format!("wm-w-{}", w.label())), w.label(), wm_font.weight == w, on(weak, move |e, _| {
+                let f = f.clone();
+                e.edit("wm-font", |d| d.effects.watermark.font = f)
+            }))
+        });
+        let watermark = fl::section("Watermark")
+            .child(fl::toggle("wm-on", "Text watermark", wm.enabled, on(weak, |e, _| {
                 e.edit("wm-on", |d| {
                     d.effects.watermark.enabled = !d.effects.watermark.enabled;
                     if d.effects.watermark.text.is_empty() {
@@ -510,18 +813,19 @@ impl Editor {
             })))
             .when(wm.enabled, |d| {
                 d.child(field)
-                    .child(self.font_picker(weak, "wm", &wm.font, |e, f| e.edit("wm-font", |d| d.effects.watermark.font = f)))
+                    .child(fonts_row)
+                    .child(div().flex().flex_wrap().gap_1().children(weights))
                     .child(doc_slider(weak, "wm-size", "Size", wm.size, (8., 120.), format!("{:.0}", wm.size), |d, v| d.effects.watermark.size = v.round()))
                     .child(doc_slider(weak, "wm-op", "Opacity", wm.opacity, (0.05, 1.), format!("{:.0}%", wm.opacity * 100.), |d, v| d.effects.watermark.opacity = v))
-                    .child(color_row(weak, "wm-c", wm.color, |e, c| e.edit("wm-c", |d| d.effects.watermark.color = c)))
+                    .child(color_row(weak, "wm-c", wm.color, 22., |e, col| e.edit("wm-c", |d| d.effects.watermark.color = col)))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_3()
-                            .child(div().text_xs().text_color(rgb(TEXT)).child("Placement"))
+                            .child(div().text_xs().text_color(c(t.muted)).child("Placement"))
                             .child(grid9(weak, "wm-pos", placement, |e, i| e.edit("wm-pos", |d| d.effects.watermark.placement = Placement::Grid(i))))
-                            .child(ui::chip("wm-tiled", "Tiled", placement.is_none(), on(weak, |e, _| e.edit("wm-pos", |d| d.effects.watermark.placement = Placement::Tiled)))),
+                            .child(fl::chip("wm-tiled", "Tiled", placement.is_none(), on(weak, |e, _| e.edit("wm-pos", |d| d.effects.watermark.placement = Placement::Tiled)))),
                     )
                     .when(placement.is_none(), |d| {
                         d.child(doc_slider(weak, "wm-rot", "Rotation", wm.rotation, (-90., 90.), format!("{:.0}°", wm.rotation), |d, v| d.effects.watermark.rotation = v.round()))
@@ -529,23 +833,22 @@ impl Editor {
             });
 
         let p = &fx.perspective;
-        let perspective = ui::section("Perspective")
+        let perspective = fl::section("Perspective")
             .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_1()
-                    .children([("Flat", 0.0, 0.0, 0.0), ("Left", 0.0, 24.0, 0.0), ("Right", 0.0, -24.0, 0.0), ("Tilt back", 22.0, 0.0, 0.0), ("Hero", 14.0, -20.0, 4.0)].into_iter().enumerate().map(
-                        |(i, (label, x, y, z))| {
-                            ui::chip(eid("persp", i), label, p.rot_x == x && p.rot_y == y && p.rot_z == z, on(weak, move |e, _| {
+                div().flex().flex_wrap().gap_1().children(
+                    [("Flat", 0.0, 0.0, 0.0), ("Left", 0.0, 24.0, 0.0), ("Right", 0.0, -24.0, 0.0), ("Tilt back", 22.0, 0.0, 0.0), ("Hero", 14.0, -20.0, 4.0)]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (name, x, y, z))| {
+                            fl::chip(eid("persp", i), name, p.rot_x == x && p.rot_y == y && p.rot_z == z, on(weak, move |e, _| {
                                 e.edit("persp", |d| {
                                     d.effects.perspective.rot_x = x;
                                     d.effects.perspective.rot_y = y;
                                     d.effects.perspective.rot_z = z;
                                 })
                             }))
-                        },
-                    )),
+                        }),
+                ),
             )
             .child(doc_slider(weak, "p-rx", "Rotate X", p.rot_x, (-60., 60.), format!("{:.0}°", p.rot_x), |d, v| d.effects.perspective.rot_x = v.round()))
             .child(doc_slider(weak, "p-ry", "Rotate Y", p.rot_y, (-60., 60.), format!("{:.0}°", p.rot_y), |d, v| d.effects.perspective.rot_y = v.round()))
@@ -553,21 +856,21 @@ impl Editor {
             .child(doc_slider(weak, "p-zoom", "Zoom", p.zoom, (0.4, 1.6), format!("{:.0}%", p.zoom * 100.), |d, v| d.effects.perspective.zoom = (v * 100.).round() / 100.))
             .child(doc_slider(weak, "p-px", "Pan X", p.pan_x, (-0.5, 0.5), format!("{:.0}%", p.pan_x * 100.), |d, v| d.effects.perspective.pan_x = (v * 100.).round() / 100.))
             .child(doc_slider(weak, "p-py", "Pan Y", p.pan_y, (-0.5, 0.5), format!("{:.0}%", p.pan_y * 100.), |d, v| d.effects.perspective.pan_y = (v * 100.).round() / 100.))
-            .child(ui::button("p-reset", "Reset perspective", None, false, on(weak, |e, _| e.edit("p-reset", |d| d.effects.perspective = Default::default()))));
+            .child(fl::button("p-reset", "Reset perspective", None, false, on(weak, |e, _| e.edit("p-reset", |d| d.effects.perspective = Default::default()))));
 
         let bl = &fx.blur;
-        let blur = ui::section("Progressive blur")
-            .child(ui::toggle("blur-on", "Progressive blur", bl.enabled, on(weak, |e, _| e.edit("blur-on", |d| d.effects.blur.enabled = !d.effects.blur.enabled))))
+        let blur = fl::section("Progressive blur")
+            .child(fl::toggle("blur-on", "Progressive blur", bl.enabled, on(weak, |e, _| e.edit("blur-on", |d| d.effects.blur.enabled = !d.effects.blur.enabled))))
             .when(bl.enabled, |d| {
                 d.child(
                     row("Shape")
-                        .child(ui::chip("bm-r", "Radial", bl.mode == BlurMode::Radial, on(weak, |e, _| e.edit("bm", |d| d.effects.blur.mode = BlurMode::Radial))))
-                        .child(ui::chip("bm-d", "Directional", bl.mode == BlurMode::Directional, on(weak, |e, _| e.edit("bm", |d| d.effects.blur.mode = BlurMode::Directional)))),
+                        .child(fl::chip("bm-r", "Radial", bl.mode == BlurMode::Radial, on(weak, |e, _| e.edit("bm", |d| d.effects.blur.mode = BlurMode::Radial))))
+                        .child(fl::chip("bm-d", "Directional", bl.mode == BlurMode::Directional, on(weak, |e, _| e.edit("bm", |d| d.effects.blur.mode = BlurMode::Directional)))),
                 )
                 .child(
                     row("Applies to")
-                        .child(ui::chip("be-c", "Screenshot", bl.edge == BlurEdge::Clipped, on(weak, |e, _| e.edit("be", |d| d.effects.blur.edge = BlurEdge::Clipped))))
-                        .child(ui::chip("be-b", "Whole scene", bl.edge == BlurEdge::Bleed, on(weak, |e, _| e.edit("be", |d| d.effects.blur.edge = BlurEdge::Bleed)))),
+                        .child(fl::chip("be-c", "Screenshot", bl.edge == BlurEdge::Clipped, on(weak, |e, _| e.edit("be", |d| d.effects.blur.edge = BlurEdge::Clipped))))
+                        .child(fl::chip("be-b", "Whole scene", bl.edge == BlurEdge::Bleed, on(weak, |e, _| e.edit("be", |d| d.effects.blur.edge = BlurEdge::Bleed)))),
                 )
                 .child(doc_slider(weak, "bl-s", "Strength", bl.strength, (1., 100.), format!("{:.0}", bl.strength), |d, v| d.effects.blur.strength = v.round()))
                 .child(doc_slider(weak, "bl-st", "Start", bl.start, (0., 1.), format!("{:.0}%", bl.start * 100.), |d, v| d.effects.blur.start = (v * 100.).round() / 100.))
@@ -579,177 +882,79 @@ impl Editor {
         div().flex().flex_col().child(border).child(watermark).child(perspective).child(blur)
     }
 
-    fn font_picker(
-        &self,
-        weak: &WeakEntity<Editor>,
-        prefix: &'static str,
-        font: &fonts::TextFont,
-        set: impl Fn(&mut Editor, fonts::TextFont) + Clone + 'static,
-    ) -> impl IntoElement {
-        let families = fonts::families().iter().enumerate().map(|(i, fam)| {
-            let set = set.clone();
-            let mut f = font.clone();
-            f.family = fam.to_string();
-            let weights = fonts::weights(fam);
-            if !weights.contains(&f.weight) {
-                f.weight = *weights.iter().min_by_key(|w| (**w as i32 - font.weight as i32).abs()).unwrap_or(&Weight::Regular);
-            }
+    /// Zoom on the left, deliverable actions on the right.
+    pub(super) fn bottom_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
+        let t = theme();
+        let (ew, eh) = self.export_size();
+        let zoom = self.zoom_percent();
+        let zb = |id: &'static str, text: &'static str, tip: &'static str, f: fn(&mut Editor)| {
             div()
-                .id(SharedString::from(format!("{prefix}-fam-{i}")))
+                .id(id)
                 .px_2()
-                .h(px(26.))
+                .h(px(28.))
                 .flex()
                 .items_center()
-                .rounded_md()
+                .rounded(px(4.))
                 .cursor_pointer()
-                .text_sm()
-                .font_family(SharedString::from(fam.to_string()))
-                .border_1()
-                .when(font.family == *fam, |d| d.bg(rgba(0x7C8CFF33)).border_color(rgb(ACCENT)))
-                .when(font.family != *fam, |d| d.bg(rgb(ELEV)).border_color(rgb(BORDER)).hover(|s| s.bg(rgb(HOVER))))
-                .child(fam.to_string())
-                .on_click(on(weak, move |e, _| set(e, f.clone())))
-        });
-        let weights = fonts::weights(&font.family).into_iter().map(|w| {
-            let set = set.clone();
-            let mut f = font.clone();
-            f.weight = w;
-            ui::chip(SharedString::from(format!("{prefix}-w-{}", w.label())), w.label(), font.weight == w, on(weak, move |e, _| set(e, f.clone())))
-        });
-        let aligns = [(Align::Left, "Left"), (Align::Center, "Center"), (Align::Right, "Right")].map(|(a, label)| {
-            let set = set.clone();
-            let mut f = font.clone();
-            f.align = a;
-            ui::chip(SharedString::from(format!("{prefix}-a-{label}")), label, font.align == a, on(weak, move |e, _| set(e, f.clone())))
-        });
+                .text_xs()
+                .text_color(c(t.text))
+                .hover(|s| s.bg(c(t.control_hover)))
+                .child(text)
+                .tooltip(ui::tooltip(tip))
+                .on_click(on(weak, move |e, _| f(e)))
+        };
         div()
+            .h(px(52.))
+            .flex_none()
             .flex()
-            .flex_col()
+            .items_center()
             .gap_2()
-            .child(div().id(SharedString::from(format!("{prefix}-fonts"))).max_h(px(150.)).overflow_y_scroll().child(div().flex().flex_wrap().gap_1().children(families)))
-            .child(row("Weight").children(weights))
-            .child(row("Align").children(aligns))
-    }
-
-    fn annotate_panel(&self, weak: &WeakEntity<Editor>) -> gpui::Div {
-        let sel: Vec<_> = self.selected_anns().collect();
-        let sel_text = sel.iter().find_map(|a| match &a.shape {
-            Shape::Text { font, style, .. } => Some((font.clone(), *style)),
-            _ => None,
-        });
-        let sel_redact = sel.iter().find_map(|a| match &a.shape {
-            Shape::Redact { strength, .. } => Some(*strength / self.doc.dpi),
-            _ => None,
-        });
-        let show_text = sel_text.is_some() || self.tool == Tool::Text;
-        let show_redact = sel_redact.is_some() || matches!(self.tool, Tool::Pixelate | Tool::Blur);
-        let (font, text_style) = sel_text.unwrap_or((self.ink.font.clone(), self.ink.text_style));
-        let strength = sel_redact.unwrap_or(self.ink.redact_strength);
-
-        let ink = ui::section("Ink")
-            .child(div().flex().flex_wrap().gap_1().children(INK.iter().enumerate().map(|(i, hex)| {
-                let col = Color::rgb(*hex);
-                ui::swatch(eid("ink", i), &[col.rgba()], self.ink.color == col, 26., on(weak, move |e, _| {
-                    e.ink.color = col;
-                    e.modify_selected("ink", |a| {
-                        if !a.is_redaction() {
-                            a.color = col
-                        }
-                    });
-                }))
-            })))
-            .child(ui::slider("stroke", "Stroke width", self.ink.stroke, 1., 24., format!("{:.0}", self.ink.stroke), on_value(weak, |e, v| {
-                e.ink.stroke = v.round();
-                let w = e.ink.stroke * e.doc.dpi;
-                e.modify_selected("stroke", |a| a.width = w);
-            })))
-            .child(ui::slider("tsize", "Text & marker size", self.ink.text_size, 10., 160., format!("{:.0}", self.ink.text_size), on_value(weak, |e, v| {
-                e.ink.text_size = v.round();
-                let s = e.ink.text_size * e.doc.dpi;
-                e.modify_selected("tsize", |a| match &mut a.shape {
-                    Shape::Text { size, .. } => *size = s,
-                    Shape::Counter { size, .. } => *size = s * 0.5,
-                    _ => {}
-                });
-            })));
-
-        let text = ui::section("Text")
-            .child(self.font_picker(weak, "tx", &font, |e, f| {
-                e.ink.font = f.clone();
-                e.modify_selected("tx-font", |a| {
-                    if let Shape::Text { font, .. } = &mut a.shape {
-                        *font = f.clone();
-                    }
-                });
-            }))
-            .child(row("Style").children([(TextStyle::Plain, "Plain"), (TextStyle::Outline, "Outline"), (TextStyle::Pill, "Label")].map(|(ts, label)| {
-                ui::chip(SharedString::from(format!("ts-{label}")), label, text_style == ts, on(weak, move |e, _| {
-                    e.ink.text_style = ts;
-                    e.modify_selected("ts", |a| {
-                        if let Shape::Text { style, .. } = &mut a.shape {
-                            *style = ts;
-                        }
-                    });
-                }))
-            })));
-
-        let redaction = ui::section("Redaction")
-            .child(ui::slider("strength", "Strength", strength, 2., 48., format!("{strength:.0}"), on_value(weak, |e, v| {
-                e.ink.redact_strength = v.round();
-                let s = e.ink.redact_strength * e.doc.dpi;
-                e.modify_selected("strength", |a| {
-                    if let Shape::Redact { strength, .. } = &mut a.shape {
-                        *strength = s;
-                    }
-                });
-            })))
-            .when(sel_redact.is_some(), |d| {
-                d.child(row("Kind").children(RedactStyle::ALL.map(|k| {
-                    ui::chip(SharedString::from(format!("rk-{}", k.label())), k.label(), sel.iter().any(|a| matches!(a.shape, Shape::Redact { kind, .. } if kind == k)), on(weak, move |e, _| {
-                        e.modify_selected("rk", |a| {
-                            if let Shape::Redact { kind, .. } = &mut a.shape {
-                                *kind = k;
-                            }
-                        });
-                    }))
-                })))
-            });
-
-        let privacy = ui::section("Privacy")
-            .child(ui::button("p-redact", "Smart redaction", Some("shield"), false, on(weak, |e, cx| e.auto_redact(cx))).w_full())
-            .child(ui::button("p-ocr", "Copy text from image", Some("scan"), false, on(weak, |e, cx| e.copy_text(cx))).w_full())
-            .child(note("Finds emails, phone numbers, card numbers, keys and tokens with on-device OCR, then blurs them. Strength stays editable."));
-
-        let selection = (!sel.is_empty()).then(|| {
-            ui::section("Selection")
-                .child(note(&format!("{} selected. Shift-click or drag a box to select more; drag to move them together.", sel.len())))
-                .child(ui::button("del", "Delete selected", Some("trash"), false, on(weak, |e, _| e.delete_selected())))
-        });
-
-        div()
-            .flex()
-            .flex_col()
-            .children(selection)
-            .child(ink)
-            .when(show_text, |d| d.child(text))
-            .when(show_redact, |d| d.child(redaction))
-            .child(privacy)
+            .px_3()
+            .bg(c(t.layer))
+            .border_t_1()
+            .border_color(c(t.border))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_0p5()
+                    .p_0p5()
+                    .rounded(px(4.))
+                    .border_1()
+                    .border_color(c(t.border))
+                    .child(zb("z-fit", "Fit", "Fit (Ctrl+1)", |e| e.zoom_to(None, None)))
+                    .child(zb("z-100", "100%", "Actual size (Ctrl+0)", |e| e.zoom_to(Some(1.0), None)))
+                    .child(zb("z-out", "−", "Zoom out (Ctrl+-)", |e| e.zoom_step(false)))
+                    .child(div().w(px(48.)).flex().justify_center().text_xs().text_color(c(t.text)).child(format!("{zoom:.0}%")))
+                    .child(zb("z-in", "+", "Zoom in (Ctrl+=)", |e| e.zoom_step(true))),
+            )
+            .child(div().text_xs().text_color(c(t.muted)).child(format!("{ew} × {eh} px")))
+            .child(div().flex_1())
+            .child(fl::tool_button("pin", "pin", false, "Pin to screen (Ctrl+P)", on(weak, |e, cx| e.pin(cx))))
+            .child(fl::tool_button("saveas", "folder", false, "Save as… (Ctrl+Shift+S)", on(weak, |e, cx| e.save_as(cx))))
+            .child(fl::button("copy", "Copy", Some("copy"), false, on(weak, |e, cx| e.copy(cx))))
+            .child(fl::button("save", "Save", Some("save"), false, on_window(weak, |e, window, cx| e.save(false, window, cx))))
+            .child(fl::button("done", "Done", Some("check"), true, on_window(weak, |e, window, cx| e.save(true, window, cx))))
     }
 }
+
+/// Wallpaper tile width: two per row inside the sidebar card.
+const WALL_W: f32 = 126.;
 
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.ensure_preview(window, cx);
         let weak = cx.entity().downgrade();
+        let t = theme();
         div()
             .id("editor")
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(BG))
-            .font_family(FONT)
-            .text_color(rgb(TEXT))
-            .child(self.titlebar(&weak))
+            .bg(c(t.base))
+            .font_family(fl::FONT)
+            .text_color(c(t.text))
+            .child(self.toolbar(&weak))
             // Focus lives below the title bar: a focusable ancestor would swallow the mouse-down
             // on the native min/max/close buttons.
             .child(
@@ -760,9 +965,10 @@ impl Render for Editor {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .child(self.canvas_area(cx))
-                    .child(self.sidebar(&weak)),
+                    .flex_col()
+                    .child(self.style_bar(&weak))
+                    .child(div().flex_1().min_h_0().flex().child(self.canvas_area(cx)).child(self.sidebar(&weak)))
+                    .child(self.bottom_bar(&weak)),
             )
-            .child(self.status_bar(&weak))
     }
 }

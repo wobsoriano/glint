@@ -370,6 +370,57 @@ mod tests {
         assert!(diff <= 2, "max channel difference {diff}");
     }
 
+    /// Renders a saved capture directory (base.png + edit.json) headlessly and compares it
+    /// with the image.png the editor saved. Run with:
+    /// GLINT_DOC_DIR=<dir> cargo test -p glint-render saved_doc -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn saved_doc_matches_headless_render() {
+        let dir = std::path::PathBuf::from(std::env::var("GLINT_DOC_DIR").expect("GLINT_DOC_DIR"));
+        let base = image::open(dir.join("base.png")).unwrap().to_rgba8();
+        let doc = EditDoc::from_json(&std::fs::read_to_string(dir.join("edit.json")).unwrap()).unwrap();
+        let saved = image::open(dir.join("image.png")).unwrap().to_rgba8();
+        let headless = render_doc(&base, &doc);
+        headless.save(dir.join("headless.png")).unwrap();
+        assert_eq!(headless.dimensions(), saved.dimensions());
+        let diff = headless.as_raw().iter().zip(saved.as_raw()).map(|(a, b)| (*a as i32 - *b as i32).abs()).max().unwrap();
+        println!("{}x{} max channel difference {diff}", saved.width(), saved.height());
+        assert_eq!(diff, 0);
+
+        // GLINT_SCREEN=<png>,<x>,<y>: a screen capture of the editor at 100% zoom, with the
+        // canvas near (x, y). Finds the exact offset and reports how far the pixels differ.
+        if let Ok(spec) = std::env::var("GLINT_SCREEN") {
+            let parts: Vec<&str> = spec.split(',').collect();
+            let screen = image::open(parts[0]).unwrap().to_rgba8();
+            let (gx, gy): (i64, i64) = (parts[1].parse().unwrap(), parts[2].parse().unwrap());
+            let (w, h) = headless.dimensions();
+            let mean_diff = |ox: i64, oy: i64| {
+                let mut sum = 0u64;
+                let mut n = 0u64;
+                for y in (0..h).step_by(3) {
+                    for x in (0..w).step_by(3) {
+                        let (sx, sy) = (ox + x as i64, oy + y as i64);
+                        if sx < 0 || sy < 0 || sx >= screen.width() as i64 || sy >= screen.height() as i64 {
+                            return f64::MAX;
+                        }
+                        let a = headless.get_pixel(x, y).0;
+                        let b = screen.get_pixel(sx as u32, sy as u32).0;
+                        sum += (0..3).map(|c| (a[c] as i32 - b[c] as i32).unsigned_abs() as u64).sum::<u64>();
+                        n += 3;
+                    }
+                }
+                sum as f64 / n as f64
+            };
+            let best = (-12..=12)
+                .flat_map(|dy| (-12..=12).map(move |dx| (dx, dy)))
+                .map(|(dx, dy)| (gx + dx, gy + dy, mean_diff(gx + dx, gy + dy)))
+                .min_by(|a, b| a.2.total_cmp(&b.2))
+                .unwrap();
+            println!("preview on screen at ({}, {}): mean channel difference {:.2}", best.0, best.1, best.2);
+            assert!(best.2 < 2.0);
+        }
+    }
+
     /// Writes sample renders of every effect. Run with:
     /// GLINT_SAMPLES=<dir> cargo test -p glint-render effect_samples -- --ignored
     #[test]

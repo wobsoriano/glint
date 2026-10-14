@@ -5,7 +5,7 @@ use super::viewport::View;
 use super::{Editor, Typing};
 use crate::annotate::{pt, Pt, Shape, Tool, R};
 use crate::style::Background;
-use crate::ui::{self, ACCENT, BORDER, MUTED, PANEL, TEXT};
+use crate::ui::{self, fluent::{c, theme}};
 use glint_render::compose::Frame;
 use glint_render::doc::EditDoc;
 use gpui::prelude::*;
@@ -214,7 +214,7 @@ impl Editor {
                 .rounded_full()
                 .bg(rgb(0xFFFFFF))
                 .border_2()
-                .border_color(rgb(ACCENT))
+                .border_color(c(theme().accent))
         };
         if let Some(c) = &self.crop {
             let (w, h) = self.base_size();
@@ -255,7 +255,7 @@ impl Editor {
                     .w(px(b.w + 6.))
                     .h(px(b.h + 6.))
                     .border_1()
-                    .border_color(rgba(0x7C8CFFCC))
+                    .border_color(c(theme().accent))
                     .rounded_sm(),
             );
         }
@@ -271,9 +271,9 @@ impl Editor {
                     .top(px(m.y))
                     .w(px(m.w))
                     .h(px(m.h))
-                    .bg(rgba(0x7C8CFF22))
+                    .bg(c((theme().accent & 0xFFFFFF00) | 0x26))
                     .border_1()
-                    .border_color(rgb(ACCENT)),
+                    .border_color(c(theme().accent)),
             );
         }
         layer
@@ -304,7 +304,7 @@ impl Editor {
             .h_full()
             .relative()
             .overflow_hidden()
-            .bg(rgb(0x0E0E10))
+            .bg(c(theme().canvas))
             .cursor(cursor)
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
@@ -358,89 +358,12 @@ impl Editor {
                             .border_color(rgba(0xFFFFFF1F))
                             .shadow_lg()
                             .text_sm()
-                            .text_color(rgb(TEXT))
-                            .child(ui::icon(if self.busy.is_some() { "scan" } else { "check" }, 15., rgb(ACCENT)))
+                            .text_color(c(theme().text))
+                            .child(ui::icon(if self.busy.is_some() { "scan" } else { "check" }, 15., c(theme().accent)))
                             .max_w(px(620.))
                             .child(div().truncate().child(msg)),
                     ),
                 )
             })
-            .when(self.crop.is_some(), |d| d.child(self.crop_bar(&weak)))
-    }
-
-    fn crop_bar(&self, weak: &gpui::WeakEntity<Editor>) -> impl IntoElement {
-        let current = self.crop.map(|c| c.preset);
-        div()
-            .absolute()
-            .top(px(12.))
-            .left_0()
-            .w_full()
-            .flex()
-            .justify_center()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .p_1()
-                    .rounded_lg()
-                    .bg(rgba(0x1C1C1FF2))
-                    .border_1()
-                    .border_color(rgb(BORDER))
-                    .children(super::CROP_PRESETS.iter().enumerate().map(|(i, (label, preset))| {
-                        let preset = *preset;
-                        ui::chip(super::inspector::eid("crop-p", i), *label, current == Some(preset), super::inspector::on(weak, move |e, _| e.set_crop_preset(preset)))
-                    }))
-                    .child(div().w(px(1.)).h(px(18.)).mx_1().bg(rgb(BORDER)))
-                    .child(ui::button("crop-cancel", "Cancel", None, false, super::inspector::on(weak, |e, _| e.set_tool(Tool::Select))))
-                    .child(ui::button("crop-apply", "Apply", Some("check"), true, super::inspector::on(weak, |e, _| e.apply_crop()))),
-            )
-    }
-
-    pub(super) fn status_bar(&self, weak: &gpui::WeakEntity<Editor>) -> impl IntoElement {
-        let (ew, eh) = self.export_size();
-        let n = self.doc.annotations.len();
-        let zoom = self.zoom_percent();
-        let zb = |id: &'static str, label: &'static str, f: fn(&mut Editor)| {
-            div()
-                .id(id)
-                .px_1p5()
-                .h(px(20.))
-                .flex()
-                .items_center()
-                .rounded_sm()
-                .cursor_pointer()
-                .hover(|s| s.bg(rgb(crate::ui::HOVER)).text_color(rgb(TEXT)))
-                .child(label)
-                .on_click(super::inspector::on(weak, move |e, _| f(e)))
-        };
-        div()
-            .h(px(30.))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_between()
-            .px_4()
-            .bg(rgb(PANEL))
-            .border_t_1()
-            .border_color(rgb(BORDER))
-            .text_xs()
-            .text_color(rgb(MUTED))
-            .child(format!(
-                "Export {ew} × {eh} px   ·   {n} annotation{}{}",
-                if n == 1 { "" } else { "s" },
-                if self.selected.len() > 1 { format!("   ·   {} selected", self.selected.len()) } else { String::new() }
-            ))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(zb("z-fit", "Fit", |e| e.zoom_to(None, None)))
-                    .child(zb("z-100", "100%", |e| e.zoom_to(Some(1.0), None)))
-                    .child(zb("z-out", "−", |e| e.zoom_step(false)))
-                    .child(div().w(px(44.)).flex().justify_center().text_color(rgb(TEXT)).child(format!("{zoom:.0}%")))
-                    .child(zb("z-in", "+", |e| e.zoom_step(true))),
-            )
     }
 }
