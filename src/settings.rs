@@ -103,11 +103,15 @@ impl Default for Settings {
     }
 }
 
-fn path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Glint")
-        .join("settings.json")
+/// Root for settings, Library and models. `GLINT_DATA_DIR` overrides `%APPDATA%\Glint`.
+pub fn data_dir() -> PathBuf {
+    std::env::var_os("GLINT_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Glint"))
+}
+
+pub fn path() -> PathBuf {
+    data_dir().join("settings.json")
 }
 
 impl Settings {

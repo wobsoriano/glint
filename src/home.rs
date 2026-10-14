@@ -287,7 +287,7 @@ impl Render for Home {
                                     .gap_2()
                                     .child(ui::button("last", "Open last capture", Some("image"), false, |_, _, cx| run_command(Command::OpenLast, cx)))
                                     .child(ui::button("cfg", "Edit shortcuts (settings.json)", Some("keyboard"), false, |_, _, cx| {
-                                        let p = dirs::config_dir().unwrap_or_default().join("Glint").join("settings.json");
+                                        let p = crate::settings::path();
                                         cx.global::<Settings>().save();
                                         cx.open_with_system(&p);
                                     }))
