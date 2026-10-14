@@ -189,8 +189,9 @@ impl Stack {
             CardAction::Copy => {
                 let this = cx.entity().downgrade();
                 self.flash(id, "Preparing video…", cx);
+                let target = item.clone();
                 actions::with_recording_file(&item, cx, move |file, cx| {
-                    let msg = match file.and_then(|f| shell::copy_files(&[f], None)) {
+                    let msg = match file.and_then(|f| actions::copy_video(&target, &f)) {
                         Ok(()) => "Copied".to_string(),
                         Err(e) => format!("Copy failed: {e:#}"),
                     };

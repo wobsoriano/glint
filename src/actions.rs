@@ -9,7 +9,7 @@ use anyhow::Context as _;
 use glint_render::doc::EditDoc;
 use gpui::{App, AppContext as _, PathPromptOptions, Task};
 use image::RgbaImage;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -69,9 +69,17 @@ pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Res
     .detach();
 }
 
+/// Puts a recording's rendered `video` on the clipboard as a file named after its title.
+/// The render itself is not used: the cache deletes it when the edit changes.
+pub fn copy_video(item: &Item, video: &Path) -> anyhow::Result<()> {
+    let file = named_copy(video, item.id(), &item.meta.title)?;
+    shell::copy_files(&[file], None)
+}
+
 pub fn copy(item: &Item, cx: &mut App) {
     if item.kind() == CaptureKind::Recording {
-        return with_recording_file(item, cx, |file, cx| match file.and_then(|f| shell::copy_files(&[f], None)) {
+        let target = item.clone();
+        return with_recording_file(item, cx, move |file, cx| match file.and_then(|f| copy_video(&target, &f)) {
             Ok(()) => toast::show("Copied the video file", cx),
             Err(e) => toast::show(format!("Copy failed: {e:#}"), cx),
         });
@@ -373,15 +381,21 @@ pub fn export_to_folder(items: Vec<Item>, cx: &mut App) {
 }
 
 /// A copy of the deliverable named after the title, for dragging into other apps.
-/// Hard-linked when possible so it is the Library file itself, not a duplicate.
 pub fn drag_file(item: &Item) -> anyhow::Result<PathBuf> {
-    let dir = crate::settings::data_dir().join("Drag").join(item.id());
-    std::fs::create_dir_all(&dir)?;
-    let ext = item.deliverable().extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
-    let path = dir.join(format!("{}.{ext}", shell::sanitize(&item.meta.title)));
+    named_copy(&item.deliverable(), item.id(), &item.meta.title)
+}
+
+/// `file` as `Drag/<id>/<title>.<ext>`, for putting on the clipboard or dragging into other
+/// apps. Hard-linked when possible so it costs no space, and so it outlives `file` when that
+/// is a render the cache later deletes.
+pub fn named_copy(file: &Path, id: &str, title: &str) -> anyhow::Result<PathBuf> {
+    let dir = crate::settings::data_dir().join("Drag").join(id);
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let ext = file.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+    let path = dir.join(format!("{}.{ext}", shell::sanitize(title)));
     let _ = std::fs::remove_file(&path);
-    if std::fs::hard_link(item.deliverable(), &path).is_err() {
-        std::fs::copy(item.deliverable(), &path)?;
+    if std::fs::hard_link(file, &path).is_err() {
+        std::fs::copy(file, &path).with_context(|| format!("writing {}", path.display()))?;
     }
     Ok(path)
 }

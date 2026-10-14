@@ -2,13 +2,12 @@
 //! which render with the project's remembered export options.
 
 use super::{Notice, Studio};
-use crate::settings::{self, Settings};
+use crate::settings::Settings;
 use crate::shell;
 use crate::ui;
 use glint_studio::{Codec, ExportOptions, Format, Fps, Quality, Resolution};
 use gpui::prelude::*;
 use gpui::{div, px, relative, rgba, Context, KeyDownEvent, SharedString};
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -110,7 +109,8 @@ impl Studio {
             let rendered = glint_studio::export(&snap, &opts, |p| progress.store(p.to_bits(), Ordering::Relaxed), &cancel)?;
             match job {
                 Job::Copy => {
-                    let file = named_copy(&rendered, &snap.dir, &stem)?;
+                    let id = snap.dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    let file = crate::actions::named_copy(&rendered, &id, &stem)?;
                     shell::copy_files(std::slice::from_ref(&file), None)?;
                     anyhow::Ok(file)
                 }
@@ -263,19 +263,4 @@ impl Studio {
             )
             .child(div().text_xs().text_color(ui::theme().muted).child(format!("Saves to {}", cx.global::<Settings>().save_dir.display())))
     }
-}
-
-/// A copy of the render named after the recording, for pasting into other apps. Hard-linked
-/// when possible so it costs no space.
-fn named_copy(rendered: &Path, session: &Path, stem: &str) -> anyhow::Result<PathBuf> {
-    let id = session.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let dir = settings::data_dir().join("Drag").join(id);
-    std::fs::create_dir_all(&dir)?;
-    let ext = rendered.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
-    let path = dir.join(format!("{stem}.{ext}"));
-    let _ = std::fs::remove_file(&path);
-    if std::fs::hard_link(rendered, &path).is_err() {
-        std::fs::copy(rendered, &path)?;
-    }
-    Ok(path)
 }
