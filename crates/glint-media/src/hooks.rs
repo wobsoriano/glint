@@ -202,9 +202,9 @@ impl HookState {
         }
     }
 
-    fn on_key(&mut self, msg: u32, vk: u32) {
+    fn on_key(&mut self, msg: u32, vk: u32, scan: u32) {
         let down = matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN);
-        if self.mods.apply(vk, down) {
+        if self.mods.apply(vk, scan, down) {
             return;
         }
         if !down {
@@ -303,10 +303,10 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let data = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
-        let vk = data.vkCode;
+        let (vk, scan) = (data.vkCode, data.scanCode);
         STATE.with(|s| {
             if let Some(state) = s.borrow_mut().as_mut() {
-                state.on_key(wparam.0 as u32, vk);
+                state.on_key(wparam.0 as u32, vk, scan);
             }
         });
     }
@@ -347,19 +347,66 @@ mod tests {
         assert!(tl.clicks[1].up >= tl.clicks[1].t, "an unreleased button closes at the end");
     }
 
+    const SC_Q: u32 = 0x10;
+    const SC_LCONTROL: u32 = 0x1D;
+    const SC_RETURN: u32 = 0x1C;
+    const SC_ALT: u32 = 0x38;
+    /// Scan code of the Left Ctrl that Windows synthesizes for AltGr, as a WH_KEYBOARD_LL hook sees it.
+    const SC_ALTGR_LCONTROL: u32 = 0x21D;
+
+    fn labels(s: &HookState) -> Vec<&str> {
+        s.timeline.keys.iter().map(|k| k.label.as_str()).collect()
+    }
+
+    /// Feeds the exact event sequence a WH_KEYBOARD_LL hook sees for one AltGr chord on a
+    /// German layout: synthetic Left Ctrl (scan 0x21D) then Right Alt, the key, then the mirror.
+    fn altgr_chord(s: &mut HookState, vk: u32, scan: u32) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LCONTROL, VK_RMENU};
+        s.on_key(WM_SYSKEYDOWN, VK_LCONTROL.0 as u32, SC_ALTGR_LCONTROL);
+        s.on_key(WM_SYSKEYDOWN, VK_RMENU.0 as u32, SC_ALT);
+        s.on_key(WM_SYSKEYDOWN, vk, scan);
+        s.on_key(WM_SYSKEYUP, vk, scan);
+        s.on_key(WM_KEYUP, VK_LCONTROL.0 as u32, SC_ALTGR_LCONTROL);
+        s.on_key(WM_KEYUP, VK_RMENU.0 as u32, SC_ALT);
+    }
+
     #[test]
     fn keys_record_shortcuts_once_per_press() {
         use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LCONTROL, VK_RETURN};
         let mut s = state(PointerMap::Fixed { x: 0, y: 0 });
-        s.on_key(WM_KEYDOWN, VK_LCONTROL.0 as u32);
-        s.on_key(WM_KEYDOWN, b'S' as u32);
-        s.on_key(WM_KEYDOWN, b'S' as u32);
-        s.on_key(WM_KEYUP, b'S' as u32);
-        s.on_key(WM_KEYUP, VK_LCONTROL.0 as u32);
-        s.on_key(WM_KEYDOWN, b'A' as u32);
-        s.on_key(WM_KEYDOWN, VK_RETURN.0 as u32);
-        let labels: Vec<&str> = s.timeline.keys.iter().map(|k| k.label.as_str()).collect();
-        assert_eq!(labels, vec!["Ctrl+S", "Enter"]);
+        s.on_key(WM_KEYDOWN, VK_LCONTROL.0 as u32, SC_LCONTROL);
+        s.on_key(WM_KEYDOWN, b'S' as u32, 0x1F);
+        s.on_key(WM_KEYDOWN, b'S' as u32, 0x1F);
+        s.on_key(WM_KEYUP, b'S' as u32, 0x1F);
+        s.on_key(WM_KEYUP, VK_LCONTROL.0 as u32, SC_LCONTROL);
+        s.on_key(WM_KEYDOWN, b'A' as u32, 0x1E);
+        s.on_key(WM_KEYDOWN, VK_RETURN.0 as u32, SC_RETURN);
+        assert_eq!(labels(&s), vec!["Ctrl+S", "Enter"]);
+    }
+
+    #[test]
+    fn altgr_typing_is_not_a_shortcut() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN;
+        let mut s = state(PointerMap::Fixed { x: 0, y: 0 });
+        altgr_chord(&mut s, b'Q' as u32, SC_Q);
+        assert_eq!(labels(&s), Vec::<&str>::new(), "AltGr+Q types @ on a German layout");
+        altgr_chord(&mut s, VK_RETURN.0 as u32, SC_RETURN);
+        assert_eq!(labels(&s), vec!["Enter"], "AltGr+Enter is still the Enter key");
+        s.on_key(WM_KEYDOWN, b'Q' as u32, SC_Q);
+        assert_eq!(labels(&s), vec!["Enter"], "AltGr is fully released afterwards");
+    }
+
+    #[test]
+    fn left_ctrl_left_alt_is_still_a_shortcut() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LCONTROL, VK_LMENU};
+        let mut s = state(PointerMap::Fixed { x: 0, y: 0 });
+        s.on_key(WM_KEYDOWN, VK_LCONTROL.0 as u32, SC_LCONTROL);
+        s.on_key(WM_SYSKEYDOWN, VK_LMENU.0 as u32, SC_ALT);
+        s.on_key(WM_SYSKEYDOWN, b'Q' as u32, SC_Q);
+        s.on_key(WM_SYSKEYUP, b'Q' as u32, SC_Q);
+        s.on_key(WM_KEYUP, VK_LMENU.0 as u32, SC_ALT);
+        s.on_key(WM_KEYUP, VK_LCONTROL.0 as u32, SC_LCONTROL);
+        assert_eq!(labels(&s), vec!["Ctrl+Alt+Q"]);
     }
 
     #[test]
@@ -368,7 +415,7 @@ mod tests {
         s.clock.pause();
         s.on_mouse(WM_MOUSEMOVE, 1, 1);
         s.on_mouse(WM_LBUTTONDOWN, 1, 1);
-        s.on_key(WM_KEYDOWN, windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN.0 as u32);
+        s.on_key(WM_KEYDOWN, windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN.0 as u32, SC_RETURN);
         assert_eq!(s.timeline, InputTimeline { version: 1, size: [1920, 1080], ..Default::default() });
     }
 }

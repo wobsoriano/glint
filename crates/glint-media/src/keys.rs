@@ -9,12 +9,22 @@ pub(crate) struct Mods {
     pub shift: bool,
     pub alt: bool,
     pub win: bool,
+    /// AltGr picks a third character on the key, so it is typing, not a shortcut modifier.
+    pub altgr: bool,
 }
+
+/// Windows delivers AltGr to a low-level hook as a Left Ctrl it synthesizes, then Right Alt,
+/// sharing one timestamp. The synthesized Left Ctrl carries this scan-code bit; a physical
+/// Left Ctrl does not.
+const SC_SYNTHETIC: u32 = 0x200;
 
 impl Mods {
     /// Applies a modifier key going down or up. Returns false for non-modifier keys.
-    pub fn apply(&mut self, vk: u32, down: bool) -> bool {
+    /// `scan` is the hook's scan code, which tells AltGr apart from a real Left Ctrl.
+    pub fn apply(&mut self, vk: u32, scan: u32, down: bool) -> bool {
         let slot = match VIRTUAL_KEY(vk as u16) {
+            VK_LCONTROL if scan & SC_SYNTHETIC != 0 => &mut self.altgr,
+            VK_RMENU if self.altgr => return true,
             VK_CONTROL | VK_LCONTROL | VK_RCONTROL => &mut self.ctrl,
             VK_SHIFT | VK_LSHIFT | VK_RSHIFT => &mut self.shift,
             VK_MENU | VK_LMENU | VK_RMENU => &mut self.alt,
@@ -29,7 +39,8 @@ impl Mods {
 /// The label for a key press, or `None` when it is plain typing that is not recorded.
 ///
 /// Recorded: anything with Ctrl, Alt or Win held, and navigation/function keys on their own
-/// or with Shift. Not recorded: letters, digits, punctuation and Space without Ctrl/Alt/Win.
+/// or with Shift or AltGr. Not recorded: letters, digits, punctuation and Space without
+/// Ctrl/Alt/Win, which includes AltGr characters.
 pub(crate) fn shortcut_label(vk: u32, mods: Mods) -> Option<String> {
     let key = key_name(vk)?;
     let special = is_special(vk);
@@ -104,10 +115,16 @@ fn key_name(vk: u32) -> Option<String> {
 mod tests {
     use super::*;
 
-    const CTRL: Mods = Mods { ctrl: true, shift: false, alt: false, win: false };
-    const CTRL_SHIFT: Mods = Mods { ctrl: true, shift: true, alt: false, win: false };
-    const SHIFT: Mods = Mods { ctrl: false, shift: true, alt: false, win: false };
-    const NONE: Mods = Mods { ctrl: false, shift: false, alt: false, win: false };
+    const NONE: Mods = Mods { ctrl: false, shift: false, alt: false, win: false, altgr: false };
+    const CTRL: Mods = Mods { ctrl: true, ..NONE };
+    const CTRL_SHIFT: Mods = Mods { ctrl: true, shift: true, ..NONE };
+    const SHIFT: Mods = Mods { shift: true, ..NONE };
+    const ALTGR: Mods = Mods { altgr: true, ..NONE };
+
+    const SC_LCONTROL: u32 = 0x1D;
+    const SC_ALT: u32 = 0x38;
+    /// Scan code of the Left Ctrl that Windows synthesizes for AltGr, as a WH_KEYBOARD_LL hook sees it.
+    const SC_ALTGR_LCONTROL: u32 = 0x21D;
 
     #[test]
     fn modifier_combos_are_labelled() {
@@ -137,11 +154,33 @@ mod tests {
     #[test]
     fn modifier_state_tracks_down_and_up() {
         let mut m = Mods::default();
-        assert!(m.apply(VK_LCONTROL.0 as u32, true));
-        assert!(m.apply(VK_RSHIFT.0 as u32, true));
+        assert!(m.apply(VK_LCONTROL.0 as u32, SC_LCONTROL, true));
+        assert!(m.apply(VK_RSHIFT.0 as u32, 0x36, true));
         assert_eq!(m, CTRL_SHIFT);
-        assert!(!m.apply(b'S' as u32, true), "S is not a modifier");
-        assert!(m.apply(VK_LCONTROL.0 as u32, false));
+        assert!(!m.apply(b'S' as u32, 0x1F, true), "S is not a modifier");
+        assert!(m.apply(VK_LCONTROL.0 as u32, SC_LCONTROL, false));
         assert_eq!(m, SHIFT);
+    }
+
+    #[test]
+    fn altgr_is_its_own_modifier_not_ctrl_alt() {
+        let mut m = Mods::default();
+        assert!(m.apply(VK_LCONTROL.0 as u32, SC_ALTGR_LCONTROL, true));
+        assert!(m.apply(VK_RMENU.0 as u32, SC_ALT, true));
+        assert_eq!(m, ALTGR);
+        assert_eq!(shortcut_label(b'Q' as u32, m), None);
+        assert_eq!(shortcut_label(VK_RETURN.0 as u32, m).as_deref(), Some("Enter"));
+        assert!(m.apply(VK_LCONTROL.0 as u32, SC_ALTGR_LCONTROL, false));
+        assert!(m.apply(VK_RMENU.0 as u32, SC_ALT, false));
+        assert_eq!(m, NONE);
+    }
+
+    #[test]
+    fn right_alt_without_the_synthetic_ctrl_is_alt() {
+        let mut m = Mods::default();
+        assert!(m.apply(VK_LCONTROL.0 as u32, SC_LCONTROL, true));
+        assert!(m.apply(VK_RMENU.0 as u32, SC_ALT, true));
+        assert_eq!(m, Mods { ctrl: true, alt: true, ..NONE });
+        assert_eq!(shortcut_label(b'Q' as u32, m).as_deref(), Some("Ctrl+Alt+Q"));
     }
 }
