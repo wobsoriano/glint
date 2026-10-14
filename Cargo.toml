@@ -56,6 +56,10 @@ features = [
 [profile.dev.package."*"]
 opt-level = 2
 
+# The compositor runs per pixel on every preview frame.
+[profile.dev.package.glint-render]
+opt-level = 2
+
 [profile.release]
 lto = "thin"
 codegen-units = 4

@@ -2511,8 +2511,10 @@ name = "glint-render"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "anyhow",
  "image",
  "serde",
+ "serde_json",
  "smallvec",
  "tiny-skia",
 ]

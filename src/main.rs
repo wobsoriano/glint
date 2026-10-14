@@ -215,6 +215,7 @@ fn main() {
         return;
     }
     let background = std::env::args().any(|a| a == "--background");
+    let edit_dir = std::env::args().skip_while(|a| a != "--edit").nth(1).map(std::path::PathBuf::from);
 
     Application::new()
         .with_assets(assets::Assets)
@@ -249,7 +250,11 @@ fn main() {
                 |_, cx| cx.new(|_| KeepAlive),
             );
 
-            if !background {
+            if let Some(dir) = edit_dir.clone() {
+                if let Err(e) = editor::open_dir(dir, cx) {
+                    quick::show_toast(format!("Couldn't open: {e:#}"), cx);
+                }
+            } else if !background {
                 home::show(cx);
             }
 
@@ -329,7 +334,7 @@ mod pipeline_tests {
         let mk = |shape| Annotation { id: 0, shape, color: ink, width: 6.0 };
         anns.push(mk(Shape::Arrow { from: pt(w * 0.2, h * 0.7), to: pt(w * 0.45, h * 0.45) }));
         anns.push(mk(Shape::Rect { rect: R { x: w * 0.5, y: h * 0.2, w: w * 0.2, h: h * 0.15 }, filled: false }));
-        anns.push(mk(Shape::Text { pos: pt(w * 0.1, h * 0.1), text: "Hello Glint".into(), size: 48.0, style: TextStyle::Pill }));
+        anns.push(mk(Shape::Text { pos: pt(w * 0.1, h * 0.1), text: "Hello Glint".into(), size: 48.0, style: TextStyle::Pill, font: Default::default() }));
         anns.push(mk(Shape::Counter { center: pt(w * 0.8, h * 0.7), n: 1, size: 22.0 }));
         anns.push(Annotation { color: Color::rgb(0xFFE14D), ..mk(Shape::Highlight { rect: R { x: w * 0.1, y: h * 0.3, w: w * 0.2, h: 40.0 } }) });
 
@@ -355,7 +360,7 @@ mod pipeline_tests {
         let full = R { x: 0.0, y: 0.0, w: 1400.0, h: 360.0 };
         let l = crate::render::layout(&style, full, 1.0, 1.0);
         let lines = ["Contact: jane.doe@example.com", "Key: sk_live_51HxYzAbCdEfGhIjKlMnOp", "Card 4242 4242 4242 4242 exp 12/29"];
-        let anns: Vec<Annotation> = lines.iter().enumerate().map(|(i, t)| Annotation { id: 0, shape: Shape::Text { pos: pt(30.0, 30.0 + i as f32 * 100.0), text: t.to_string(), size: 40.0, style: TextStyle::Plain }, color: Color::BLACK, width: 1.0 }).collect();
+        let anns: Vec<Annotation> = lines.iter().enumerate().map(|(i, t)| Annotation { id: 0, shape: Shape::Text { pos: pt(30.0, 30.0 + i as f32 * 100.0), text: t.to_string(), size: 40.0, style: TextStyle::Plain, font: Default::default() }, color: Color::BLACK, width: 1.0 }).collect();
         crate::render::render_annotations(&mut pm, &l, &anns);
         let img = crate::render::rgba_from_pixmap(&pm);
         if let Ok(out) = std::env::var("PIPELINE_OUT") {
