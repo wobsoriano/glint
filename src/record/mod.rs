@@ -341,6 +341,7 @@ fn begin(cx: &mut App) {
                     if !warnings.is_empty() {
                         toast::show(warnings.join(" · "), cx);
                     }
+                    watch_live(epoch, cx);
                 }
                 Err(e) => {
                     let _ = std::fs::remove_dir_all(&pending.dir);
@@ -349,6 +350,29 @@ fn begin(cx: &mut App) {
                 }
             }
         });
+    })
+    .detach();
+}
+
+/// Stops on the user's behalf when the screen capture ends before they do, because its
+/// window closed or it failed; `stop` then says why in a toast.
+fn watch_live(epoch: u64, cx: &mut App) {
+    cx.spawn(async move |cx| loop {
+        Timer::after(Duration::from_millis(250)).await;
+        let go_on = cx.update(|cx| {
+            let r = rec(cx);
+            if r.epoch != epoch {
+                return false;
+            }
+            let ended = matches!(&r.stage, Stage::Live(live) if !live.recorder.is_live());
+            if ended {
+                stop(cx);
+            }
+            !ended
+        });
+        if !matches!(go_on, Ok(true)) {
+            break;
+        }
     })
     .detach();
 }
@@ -418,7 +442,7 @@ fn stop(cx: &mut App) {
     let lib = store::library(cx);
     let task = cx.background_spawn(async move {
         let Live { recorder, pending, target } = live;
-        let summary = recorder.stop()?;
+        let summary = recorder.stop();
         let first = VideoReader::open(&summary.files[0]).and_then(|mut r| r.next_frame()).ok().flatten();
         let info = RecordingInfo { width: summary.width, height: summary.height, duration_ms: summary.duration_ms, source: target.label() };
         let item = lib.finish_recording(&pending, &info, first.as_ref().map(|f| &f.image))?;

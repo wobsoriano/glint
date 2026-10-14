@@ -6,7 +6,7 @@
 
 use glint_media::{CaptureSource, Fps, RecordOptions, Recorder, VideoReader};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const FRAMES: u64 = 20;
 
@@ -41,7 +41,7 @@ fn stop_after_the_screen_thread_died_keeps_the_frames_written_so_far() {
     let dir = session("stop");
     let rec = start(&dir);
     let_it_die();
-    let summary = rec.stop().unwrap();
+    let summary = rec.stop();
 
     assert_eq!(summary.files, vec![dir.join("screen.mp4")]);
     assert_eq!(summary.warnings, vec![format!("the screen capture failed; the recording ends there: GLINT_FAIL_SCREEN_AFTER: injected failure after {FRAMES} frames")]);
@@ -60,6 +60,21 @@ fn cancel_after_the_screen_thread_died_deletes_the_session_dir() {
     let dir = session("cancel");
     let rec = start(&dir);
     let_it_die();
-    rec.cancel().unwrap();
+    rec.cancel();
     assert!(!dir.exists(), "{} still exists", dir.display());
+}
+
+#[test]
+fn the_recorder_reports_live_until_the_screen_thread_dies() {
+    let dir = session("live");
+    let rec = start(&dir);
+    assert!(rec.is_live());
+    let started = Instant::now();
+    while rec.is_live() {
+        assert!(started.elapsed() < Duration::from_secs(5), "still live 5 s after the injected failure point");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let lived = started.elapsed();
+    assert!((Duration::from_millis(500)..Duration::from_secs(2)).contains(&lived), "died after {lived:?}, expected about 0.67 s");
+    assert_eq!(rec.stop().files, vec![dir.join("screen.mp4")]);
 }
