@@ -2,9 +2,12 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use ureq::unversioned::resolver::DefaultResolver;
+use ureq::unversioned::transport::{time, Buffers, ConnectionDetails, Connector, DefaultConnector, NextTimeout, Transport};
 
 /// Returned (inside `anyhow::Error`) when a cancel flag stops a long job.
 #[derive(Debug)]
@@ -103,7 +106,7 @@ pub fn download_model(
     fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let part = dest.with_extension("bin.part");
 
-    let result = fetch(&model.url(), &part, total, &mut progress, cancel);
+    let result = fetch(&agent(STALL), &model.url(), &part, total, &mut progress, cancel);
     if let Err(err) = result {
         let _ = fs::remove_file(&part);
         return Err(err);
@@ -112,7 +115,63 @@ pub fn download_model(
     Ok(dest)
 }
 
+/// How long a download may go without connecting or receiving a byte before it fails. A read
+/// blocks until then, so this also bounds how long a cancel waits.
+const STALL: Duration = Duration::from_secs(30);
+
+fn agent(stall: Duration) -> ureq::Agent {
+    let config = ureq::Agent::config_builder().timeout_connect(Some(stall)).timeout_recv_response(Some(stall)).build();
+    ureq::Agent::with_parts(config, DefaultConnector::new().chain(IdleReads(stall)), DefaultResolver::default())
+}
+
+/// ureq's body timeout is a budget for the whole body, so a slow but healthy download of a
+/// large model would hit it. This caps each read instead.
+#[derive(Debug)]
+struct IdleReads(Duration);
+
+impl Connector<Box<dyn Transport>> for IdleReads {
+    type Out = IdleReadTransport;
+
+    fn connect(&self, _: &ConnectionDetails, chained: Option<Box<dyn Transport>>) -> Result<Option<Self::Out>, ureq::Error> {
+        Ok(chained.map(|inner| IdleReadTransport { inner, idle: self.0 }))
+    }
+}
+
+#[derive(Debug)]
+struct IdleReadTransport {
+    inner: Box<dyn Transport>,
+    idle: Duration,
+}
+
+impl Transport for IdleReadTransport {
+    fn buffers(&mut self) -> &mut dyn Buffers {
+        self.inner.buffers()
+    }
+
+    fn transmit_output(&mut self, amount: usize, timeout: NextTimeout) -> Result<(), ureq::Error> {
+        self.inner.transmit_output(amount, timeout)
+    }
+
+    fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, ureq::Error> {
+        let timeout = if *timeout.after > self.idle {
+            NextTimeout { after: time::Duration::Exact(self.idle), reason: ureq::Timeout::RecvBody }
+        } else {
+            timeout
+        };
+        self.inner.await_input(timeout)
+    }
+
+    fn is_open(&mut self) -> bool {
+        self.inner.is_open()
+    }
+
+    fn is_tls(&self) -> bool {
+        self.inner.is_tls()
+    }
+}
+
 fn fetch(
+    agent: &ureq::Agent,
     url: &str,
     part: &Path,
     total: u64,
@@ -122,7 +181,7 @@ fn fetch(
     if cancel.load(Ordering::Relaxed) {
         return Err(Cancelled.into());
     }
-    let mut response = ureq::get(url).call().with_context(|| format!("requesting {url}"))?;
+    let mut response = agent.get(url).call().with_context(|| format!("requesting {url}"))?;
     if let Some(len) = response.body().content_length() {
         if len != total {
             bail!("{url} reports {len} bytes, expected {total}");
@@ -156,6 +215,8 @@ fn fetch(
 mod tests {
     use super::*;
 
+    use std::time::Instant;
+
     #[test]
     fn lists_only_complete_models() {
         let data = std::env::temp_dir().join(format!("glint-models-{}", std::process::id()));
@@ -177,5 +238,44 @@ mod tests {
         assert!(!model_path(&data, Model::TinyEn).exists());
         assert!(!model_path(&data, Model::TinyEn).with_extension("bin.part").exists());
         let _ = fs::remove_dir_all(&data);
+    }
+
+    /// Serves one connection: reads the request, writes `reply`, then holds the socket open
+    /// without sending anything more.
+    fn stalling_server(reply: &'static [u8]) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/model.bin", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut request = [0u8; 4096];
+            let _ = socket.read(&mut request);
+            socket.write_all(reply).unwrap();
+            std::thread::sleep(Duration::from_secs(30));
+        });
+        url
+    }
+
+    fn fetch_from(url: &str, name: &str) -> (anyhow::Error, Duration) {
+        let part = std::env::temp_dir().join(format!("glint-stall-{name}-{}.part", std::process::id()));
+        let stall = Duration::from_millis(500);
+        let started = Instant::now();
+        let err = fetch(&agent(stall), url, &part, 100, &mut |_, _| {}, &AtomicBool::new(false)).unwrap_err();
+        let _ = fs::remove_file(&part);
+        (err, started.elapsed())
+    }
+
+    #[test]
+    fn server_that_never_answers_times_out() {
+        let (err, elapsed) = fetch_from(&stalling_server(b""), "headers");
+        assert!(elapsed < Duration::from_secs(1), "gave up after {elapsed:?}");
+        assert!(format!("{err:#}").contains("timeout: receive response"), "{err:#}");
+    }
+
+    #[test]
+    fn body_that_stops_arriving_times_out() {
+        let reply = b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nfirst ten.";
+        let (err, elapsed) = fetch_from(&stalling_server(reply), "body");
+        assert!(elapsed < Duration::from_secs(1), "gave up after {elapsed:?}");
+        assert!(format!("{err:#}").contains("timeout: receive body"), "{err:#}");
     }
 }
