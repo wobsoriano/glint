@@ -1,4 +1,10 @@
 //! MP4 muxing through the Media Foundation sink writer: H.264/HEVC video plus optional AAC.
+//!
+//! Every stream is written as BT.709 limited range and tagged as such in the output type, so
+//! the encoder writes the colour space into the bitstream and decoders stop guessing it from
+//! the frame size (Media Foundation assumes BT.601 below 720 rows). CPU frames are converted
+//! to NV12 here with that matrix; GPU textures go to the hardware encoder as BGRA, which
+//! converts with BT.709 at every size.
 
 use crate::d3d::D3dDevice;
 use crate::mf::{self, pack2, pcwstr, wide};
@@ -7,6 +13,7 @@ use std::path::Path;
 use windows::core::{Interface, GUID};
 use windows::Win32::Graphics::Direct3D11::{ID3D11Texture2D, D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE};
 use windows::Win32::Media::MediaFoundation::*;
+use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_UI4};
 
 /// Video codec written into the MP4.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -73,6 +80,7 @@ pub(crate) struct Mp4Sink {
     frames: u64,
     last_t: i64,
     hardware: bool,
+    nv12: Vec<u8>,
 }
 
 impl Mp4Sink {
@@ -105,19 +113,39 @@ impl Mp4Sink {
             out.SetUINT64(&MF_MT_FRAME_RATE, pack2(video.fps, 1))?;
             out.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, pack2(1, 1))?;
             out.SetUINT32(&MF_MT_MPEG2_PROFILE, video.codec.profile())?;
+            out.SetUINT32(&MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709.0 as u32)?;
+            out.SetUINT32(&MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235.0 as u32)?;
+            out.SetUINT32(&MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709.0 as u32)?;
+            out.SetUINT32(&MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709.0 as u32)?;
             let video_stream = writer.AddStream(&out).with_context(|| format!("AddStream {:?}", video.codec))?;
 
-            let input = bgra_type(video.width, video.height, video.fps)?;
+            let input = if d3d.is_some() {
+                bgra_type(video.width, video.height, video.fps)?
+            } else {
+                nv12_type(video.width, video.height, video.fps)?
+            };
             writer
                 .SetInputMediaType(video_stream, &input, None)
-                .with_context(|| format!("SetInputMediaType ARGB32 for {:?}", video.codec))?;
+                .with_context(|| format!("SetInputMediaType for {:?}", video.codec))?;
 
             let audio_stream = match audio {
                 Some(a) => Some(add_aac_stream(&writer, a)?),
                 None => None,
             };
 
-            let hardware = encoder_is_hardware(&writer, video_stream);
+            let encoder = encoder_attributes(&writer, video_stream);
+            let hardware = encoder.as_ref().is_some_and(|a| string_attribute(a, &MFT_ENUM_HARDWARE_URL_Attribute).is_some());
+            let vendor = encoder.as_ref().and_then(|a| string_attribute(a, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute));
+            if video.codec == VideoCodec::H264 && video.fps > 30 && vendor.as_deref() == Some(AMD_VENDOR) {
+                // AMD's H.264 MFT budgets bits as if every stream ran at 30 fps, so a 60 fps
+                // file comes out at twice the bitrate (measured on an RX 6700 XT: 2.00x at 60,
+                // 4.06x at 120, 1.00x at or below 30). Its HEVC MFT does not have the fault.
+                let mean = (video.bitrate as u64 * 30 / video.fps as u64) as u32;
+                codec_api(&writer, video_stream)
+                    .context("AMD H.264 encoder has no ICodecAPI")?
+                    .SetValue(&CODECAPI_AVEncCommonMeanBitRate, &variant_u32(mean))
+                    .context("set mean bitrate")?;
+            }
             writer.BeginWriting().context("BeginWriting")?;
             Ok(Self {
                 writer,
@@ -129,6 +157,7 @@ impl Mp4Sink {
                 frames: 0,
                 last_t: -1,
                 hardware,
+                nv12: Vec::new(),
             })
         }
     }
@@ -160,31 +189,39 @@ impl Mp4Sink {
 
     /// Writes a top-down BGRA frame (`width * height * 4` bytes) at media time `t` (100 ns).
     pub fn write_bgra(&mut self, bgra: &[u8], t: i64) -> anyhow::Result<()> {
-        let expected = self.video.width as usize * self.video.height as usize * 4;
-        if bgra.len() != expected {
-            bail!("frame has {} bytes, expected {expected}", bgra.len());
-        }
-        unsafe {
-            let buffer = MFCreateMemoryBuffer(expected as u32)?;
-            let mut ptr = std::ptr::null_mut();
-            buffer.Lock(&mut ptr, None, None)?;
-            std::ptr::copy_nonoverlapping(bgra.as_ptr(), ptr, expected);
-            buffer.Unlock()?;
-            buffer.SetCurrentLength(expected as u32)?;
-            let sample = MFCreateSample()?;
-            sample.AddBuffer(&buffer)?;
-            self.write_sample(&sample, t)
-        }
+        self.write_rgb(bgra, 2, t)
     }
 
     /// Writes the next video frame from RGBA pixels at the constant frame rate.
     pub fn write_rgba_sequential(&mut self, rgba: &[u8]) -> anyhow::Result<()> {
-        let mut bgra = rgba.to_vec();
-        for px in bgra.chunks_exact_mut(4) {
-            px.swap(0, 2);
-        }
         let t = self.frames as i64 * self.video.frame_duration();
-        self.write_bgra(&bgra, t)
+        self.write_rgb(rgba, 0, t)
+    }
+
+    /// Converts a 4-byte-per-pixel frame with red at channel `r` (blue at `2 - r`) to NV12
+    /// and writes it at media time `t`.
+    fn write_rgb(&mut self, pixels: &[u8], r: usize, t: i64) -> anyhow::Result<()> {
+        let (w, h) = (self.video.width as usize, self.video.height as usize);
+        if pixels.len() != w * h * 4 {
+            bail!("frame has {} bytes, expected {}", pixels.len(), w * h * 4);
+        }
+        let len = w * h * 3 / 2;
+        let mut nv12 = std::mem::take(&mut self.nv12);
+        nv12.resize(len, 0);
+        rgb_to_nv12(pixels, r, w, h, &mut nv12);
+        let written = unsafe {
+            let buffer = MFCreateMemoryBuffer(len as u32)?;
+            let mut ptr = std::ptr::null_mut();
+            buffer.Lock(&mut ptr, None, None)?;
+            std::ptr::copy_nonoverlapping(nv12.as_ptr(), ptr, len);
+            buffer.Unlock()?;
+            buffer.SetCurrentLength(len as u32)?;
+            let sample = MFCreateSample()?;
+            sample.AddBuffer(&buffer)?;
+            self.write_sample(&sample, t)
+        };
+        self.nv12 = nv12;
+        written
     }
 
     /// Appends interleaved float samples to the AAC track, continuing from the last write.
@@ -224,21 +261,79 @@ impl Mp4Sink {
     }
 }
 
+const AMD_VENDOR: &str = "VEN_1002";
+
+/// BT.709 RGB to limited-range Y'CbCr, 16.16 fixed point.
+const Y_R: i32 = 11_966;
+const Y_G: i32 = 40_254;
+const Y_B: i32 = 4_064;
+const CB_R: i32 = -6_596;
+const CB_G: i32 = -22_189;
+const CB_B: i32 = 28_784;
+const CR_R: i32 = 28_784;
+const CR_G: i32 = -26_145;
+const CR_B: i32 = -2_639;
+
+/// Converts a 4-byte-per-pixel frame (red at channel `r`, blue at `2 - r`) to NV12 with the
+/// BT.709 matrix, chroma averaged over each 2x2 block, splitting row pairs across all cores.
+fn rgb_to_nv12(px: &[u8], r: usize, w: usize, h: usize, out: &mut [u8]) {
+    let b = 2 - r;
+    let (luma, chroma) = out.split_at_mut(w * h);
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let rows_per = h.div_ceil(threads).next_multiple_of(2);
+    std::thread::scope(|s| {
+        for ((ci, luma), chroma) in luma.chunks_mut(rows_per * w).enumerate().zip(chroma.chunks_mut(rows_per / 2 * w)) {
+            s.spawn(move || {
+                let y0 = ci * rows_per;
+                for (ri, yrow) in luma.chunks_exact_mut(w).enumerate() {
+                    let src = &px[(y0 + ri) * w * 4..][..w * 4];
+                    for (y, p) in yrow.iter_mut().zip(src.chunks_exact(4)) {
+                        let v = Y_R * p[r] as i32 + Y_G * p[1] as i32 + Y_B * p[b] as i32;
+                        *y = (16 + ((v + 32_768) >> 16)) as u8;
+                    }
+                }
+                for (ri, uvrow) in chroma.chunks_exact_mut(w).enumerate() {
+                    let top = &px[(y0 + ri * 2) * w * 4..][..w * 4];
+                    let bot = &px[(y0 + ri * 2 + 1) * w * 4..][..w * 4];
+                    for (x, uv) in uvrow.chunks_exact_mut(2).enumerate() {
+                        let (a, c) = (&top[x * 8..x * 8 + 8], &bot[x * 8..x * 8 + 8]);
+                        let sum = |i: usize| a[i] as i32 + a[i + 4] as i32 + c[i] as i32 + c[i + 4] as i32;
+                        let (sr, sg, sb) = (sum(r), sum(1), sum(b));
+                        uv[0] = (128 + ((CB_R * sr + CB_G * sg + CB_B * sb + (1 << 17)) >> 18)) as u8;
+                        uv[1] = (128 + ((CR_R * sr + CR_G * sg + CR_B * sb + (1 << 17)) >> 18)) as u8;
+                    }
+                }
+            });
+        }
+    });
+}
+
 /// BGRA input type. `ARGB32` maps to `DXGI_FORMAT_B8G8R8A8_UNORM`, the format WGC frames come
 /// in, so pooled textures can be copied from them (`RGB32` would make `B8G8R8X8` textures and
 /// the copy would silently do nothing).
 fn bgra_type(width: u32, height: u32, fps: u32) -> anyhow::Result<IMFMediaType> {
+    let t = uncompressed_type(MFVideoFormat_ARGB32, width, height, fps)?;
+    // Positive stride tells MF the rows run top-down, as every buffer we hand it does.
+    unsafe { t.SetUINT32(&MF_MT_DEFAULT_STRIDE, width * 4)? };
+    Ok(t)
+}
+
+fn nv12_type(width: u32, height: u32, fps: u32) -> anyhow::Result<IMFMediaType> {
+    let t = uncompressed_type(MFVideoFormat_NV12, width, height, fps)?;
+    unsafe { t.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)? };
+    Ok(t)
+}
+
+fn uncompressed_type(subtype: GUID, width: u32, height: u32, fps: u32) -> anyhow::Result<IMFMediaType> {
     unsafe {
         let t = MFCreateMediaType()?;
         t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-        t.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_ARGB32)?;
+        t.SetGUID(&MF_MT_SUBTYPE, &subtype)?;
         t.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
         t.SetUINT64(&MF_MT_FRAME_SIZE, pack2(width, height))?;
         t.SetUINT64(&MF_MT_FRAME_RATE, pack2(fps, 1))?;
         t.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, pack2(1, 1))?;
         t.SetUINT32(&MF_MT_ALL_SAMPLES_INDEPENDENT, 1)?;
-        // Positive stride tells MF the rows run top-down, as every buffer we hand it does.
-        t.SetUINT32(&MF_MT_DEFAULT_STRIDE, width * 4)?;
         Ok(t)
     }
 }
@@ -267,16 +362,43 @@ unsafe fn add_aac_stream(writer: &IMFSinkWriter, audio: AudioParams) -> anyhow::
     Ok(stream)
 }
 
-unsafe fn encoder_is_hardware(writer: &IMFSinkWriter, stream: u32) -> bool {
+/// The attributes of the encoder MFT the sink writer picked for `stream`.
+unsafe fn encoder_attributes(writer: &IMFSinkWriter, stream: u32) -> Option<IMFAttributes> {
     let mut raw = std::ptr::null_mut();
-    if writer.GetServiceForStream(stream, &GUID::zeroed(), &IMFTransform::IID, &mut raw).is_err() || raw.is_null() {
-        return false;
+    writer.GetServiceForStream(stream, &GUID::zeroed(), &IMFTransform::IID, &mut raw).ok()?;
+    if raw.is_null() {
+        return None;
     }
-    let mft = IMFTransform::from_raw(raw);
-    let Ok(attrs) = mft.GetAttributes() else { return false };
+    IMFTransform::from_raw(raw).GetAttributes().ok()
+}
+
+unsafe fn string_attribute(attrs: &IMFAttributes, key: &GUID) -> Option<String> {
     let mut len = 0;
     let mut s = windows::core::PWSTR::null();
-    attrs.GetAllocatedString(&MFT_ENUM_HARDWARE_URL_Attribute, &mut s, &mut len).is_ok() && len > 0
+    attrs.GetAllocatedString(key, &mut s, &mut len).ok()?;
+    let value = s.to_string().ok();
+    windows::Win32::System::Com::CoTaskMemFree(Some(s.as_ptr() as *const _));
+    value.filter(|v| !v.is_empty())
+}
+
+unsafe fn codec_api(writer: &IMFSinkWriter, stream: u32) -> Option<ICodecAPI> {
+    let mut raw = std::ptr::null_mut();
+    writer.GetServiceForStream(stream, &GUID::zeroed(), &ICodecAPI::IID, &mut raw).ok()?;
+    (!raw.is_null()).then(|| ICodecAPI::from_raw(raw))
+}
+
+fn variant_u32(v: u32) -> VARIANT {
+    VARIANT {
+        Anonymous: VARIANT_0 {
+            Anonymous: std::mem::ManuallyDrop::new(VARIANT_0_0 {
+                vt: VT_UI4,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: VARIANT_0_0_0 { ulVal: v },
+            }),
+        },
+    }
 }
 
 /// Codecs this machine can encode, hardware or software. H.264 is always present on Windows;
@@ -368,5 +490,24 @@ impl SampleAllocator {
             dxgi.GetResource(&ID3D11Texture2D::IID, &mut raw)?;
             Ok(Some((sample, ID3D11Texture2D::from_raw(raw))))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nv12_conversion_is_bt709_limited_range() {
+        // 2x2 blocks: white, black, pure red (RGBA order), then the same frame as BGRA.
+        let rgba = [255, 255, 255, 255, 0, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255];
+        let mut out = vec![0u8; 6];
+        rgb_to_nv12(&rgba[..8].repeat(2), 0, 2, 2, &mut out);
+        assert_eq!(out, [235, 16, 235, 16, 128, 128]);
+        rgb_to_nv12(&rgba[8..].repeat(2), 0, 2, 2, &mut out);
+        assert_eq!(out, [63, 63, 63, 63, 102, 240]);
+        let bgra = [0, 0, 255, 255];
+        rgb_to_nv12(&bgra.repeat(4), 2, 2, 2, &mut out);
+        assert_eq!(out, [63, 63, 63, 63, 102, 240]);
     }
 }
