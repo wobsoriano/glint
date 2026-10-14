@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Context};
 use std::fs::File;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
 /// Interleaved float samples read from a WAV file.
@@ -167,13 +167,6 @@ impl WavWriter {
     }
 }
 
-/// Reads one file fully. Used by tests and the WAV parser.
-pub(crate) fn read_all(path: &Path) -> anyhow::Result<Vec<u8>> {
-    let mut v = Vec::new();
-    File::open(path)?.read_to_end(&mut v)?;
-    Ok(v)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,7 +187,7 @@ mod tests {
             WavData { sample_rate: 48000, channels: 2, samples: vec![0.25, -0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0] }
         );
         assert_eq!(data.frames(), 4);
-        assert_eq!(read_all(&path).unwrap().len() as u64, bytes);
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), bytes);
     }
 
     #[test]

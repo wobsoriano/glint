@@ -2,13 +2,18 @@
 //! on one media clock, written into a session directory.
 
 use crate::audio::{AudioSource, AudioTrack};
+use crate::camera::CameraTrack;
 use crate::clock::MediaClock;
-use crate::devices::{displays, DeviceId, Rect};
+use crate::devices::{displays, DeviceId, DisplayInfo, Rect};
+use crate::hooks::{InputTrack, PointerMap};
+use crate::input::InputTimeline;
 use crate::screen::{ScreenSource, ScreenTrack};
-use anyhow::{bail, Context};
+use anyhow::Context;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
 
 /// What to record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +84,8 @@ pub struct Recorder {
     screen: ScreenTrack,
     system: Option<AudioTrack>,
     mic: Option<AudioTrack>,
+    camera: Option<CameraTrack>,
+    input: Option<InputTrack>,
     width: u32,
     height: u32,
     warnings: Vec<String>,
@@ -92,9 +99,22 @@ impl Recorder {
         let clock = Arc::new(MediaClock::paused());
         let mut warnings = Vec::new();
 
-        let source = resolve_source(opts.source)?;
-        let (screen, geometry) = ScreenTrack::start(source, opts.fps.value(), &opts.session_dir.join("screen.mp4"), clock.clone())?;
+        let resolved = resolve_source(opts.source)?;
+        let (screen, geometry) =
+            ScreenTrack::start(resolved.screen, opts.fps.value(), &opts.session_dir.join("screen.mp4"), clock.clone())?;
         warnings.extend(screen.warnings.iter().cloned());
+
+        let input = if opts.record_input {
+            let map = match (resolved.screen, geometry.window_bounds) {
+                (ScreenSource::Window { hwnd }, Some(bounds)) => PointerMap::Window { hwnd, bounds },
+                _ => PointerMap::Fixed { x: resolved.origin.0, y: resolved.origin.1 },
+            };
+            start_optional(&mut warnings, "input", || {
+                InputTrack::start(map, [geometry.width, geometry.height], resolved.scale, &opts.session_dir, clock.clone())
+            })
+        } else {
+            None
+        };
 
         let system = if opts.system_audio {
             start_optional(&mut warnings, "system audio", || {
@@ -109,8 +129,23 @@ impl Recorder {
             })
         });
 
+        let camera = opts.camera.as_ref().and_then(|id| {
+            start_optional(&mut warnings, "camera", || CameraTrack::start(id, &opts.session_dir.join("camera.mp4"), clock.clone()))
+        });
+
         clock.resume();
-        Ok(Self { clock, session_dir: opts.session_dir, screen, system, mic, width: geometry.width, height: geometry.height, warnings })
+        Ok(Self {
+            clock,
+            session_dir: opts.session_dir,
+            screen,
+            system,
+            mic,
+            camera,
+            input,
+            width: geometry.width,
+            height: geometry.height,
+            warnings,
+        })
     }
 
     /// Freezes media time; every track stops writing until [`resume`](Self::resume).
@@ -147,6 +182,18 @@ impl Recorder {
         let mut warnings = self.warnings;
         let mut files = Vec::new();
 
+        if let Some(input) = self.input {
+            match input.stop().and_then(|timeline| {
+                timeline.save(&self.session_dir)?;
+                Ok(timeline)
+            }) {
+                Ok(timeline) => {
+                    files.push(self.session_dir.join(InputTimeline::FILE));
+                    files.extend(timeline.cursors.iter().map(|c| self.session_dir.join(&c.file)));
+                }
+                Err(e) => warnings.push(format!("input.json: {e:#}")),
+            }
+        }
         for track in [self.system, self.mic].into_iter().flatten() {
             let path = track.path.clone();
             match track.stop() {
@@ -154,11 +201,19 @@ impl Recorder {
                 Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
             }
         }
+        if let Some(camera) = self.camera {
+            let path = camera.path.clone();
+            match camera.stop() {
+                Ok(_) => files.push(path),
+                Err(e) => warnings.push(format!("{}: {e:#}", path.display())),
+            }
+        }
+        let screen_path = self.screen.path.clone();
         let screen = self.screen.stop().context("screen track")?;
         if screen.source_closed {
             warnings.push("the captured window closed; the recording ends there".into());
         }
-        files.insert(0, self.session_dir.join("screen.mp4"));
+        files.insert(0, screen_path);
 
         let bytes = files.iter().map(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0)).sum();
         Ok(RecordSummary {
@@ -180,9 +235,19 @@ impl Recorder {
         for f in summary.files {
             let _ = std::fs::remove_file(f);
         }
+        let _ = std::fs::remove_dir(dir.join("cursors"));
         let _ = std::fs::remove_dir(&dir);
         Ok(())
     }
+}
+
+/// A capture source turned into handles, plus what the input track needs to map positions.
+struct Resolved {
+    screen: ScreenSource,
+    /// Virtual-desktop origin of the captured pixels (unused for windows, which move).
+    origin: (i32, i32),
+    /// DPI scale of the display the source is on.
+    scale: f32,
 }
 
 fn start_optional<T>(warnings: &mut Vec<String>, what: &str, start: impl FnOnce() -> anyhow::Result<T>) -> Option<T> {
@@ -195,17 +260,29 @@ fn start_optional<T>(warnings: &mut Vec<String>, what: &str, start: impl FnOnce(
     }
 }
 
-fn resolve_source(source: CaptureSource) -> anyhow::Result<ScreenSource> {
+fn resolve_source(source: CaptureSource) -> anyhow::Result<Resolved> {
+    let list = displays()?;
     match source {
-        CaptureSource::Window(hwnd) => Ok(ScreenSource::Window { hwnd }),
-        CaptureSource::Display(i) | CaptureSource::Area { display: i, .. } => {
-            let list = displays()?;
-            let Some(display) = list.get(i) else { bail!("display {i} does not exist ({} attached)", list.len()) };
-            let crop = match source {
-                CaptureSource::Area { rect, .. } => Some(rect),
-                _ => None,
-            };
-            Ok(ScreenSource::Monitor { hmonitor: display.hmonitor, crop })
+        CaptureSource::Window(hwnd) => {
+            let monitor = unsafe { MonitorFromWindow(HWND(hwnd as *mut _), MONITOR_DEFAULTTONEAREST) }.0 as isize;
+            let scale = list.iter().find(|d| d.hmonitor == monitor).map(|d| d.scale).unwrap_or(1.0);
+            Ok(Resolved { screen: ScreenSource::Window { hwnd }, origin: (0, 0), scale })
+        }
+        CaptureSource::Display(i) => {
+            let d = display(&list, i)?;
+            Ok(Resolved { screen: ScreenSource::Monitor { hmonitor: d.hmonitor, crop: None }, origin: (d.rect.x, d.rect.y), scale: d.scale })
+        }
+        CaptureSource::Area { display: i, rect } => {
+            let d = display(&list, i)?;
+            Ok(Resolved {
+                screen: ScreenSource::Monitor { hmonitor: d.hmonitor, crop: Some(rect) },
+                origin: (d.rect.x + rect.x, d.rect.y + rect.y),
+                scale: d.scale,
+            })
         }
     }
+}
+
+fn display(list: &[DisplayInfo], i: usize) -> anyhow::Result<&DisplayInfo> {
+    list.get(i).with_context(|| format!("display {i} does not exist ({} attached)", list.len()))
 }
