@@ -21,7 +21,7 @@ use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex};
 
 /// Bump when rendering changes so stale cached exports are not reused.
-const RENDER_VERSION: u32 = 1;
+const RENDER_VERSION: u32 = 2;
 const GIF_FPS: u32 = 15;
 const GIF_MAX_SHORT_SIDE: u32 = 480;
 /// Frames composed in parallel. Each compositor already splits the screen blit and the NV12
