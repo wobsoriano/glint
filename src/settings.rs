@@ -3,7 +3,9 @@
 pub use crate::annotate::RedactStyle;
 use crate::cards::CardLayout;
 use crate::style::Style;
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 /// What happens after every screenshot. Each toggle is independent.
@@ -338,21 +340,39 @@ impl Settings {
     }
 
     fn load_from(p: &Path) -> Self {
-        let mut s: Settings = std::fs::read_to_string(p)
-            .ok()
-            .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
-            .unwrap_or_default();
+        let mut s: Settings = match std::fs::read_to_string(p) {
+            Ok(text) => serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap_or_else(|e| {
+                // Keep the unreadable file so the next save cannot destroy what the user had.
+                let broken = p.with_extension("json.broken");
+                match std::fs::rename(p, &broken) {
+                    Ok(()) => eprintln!("{} is not valid ({e}); moved it to {} and using default settings", p.display(), broken.display()),
+                    Err(re) => eprintln!("{} is not valid ({e}) and could not be moved aside ({re}); using default settings", p.display()),
+                }
+                Settings::default()
+            }),
+            Err(_) => Settings::default(),
+        };
         s.overlay.layout = s.overlay.layout.normalized();
         s
     }
 
     fn save_to(&self, p: &Path) {
+        if let Err(e) = self.write_replacing(p) {
+            eprintln!("Settings were not saved: {e:#}");
+        }
+    }
+
+    /// Writes a sibling temp file and renames it over `p`, so a crash mid-write leaves the old file intact.
+    fn write_replacing(&self, p: &Path) -> anyhow::Result<()> {
         if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
         }
-        if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(p, json);
-        }
+        let json = serde_json::to_string_pretty(self)?;
+        let tmp = p.with_extension("json.tmp");
+        let mut f = std::fs::File::create(&tmp).with_context(|| format!("creating {}", tmp.display()))?;
+        f.write_all(json.as_bytes()).and_then(|()| f.sync_all()).with_context(|| format!("writing {}", tmp.display()))?;
+        drop(f);
+        std::fs::rename(&tmp, p).with_context(|| format!("replacing {}", p.display()))
     }
 }
 
