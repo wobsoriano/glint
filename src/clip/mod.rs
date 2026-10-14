@@ -37,7 +37,7 @@ pub fn pick(cx: &mut App) {
         files: true,
         directories: false,
         multiple: false,
-        prompt: Some("Trim & Compress".into()),
+        prompt: Some("Open".into()),
     });
     cx.spawn(async move |cx| {
         let Ok(Ok(Some(paths))) = rx.await else { return };

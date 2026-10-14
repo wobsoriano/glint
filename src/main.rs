@@ -128,7 +128,8 @@ fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
     for (label, accel, cmd) in items {
         add(accel.map(|a| format!("{label}\t{a}")).unwrap_or(label.to_string()), cmd);
     }
-    add("Trim & Compress Video…".into(), Command::TrimVideo);
+    // Win32 menus read a single & as a mnemonic marker.
+    add("Trim && Compress Video…".into(), Command::TrimVideo);
     let _ = menu.append(&PredefinedMenuItem::separator());
     add(format!("Open Library\t{}", hotkeys::display(&h.library)), Command::Library);
     add("Edit Last Capture".into(), Command::OpenLast);
