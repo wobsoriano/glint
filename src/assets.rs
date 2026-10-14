@@ -61,6 +61,18 @@ fn body(name: &str) -> Option<&'static str> {
         "align-left" => r##"<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>"##,
         "align-center" => r##"<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>"##,
         "align-right" => r##"<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>"##,
+        "record" => r##"<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#000"/>"##,
+        "pause" => r##"<path d="M9 5v14M15 5v14"/>"##,
+        "play" => r##"<path d="M7 4.5v15l12-7.5z"/>"##,
+        "stop" => r##"<rect x="6" y="6" width="12" height="12" rx="2" fill="#000"/>"##,
+        "restart" => r##"<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/>"##,
+        "mic" => r##"<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>"##,
+        "mic-off" => r##"<path d="M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.9 2.3M5 11a7 7 0 0 0 11.6 5.3M19 11a7 7 0 0 1-.4 2.3M12 18v4M3 3l18 18"/>"##,
+        "speaker" => r##"<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>"##,
+        "speaker-off" => r##"<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/>"##,
+        "camera-off" => r##"<path d="M2 2l20 20"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v8.3M15.2 15.2A3 3 0 0 1 11 11M4 7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14"/>"##,
+        "prompter" => r##"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>"##,
+        "chevron-down" => r##"<path d="M6 9l6 6 6-6"/>"##,
         _ => return None,
     })
 }

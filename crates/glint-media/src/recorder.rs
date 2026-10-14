@@ -10,6 +10,7 @@ use crate::input::InputTimeline;
 use crate::screen::{ScreenSource, ScreenTrack};
 use anyhow::Context;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 use std::time::Duration;
 use windows::Win32::Foundation::HWND;
@@ -57,6 +58,9 @@ pub struct RecordOptions {
     pub camera: Option<DeviceId>,
     /// Record pointer, clicks, shortcuts and cursor sprites to `input.json`.
     pub record_input: bool,
+    /// Also offer every microphone buffer (48 kHz mono f32, paused or not) to this channel,
+    /// for live speech recognition. A full channel drops the buffer; the recording never waits.
+    pub mic_tap: Option<SyncSender<Vec<f32>>>,
 }
 
 /// What a finished recording produced.
@@ -118,14 +122,20 @@ impl Recorder {
 
         let system = if opts.system_audio {
             start_optional(&mut warnings, "system audio", || {
-                AudioTrack::start(AudioSource::Loopback, &opts.session_dir.join("system.wav"), 2, clock.clone())
+                AudioTrack::start(AudioSource::Loopback, &opts.session_dir.join("system.wav"), 2, clock.clone(), None)
             })
         } else {
             None
         };
         let mic = opts.mic.as_ref().and_then(|id| {
             start_optional(&mut warnings, "microphone", || {
-                AudioTrack::start(AudioSource::Microphone(Some(id.clone())), &opts.session_dir.join("mic.wav"), 1, clock.clone())
+                AudioTrack::start(
+                    AudioSource::Microphone(Some(id.clone())),
+                    &opts.session_dir.join("mic.wav"),
+                    1,
+                    clock.clone(),
+                    opts.mic_tap.clone(),
+                )
             })
         });
 
@@ -169,6 +179,11 @@ impl Recorder {
     /// RMS of the last microphone buffer, when a microphone is recording.
     pub fn mic_level(&self) -> Option<f32> {
         self.mic.as_ref().map(|m| m.level().rms())
+    }
+
+    /// Optional tracks that failed to start, so the UI can warn while recording continues.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
     }
 
     pub fn session_dir(&self) -> &Path {

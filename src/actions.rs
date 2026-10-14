@@ -42,9 +42,30 @@ fn display_scale() -> f32 {
     shell::work_area_at_cursor().1
 }
 
+/// A recording's current edit as a video file, rendered with its Studio project (defaults
+/// when it was never opened in Studio) and cached in its `render/` folder. Blocking.
+pub fn recording_file(item: &Item) -> anyhow::Result<PathBuf> {
+    let session = glint_studio::Session::open(&item.dir).with_context(|| format!("opening {}", item.dir.display()))?;
+    glint_studio::deliverable(&session)
+}
+
+/// Renders a recording's deliverable in the background, then continues on the main thread.
+pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Result<PathBuf>, &mut App) + 'static) {
+    let item = item.clone();
+    let task = cx.background_spawn(async move { recording_file(&item) });
+    cx.spawn(async move |cx| {
+        let result = task.await;
+        let _ = cx.update(|cx| f(result, cx));
+    })
+    .detach();
+}
+
 pub fn copy(item: &Item, cx: &mut App) {
     if item.kind() == CaptureKind::Recording {
-        return copy_files(std::slice::from_ref(item), cx);
+        return with_recording_file(item, cx, |file, cx| match file.and_then(|f| shell::copy_files(&[f], None)) {
+            Ok(()) => toast::show("Copied the video file", cx),
+            Err(e) => toast::show(format!("Copy failed: {e:#}"), cx),
+        });
     }
     with_pixels(item, cx, |img, cx| match win::copy_image(&img) {
         Ok(()) => toast::show("Copied to clipboard", cx),
@@ -166,8 +187,53 @@ pub enum SaveTarget {
 /// Saves to the export folder or through a dialog, per `ask` and settings. A failed write
 /// shows a dialog offering Retry or another folder; `done` sees the final outcome.
 pub fn save(item: &Item, ask: bool, cx: &mut App, done: Done) {
+    if item.kind() == CaptureKind::Recording {
+        return save_video(item, ask, cx, done);
+    }
     let title = item.meta.title.clone();
     with_pixels(item, cx, move |img, cx| save_image(title, img, ask, cx, done));
+}
+
+/// Renders a recording and copies the video out as `<title>.<ext>`.
+fn save_video(item: &Item, ask: bool, cx: &mut App, done: Done) {
+    let s = cx.global::<Settings>().clone();
+    let stem = shell::sanitize(&item.meta.title);
+    let ask = ask || !s.save_without_dialog;
+    with_recording_file(item, cx, move |file, cx| {
+        let src = match file {
+            Ok(f) => f,
+            Err(e) => return done(Err(e), cx),
+        };
+        let ext = src.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_else(|| "mp4".into());
+        let copy = move |dest: PathBuf| -> anyhow::Result<PathBuf> {
+            if let Some(dir) = dest.parent() {
+                std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+            }
+            std::fs::copy(&src, &dest).with_context(|| format!("writing {}", dest.display()))?;
+            Ok(dest)
+        };
+        if !ask {
+            let dest = shell::unique_path(&s.save_dir, &stem, &ext);
+            let task = cx.background_spawn(async move { copy(dest) });
+            cx.spawn(async move |cx| {
+                let result = task.await;
+                let _ = cx.update(|cx| done(result, cx));
+            })
+            .detach();
+            return;
+        }
+        let _ = std::fs::create_dir_all(&s.save_dir);
+        let rx = cx.prompt_for_new_path(&s.save_dir, Some(&format!("{stem}.{ext}")));
+        cx.spawn(async move |cx| {
+            let Ok(Ok(Some(path))) = rx.await else {
+                let _ = cx.update(|cx| done(Err(anyhow::anyhow!("cancelled")), cx));
+                return;
+            };
+            let result = cx.background_spawn(async move { copy(path) }).await;
+            let _ = cx.update(|cx| done(result, cx));
+        })
+        .detach();
+    });
 }
 
 /// Saves pixels named after `title`, with the same rules as [`save`].
