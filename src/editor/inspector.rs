@@ -99,7 +99,7 @@ fn grid9(weak: &WeakEntity<Editor>, prefix: &'static str, selected: Option<u8>, 
 }
 
 fn color_row(weak: &WeakEntity<Editor>, prefix: &'static str, current: Color, size: f32, set: impl Fn(&mut Editor, Color) + Clone + 'static) -> gpui::Div {
-    let colors = INK.into_iter().chain([0x000000]);
+    let colors = INK.into_iter();
     div().flex().flex_wrap().gap(px(2.)).children(colors.enumerate().map(move |(i, hex)| {
         let col = Color::rgb(hex);
         let set = set.clone();
