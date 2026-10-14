@@ -2,6 +2,7 @@
 //! settings sidebar on the right. Every edit goes through [`Studio::edit`], which records
 //! undo history, hands the project to the player and schedules a save.
 
+mod captions;
 mod export;
 mod geometry;
 mod preview;
@@ -130,11 +131,12 @@ enum Tab {
     Camera,
     Audio,
     Zoom,
+    Captions,
     Presets,
 }
 
-/// Sidebar tabs in display order: icon and title. Captions joins here as one more row.
-const TABS: [(Tab, &str, &str); 8] = [
+/// Sidebar tabs in display order: icon and title.
+const TABS: [(Tab, &str, &str); 9] = [
     (Tab::Background, "image", "Background"),
     (Tab::Layout, "area", "Layout"),
     (Tab::Cursor, "select", "Cursor"),
@@ -142,6 +144,7 @@ const TABS: [(Tab, &str, &str); 8] = [
     (Tab::Camera, "camera", "Camera"),
     (Tab::Audio, "speaker", "Audio"),
     (Tab::Zoom, "zoom", "Zoom"),
+    (Tab::Captions, "captions", "Captions"),
     (Tab::Presets, "stack", "Presets"),
 ];
 
@@ -205,6 +208,7 @@ pub struct Studio {
 
     export: export::ExportUi,
     hevc: bool,
+    cap: captions::CaptionsUi,
 
     save_gen: u64,
     dirty: bool,
@@ -215,6 +219,7 @@ pub struct Studio {
 
 impl Studio {
     fn new(p: Prepared, cx: &mut Context<Self>) -> Self {
+        let cap = captions::CaptionsUi::new(p.session.tracks.mic.is_some());
         let mut s = Self {
             session: p.session,
             player: p.player,
@@ -242,6 +247,7 @@ impl Studio {
             default_preset: None,
             preset_name: None,
             hue: 210.0,
+            cap,
             export: export::ExportUi::Closed,
             hevc: glint_media::available_codecs().contains(&glint_media::VideoCodec::Hevc),
             save_gen: 0,
@@ -391,6 +397,7 @@ impl Studio {
         if let export::ExportUi::Running { cancel, .. } = &self.export {
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
+        self.cap.cancel();
         !self.dirty || self.save_now(cx)
     }
 
@@ -433,7 +440,7 @@ impl Studio {
             self.follow_playhead();
             cx.notify();
         }
-        let busy = self.export.is_running();
+        let busy = self.export.is_running() || self.cap.is_busy();
         if busy {
             cx.notify();
         }
@@ -607,6 +614,9 @@ impl Studio {
         if !matches!(self.export, export::ExportUi::Closed) {
             return self.export_key(e, cx);
         }
+        if self.cap.is_editing() {
+            return self.caption_key(e, cx);
+        }
         let k = &e.keystroke;
         let (ctrl, shift) = (k.modifiers.control, k.modifiers.shift);
         match k.key.as_str() {
@@ -629,6 +639,7 @@ impl Studio {
             "end" => self.seek(self.duration(), cx),
             "s" => self.split(cx),
             "z" => self.add_zoom(cx),
+            "delete" | "backspace" if self.has_word_selection() => self.cut_selected_words(cx),
             "delete" | "backspace" => self.delete_selection(cx),
             "enter" if matches!(self.mode, Mode::Crop { .. } | Mode::Focus { .. }) => self.set_mode(Mode::Normal, cx),
             "escape" => self.escape(cx),
@@ -637,6 +648,9 @@ impl Studio {
     }
 
     fn escape(&mut self, cx: &mut Context<Self>) {
+        if self.mode == Mode::Normal && !self.speed_menu && self.clear_word_selection() {
+            return cx.notify();
+        }
         match self.mode {
             Mode::Crop { before, .. } => {
                 self.edit(Some("crop"), cx, |p| p.crop = before);
@@ -670,6 +684,7 @@ impl Drop for Studio {
         if let export::ExportUi::Running { cancel, .. } = &self.export {
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
+        self.cap.cancel();
     }
 }
 
