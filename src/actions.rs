@@ -23,7 +23,7 @@ pub fn load_pixels(item: &Item) -> anyhow::Result<RgbaImage> {
 /// Decodes the deliverable in the background, then continues on the main thread.
 pub fn with_pixels(item: &Item, cx: &mut App, f: impl FnOnce(Arc<RgbaImage>, &mut App) + 'static) {
     if item.kind() != CaptureKind::Screenshot {
-        toast::show("Recordings open in Studio, which is not part of this build yet", cx);
+        toast::show("This works on screenshots; a recording has no single image to use", cx);
         return;
     }
     let item = item.clone();

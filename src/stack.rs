@@ -6,7 +6,7 @@ use crate::flow::Shot;
 use crate::settings::{Settings, Side};
 use crate::ui::{self, FONT};
 use crate::library::Item;
-use crate::{actions, pin, quicklook, shell, toast, win};
+use crate::{actions, pin, quicklook, shell, win};
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, Global, ImageSource, MouseButton, MouseDownEvent,
@@ -211,7 +211,7 @@ impl Stack {
                     }),
                 );
             }
-            CardAction::Edit => toast::show("Studio is not part of this build yet; the recording is in the Library", cx),
+            CardAction::Edit => actions::edit(&item, cx),
             CardAction::Delete => {
                 let handle = window.window_handle();
                 let this = cx.entity().downgrade();

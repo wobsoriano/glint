@@ -453,7 +453,7 @@ fn automate(item: Item, cx: &mut App) {
         crate::actions::save(&item, false, cx, Box::new(|r, cx| crate::actions::report_save(&r, cx)));
     }
     if a.studio {
-        toast::show("Studio is not part of this build yet; the recording is in the Library", cx);
+        crate::actions::edit(&item, cx);
     }
     if a.preview {
         stack::push_recording(item, cx);
