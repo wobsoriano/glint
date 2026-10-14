@@ -2525,8 +2525,10 @@ name = "glint-media"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "image",
  "serde",
  "serde_json",
+ "windows 0.62.2",
 ]
 
 [[package]]
