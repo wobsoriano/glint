@@ -2541,6 +2541,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glint-studio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glint-media",
+ "glint-render",
+ "image",
+ "serde",
+ "serde_json",
+ "tiny-skia",
+]
+
+[[package]]
 name = "glint-transcribe"
 version = "0.1.0"
 dependencies = [
