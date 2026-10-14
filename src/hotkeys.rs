@@ -101,17 +101,10 @@ pub fn rebind(action: HotkeyAction, accel: &str, cx: &mut App) -> Result<(), Str
 pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     let key = match k.key.as_str() {
         "control" | "shift" | "alt" | "platform" | "function" | "" => return Ok(None),
-        "space" => "Space".to_string(),
-        "up" | "down" | "left" | "right" => {
-            let mut s = k.key.clone();
-            s[..1].make_ascii_uppercase();
-            s
-        }
-        key if key.len() == 1 => key.to_ascii_uppercase(),
+        key if !key.is_ascii() => return Err(format!("{key} cannot be used in a global shortcut")),
         key => {
-            let mut s = key.to_string();
-            s[..1].make_ascii_uppercase();
-            s
+            let mut chars = key.chars();
+            chars.next().into_iter().map(|c| c.to_ascii_uppercase()).chain(chars).collect::<String>()
         }
     };
     let m = &k.modifiers;
