@@ -14,5 +14,12 @@ fn main() -> anyhow::Result<()> {
     }
     println!("encode: {:?}", glint_media::available_codecs());
     println!("decode: {:?}", glint_media::decodable_codecs());
+    if std::env::args().any(|a| a == "--mic-level") {
+        let monitor = glint_media::MicMonitor::start(None)?;
+        for _ in 0..5 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            println!("mic rms {:.4}", monitor.level());
+        }
+    }
     Ok(())
 }

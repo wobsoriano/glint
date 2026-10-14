@@ -75,8 +75,8 @@ impl AudioTrack {
         let stop = Arc::new(AtomicBool::new(false));
         let level = Arc::new(LevelMeter::default());
         let writer_path = path.to_path_buf();
-        let (thread, _) = spawn_capture(format!("glint-audio-{source:?}"), source, channels, stop.clone(), level.clone(), move || {
-            WavWriter::create(&writer_path, SAMPLE_RATE, channels).map(|w| (w, clock))
+        let thread = spawn_capture(format!("glint-audio-{source:?}"), source, channels, stop.clone(), level.clone(), move || {
+            WavWriter::create(&writer_path, SAMPLE_RATE, channels).map(|w| Some((w, clock)))
         })?;
         Ok(Self { stop, thread: Some(thread), level, path: path.to_path_buf() })
     }
@@ -113,8 +113,7 @@ impl MicMonitor {
     pub fn start(mic: Option<DeviceId>) -> anyhow::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let level = Arc::new(LevelMeter::default());
-        let (thread, _) =
-            spawn_capture("glint-mic-monitor".into(), AudioSource::Microphone(mic), 1, stop.clone(), level.clone(), || Ok(None))?;
+        let thread = spawn_capture("glint-mic-monitor".into(), AudioSource::Microphone(mic), 1, stop.clone(), level.clone(), || Ok(None))?;
         Ok(Self { stop, thread: Some(thread), level })
     }
 
@@ -137,28 +136,19 @@ type Sink = Option<(WavWriter, Arc<MediaClock>)>;
 
 /// Starts the capture thread. WASAPI objects are not `Send`, so the device is opened on that
 /// thread and the outcome comes back over a channel before this returns.
-fn spawn_capture<S>(
+fn spawn_capture(
     name: String,
     source: AudioSource,
     channels: u16,
     stop: Arc<AtomicBool>,
     level: Arc<LevelMeter>,
-    make_sink: impl FnOnce() -> anyhow::Result<S> + Send + 'static,
-) -> anyhow::Result<(JoinHandle<anyhow::Result<AudioStats>>, ())>
-where
-    S: Into<Sink>,
-{
+    make_sink: impl FnOnce() -> anyhow::Result<Sink> + Send + 'static,
+) -> anyhow::Result<JoinHandle<anyhow::Result<AudioStats>>> {
     let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
     let thread = std::thread::Builder::new().name(name).spawn(move || {
-        let capture = match Capture::open(&source, channels) {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = tx.send(Err(e));
-                return Ok(AudioStats { frames: 0, bytes: 0 });
-            }
-        };
-        let sink = match make_sink() {
-            Ok(s) => s.into(),
+        let opened = Capture::open(&source, channels).and_then(|capture| Ok((capture, make_sink()?)));
+        let (capture, sink) = match opened {
+            Ok(v) => v,
             Err(e) => {
                 let _ = tx.send(Err(e));
                 return Ok(AudioStats { frames: 0, bytes: 0 });
@@ -168,7 +158,7 @@ where
         capture.run(sink, &stop, &level)
     })?;
     match rx.recv() {
-        Ok(Ok(())) => Ok((thread, ())),
+        Ok(Ok(())) => Ok(thread),
         Ok(Err(e)) => {
             let _ = thread.join();
             Err(e)

@@ -197,10 +197,9 @@ pub fn microphones() -> anyhow::Result<Vec<AudioDevice>> {
             let device = collection.Item(i)?;
             let id = take_pwstr(device.GetId()?);
             let store = device.OpenPropertyStore(STGM_READ)?;
-            let value = store.GetValue(&PKEY_Device_FriendlyName)?;
+            let mut value = store.GetValue(&PKEY_Device_FriendlyName)?;
             let name = value.Anonymous.Anonymous.Anonymous.pwszVal.to_string().unwrap_or_default();
-            let mut prop = value;
-            let _ = windows::Win32::System::Com::StructuredStorage::PropVariantClear(&mut prop);
+            let _ = windows::Win32::System::Com::StructuredStorage::PropVariantClear(&mut value);
             out.push(AudioDevice { id: DeviceId(id), name });
         }
         out.sort_by_key(|d| d.id.0 != default_id);

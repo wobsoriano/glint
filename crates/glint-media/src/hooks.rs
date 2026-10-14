@@ -113,7 +113,7 @@ impl InputTrack {
 impl Drop for InputTrack {
     fn drop(&mut self) {
         if let Some(t) = self.thread.take() {
-            unsafe { let _ = PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)); }
+            let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
             let _ = t.join();
         }
     }

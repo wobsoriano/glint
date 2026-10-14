@@ -19,11 +19,11 @@ impl CursorImage {
     /// Content hash used to recognise a shape seen before.
     pub fn hash(&self) -> u64 {
         let mut h: u64 = 0xcbf29ce484222325;
-        for b in self.rgba.iter().chain(self.hotspot.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>().iter()) {
+        for b in &self.rgba {
             h ^= *b as u64;
             h = h.wrapping_mul(0x100000001b3);
         }
-        h ^ ((self.width as u64) << 32 | self.height as u64)
+        h ^ ((self.width as u64) << 48 | (self.height as u64) << 32 | (self.hotspot[0] as u64) << 16 | self.hotspot[1] as u64)
     }
 }
 

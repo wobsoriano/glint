@@ -3,7 +3,7 @@
 
 use crate::clock::MediaClock;
 use crate::devices::{camera_activate, DeviceId};
-use crate::encoder::{AudioParams, Mp4Sink, VideoCodec, VideoParams};
+use crate::encoder::{Mp4Sink, VideoCodec, VideoParams};
 use crate::mf::{self, pack2, unpack2};
 use anyhow::{bail, Context};
 use image::RgbaImage;
@@ -40,7 +40,7 @@ impl CameraTrack {
             let path = path.to_path_buf();
             move |width, height, fps| {
                 let params = VideoParams { width, height, fps, bitrate: VideoParams::recording_bitrate(width, height, fps), codec: VideoCodec::H264 };
-                Mp4Sink::create(&path, params, None::<AudioParams>, None).map(|sink| FrameSink::Encode { sink, clock, path })
+                Mp4Sink::create(&path, params, None, None).map(|sink| FrameSink::Encode { sink, clock, path })
             }
         })?;
         Ok(Self { stop, thread: Some(thread), path: path.to_path_buf() })
