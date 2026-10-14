@@ -48,6 +48,7 @@ pub struct MonitorShot {
 
 #[derive(Clone, Debug)]
 pub struct WinInfo {
+    pub hwnd: isize,
     pub title: String,
     /// Physical screen coordinates: x, y, w, h.
     pub rect: [i32; 4],
@@ -107,7 +108,7 @@ pub fn crop_screen(shots: &[MonitorShot], rect: [i32; 4], title: Option<String>)
     Some(Capture::new(img, m.scale, title))
 }
 
-fn window_rect(hwnd: HWND) -> Option<[i32; 4]> {
+pub fn window_rect(hwnd: HWND) -> Option<[i32; 4]> {
     let mut r = RECT::default();
     unsafe {
         DwmGetWindowAttribute(
@@ -166,7 +167,7 @@ pub fn list_windows() -> Vec<WinInfo> {
             return BOOL(1);
         }
         if let Some(rect) = window_rect(hwnd) {
-            out.push(WinInfo { title, rect });
+            out.push(WinInfo { hwnd: hwnd.0 as isize, title, rect });
         }
         BOOL(1)
     }
@@ -189,6 +190,7 @@ pub fn foreground_window() -> Option<WinInfo> {
             return None;
         }
         Some(WinInfo {
+            hwnd: hwnd.0 as isize,
             title: window_title(hwnd),
             rect: window_rect(hwnd)?,
         })

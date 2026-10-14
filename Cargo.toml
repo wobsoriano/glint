@@ -16,6 +16,8 @@ windows = "0.62"
 
 [dependencies]
 glint-render = { path = "crates/glint-render" }
+glint-media = { path = "crates/glint-media" }
+glint-transcribe = { path = "crates/glint-transcribe" }
 gpui = "0.2.2"
 xcap = "0.9.8"
 global-hotkey = "0.8"

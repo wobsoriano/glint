@@ -34,6 +34,24 @@ pub struct CaptureMeta {
     pub imported_from: Option<PathBuf>,
 }
 
+/// A recording being written into a hidden staging directory. [`Library::finish_recording`]
+/// renames it to `<id>.glintrec`; deleting `dir` discards it.
+#[derive(Clone, Debug)]
+pub struct PendingRecording {
+    pub id: String,
+    pub dir: PathBuf,
+    pub created: DateTime<Local>,
+}
+
+/// What a finished recording package records about itself in `meta.json`.
+#[derive(Clone, Debug)]
+pub struct RecordingInfo {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub source: String,
+}
+
 /// One capture in the Library, as found on disk.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
@@ -142,6 +160,37 @@ impl Library {
         load(&dir)
     }
 
+    /// Reserves an id and a hidden staging directory for a recording to be written into.
+    pub fn begin_recording(&self, created: DateTime<Local>) -> Result<PendingRecording> {
+        std::fs::create_dir_all(&self.root).with_context(|| format!("creating {}", self.root.display()))?;
+        let (id, dir) = self.reserve(&created)?;
+        Ok(PendingRecording { id, dir, created })
+    }
+
+    /// Writes `meta.json` and a thumbnail of `first_frame` into the staging directory, then
+    /// renames it into place, so `scan` never sees a recording without its metadata.
+    pub fn finish_recording(&self, pending: &PendingRecording, info: &RecordingInfo, first_frame: Option<&RgbaImage>) -> Result<Item> {
+        let meta = CaptureMeta {
+            version: 1,
+            kind: CaptureKind::Recording,
+            title: default_title(CaptureKind::Recording, &pending.created),
+            created: pending.created,
+            modified: pending.created,
+            width: info.width,
+            height: info.height,
+            duration_ms: Some(info.duration_ms),
+            source: Some(info.source.clone()),
+            imported_from: None,
+        };
+        if let Some(frame) = first_frame {
+            write_png(&thumbnail(frame), &pending.dir.join("thumb.png"))?;
+        }
+        write_meta(&pending.dir, &meta)?;
+        let dir = self.root.join(format!("{}.{RECORDING_EXT}", pending.id));
+        std::fs::rename(&pending.dir, &dir).with_context(|| format!("finalizing {}", dir.display()))?;
+        load(&dir)
+    }
+
     /// Validates an image file and imports a copy. The original is only read.
     pub fn import_file(&self, path: &Path) -> Result<Item> {
         let img = image::open(path)
@@ -170,7 +219,7 @@ impl Library {
     fn reserve(&self, created: &DateTime<Local>) -> Result<(String, PathBuf)> {
         for _ in 0..16 {
             let id = format!("{}_{:04x}", created.format("%Y-%m-%d_%H-%M-%S"), random_u16());
-            if self.root.join(&id).exists() {
+            if self.root.join(&id).exists() || self.root.join(format!("{id}.{RECORDING_EXT}")).exists() {
                 continue;
             }
             let staging = self.root.join(format!(".{id}.tmp"));
@@ -415,5 +464,27 @@ mod tests {
         assert_eq!(lib.scan()[0].meta.title, "Login bug");
         assert_eq!(rename(&item, "   ").unwrap_err().to_string(), "a title cannot be empty");
         assert_eq!(lib.scan()[0].meta.title, "Login bug");
+    }
+
+    #[test]
+    fn finished_recording_is_renamed_into_place_with_meta_and_thumb() {
+        let root = TempRoot::new("rec");
+        let lib = Library::new(&root.0);
+        let pending = lib.begin_recording(at(15, 4, 5)).unwrap();
+        assert!(pending.dir.file_name().unwrap().to_string_lossy().starts_with('.'), "staging is hidden");
+        std::fs::write(pending.dir.join("screen.mp4"), vec![0u8; 300]).unwrap();
+        assert!(lib.scan().is_empty(), "an unfinished recording is not in the Library");
+
+        let info = RecordingInfo { width: 1280, height: 720, duration_ms: 4_250, source: "Display 1".into() };
+        let item = lib.finish_recording(&pending, &info, Some(&checker(1280, 720))).unwrap();
+        assert_eq!(item.dir, root.0.join(format!("{}.glintrec", pending.id)));
+        assert!(!pending.dir.exists());
+        assert_eq!(item.kind(), CaptureKind::Recording);
+        assert_eq!(item.meta.title, "Recording 2026-10-14 at 15.04.05");
+        assert_eq!((item.meta.width, item.meta.height, item.meta.duration_ms), (1280, 720, Some(4_250)));
+        assert_eq!(item.meta.source.as_deref(), Some("Display 1"));
+        let thumb = image::open(item.thumb()).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (512, 288));
+        assert_eq!(lib.scan(), vec![item]);
     }
 }

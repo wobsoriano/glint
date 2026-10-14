@@ -15,6 +15,7 @@ mod overlay;
 mod pin;
 mod prefs;
 mod quicklook;
+mod record;
 mod redact;
 mod settings;
 mod shell;
@@ -68,7 +69,7 @@ pub fn run_command(cmd: Command, cx: &mut App) {
         Command::Capture(CaptureCmd::Window) => flow::capture_window(cx),
         Command::Capture(CaptureCmd::Previous) => flow::capture_previous(cx),
         Command::CaptureTimer => flow::capture_after_timer(cx),
-        Command::Recording => toast::show("Screen recording is not installed in this build", cx),
+        Command::Recording => record::toggle(cx),
         Command::Library => library_window::show(cx),
         Command::Settings => prefs::show(cx),
         Command::OpenLast => flow::open_last(cx),
@@ -82,6 +83,7 @@ fn handle_requests(requests: Vec<Request>, cx: &mut App) {
         match r {
             Request::Capture(c) => run_command(Command::Capture(c), cx),
             Request::Library => library_window::show(cx),
+            Request::Record => record::toggle(cx),
             Request::Open(path) => images.push(path),
         }
     }
@@ -110,6 +112,7 @@ fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
         ("Capture Previous Area", display(HotkeyAction::PreviousArea), Command::Capture(CaptureCmd::Previous)),
         ("Capture Text", display(HotkeyAction::Text), Command::Capture(CaptureCmd::Text)),
         ("Self-Timer", Some(format!("{} s", s.timer_seconds)), Command::CaptureTimer),
+        ("Record Screen", display(HotkeyAction::Recording), Command::Recording),
     ];
     let mut add = |label: String, cmd: Command| {
         let item = MenuItem::new(label, true, None);

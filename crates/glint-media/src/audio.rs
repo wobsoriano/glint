@@ -8,6 +8,7 @@ use crate::wav::WavWriter;
 use anyhow::{bail, Context};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -70,12 +71,18 @@ pub(crate) struct AudioTrack {
 
 impl AudioTrack {
     /// Opens the device (a missing device fails here, before any file exists) and starts
-    /// writing `path`.
-    pub fn start(source: AudioSource, path: &Path, channels: u16, clock: Arc<MediaClock>) -> anyhow::Result<Self> {
+    /// writing `path`. With a `tap`, every converted buffer is also offered to it.
+    pub fn start(
+        source: AudioSource,
+        path: &Path,
+        channels: u16,
+        clock: Arc<MediaClock>,
+        tap: Option<SyncSender<Vec<f32>>>,
+    ) -> anyhow::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let level = Arc::new(LevelMeter::default());
         let writer_path = path.to_path_buf();
-        let thread = spawn_capture(format!("glint-audio-{source:?}"), source, channels, stop.clone(), level.clone(), move || {
+        let thread = spawn_capture(format!("glint-audio-{source:?}"), source, channels, stop.clone(), level.clone(), tap, move || {
             WavWriter::create(&writer_path, SAMPLE_RATE, channels).map(|w| Some((w, clock)))
         })?;
         Ok(Self { stop, thread: Some(thread), level, path: path.to_path_buf() })
@@ -113,7 +120,7 @@ impl MicMonitor {
     pub fn start(mic: Option<DeviceId>) -> anyhow::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let level = Arc::new(LevelMeter::default());
-        let thread = spawn_capture("glint-mic-monitor".into(), AudioSource::Microphone(mic), 1, stop.clone(), level.clone(), || Ok(None))?;
+        let thread = spawn_capture("glint-mic-monitor".into(), AudioSource::Microphone(mic), 1, stop.clone(), level.clone(), None, || Ok(None))?;
         Ok(Self { stop, thread: Some(thread), level })
     }
 
@@ -142,6 +149,7 @@ fn spawn_capture(
     channels: u16,
     stop: Arc<AtomicBool>,
     level: Arc<LevelMeter>,
+    tap: Option<SyncSender<Vec<f32>>>,
     make_sink: impl FnOnce() -> anyhow::Result<Sink> + Send + 'static,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<AudioStats>>> {
     let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
@@ -155,7 +163,7 @@ fn spawn_capture(
             }
         };
         let _ = tx.send(Ok(()));
-        capture.run(sink, &stop, &level)
+        capture.run(sink, &stop, &level, tap)
     })?;
     match rx.recv() {
         Ok(Ok(())) => Ok(thread),
@@ -232,8 +240,8 @@ impl Capture {
     }
 
     /// Pumps packets until `stop`. With a sink, writes them aligned to media time; always
-    /// updates `level`.
-    fn run(mut self, mut sink: Sink, stop: &AtomicBool, level: &LevelMeter) -> anyhow::Result<AudioStats> {
+    /// updates `level`. A full `tap` drops the buffer instead of blocking capture.
+    fn run(mut self, mut sink: Sink, stop: &AtomicBool, level: &LevelMeter, tap: Option<SyncSender<Vec<f32>>>) -> anyhow::Result<AudioStats> {
         let mut out = Vec::new();
         while !stop.load(Ordering::Relaxed) {
             let mut got_any = false;
@@ -254,6 +262,9 @@ impl Capture {
                 self.convert(raw, frames as usize, silent, &mut out);
                 unsafe { self.capture.ReleaseBuffer(frames)? };
                 level.update(&out);
+                if let Some(tap) = &tap {
+                    let _ = tap.try_send(out.clone());
+                }
                 if let Some((writer, clock)) = sink.as_mut() {
                     if !clock.is_paused() {
                         write_aligned(writer, clock, &out, self.out_channels)?;
@@ -408,7 +419,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("system.wav");
         let clock = Arc::new(MediaClock::paused());
-        let track = AudioTrack::start(AudioSource::Loopback, &path, 2, clock.clone()).unwrap();
+        let track = AudioTrack::start(AudioSource::Loopback, &path, 2, clock.clone(), None).unwrap();
         clock.resume();
         std::thread::sleep(Duration::from_millis(700));
         clock.pause();
@@ -424,5 +435,25 @@ mod tests {
         let diff = wav.duration_ms() as i64 - media_ms as i64;
         assert!(diff.abs() <= 70, "wav is {} ms, media time {} ms", wav.duration_ms(), media_ms);
         assert!(wav.duration_ms() < 1200, "the 300 ms pause leaked into the file: {} ms", wav.duration_ms());
+    }
+
+    #[test]
+    #[ignore = "needs a microphone"]
+    fn tap_receives_converted_buffers_without_blocking_capture() {
+        let dir = std::env::temp_dir().join("glint-media-tap-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let clock = Arc::new(MediaClock::paused());
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let track = AudioTrack::start(AudioSource::Microphone(None), &dir.join("mic.wav"), 1, clock.clone(), Some(tx)).unwrap();
+        clock.resume();
+        std::thread::sleep(Duration::from_millis(600));
+        clock.pause();
+        let media_ms = clock.now_ms();
+        let stats = track.stop().unwrap();
+        let buffers: Vec<Vec<f32>> = rx.try_iter().collect();
+        assert_eq!(buffers.len(), 1, "a one-slot tap that nobody reads holds one buffer and drops the rest");
+        assert!(!buffers[0].is_empty());
+        let wav_ms = stats.frames * 1000 / SAMPLE_RATE as u64;
+        assert!((wav_ms as i64 - media_ms as i64).abs() <= 70, "the full tap stalled the file: {wav_ms} ms of {media_ms} ms");
     }
 }

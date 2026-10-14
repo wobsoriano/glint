@@ -40,6 +40,7 @@ fn main() -> anyhow::Result<()> {
         mic,
         camera: get("--camera").map(DeviceId),
         record_input: !has("--no-input"),
+        mic_tap: None,
     };
     println!("start {:?} -> {}", opts.source, session_dir.display());
     let started = Instant::now();

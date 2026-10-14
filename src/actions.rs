@@ -130,7 +130,48 @@ pub fn save(item: &Item, ask: bool, cx: &mut App, done: Done) {
     let s = cx.global::<Settings>();
     let target = if ask || !s.save_without_dialog { SaveTarget::Ask } else { SaveTarget::Folder(s.save_dir.clone()) };
     let item = item.clone();
+    if item.kind() == CaptureKind::Recording {
+        return save_video(item, target, cx, done);
+    }
     with_pixels(&item.clone(), cx, move |img, cx| save_to(item, img, target, cx, done));
+}
+
+/// Copies a recording's screen video out as `<title>.mp4`.
+fn save_video(item: Item, target: SaveTarget, cx: &mut App, done: Done) {
+    let s = cx.global::<Settings>().clone();
+    let stem = shell::sanitize(&item.meta.title);
+    let src = item.deliverable();
+    let copy = move |dest: PathBuf| -> anyhow::Result<PathBuf> {
+        if let Some(dir) = dest.parent() {
+            std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+        }
+        std::fs::copy(&src, &dest).with_context(|| format!("writing {}", dest.display()))?;
+        Ok(dest)
+    };
+    match target {
+        SaveTarget::Folder(dir) => {
+            let dest = shell::unique_path(&dir, &stem, "mp4");
+            let task = cx.background_spawn(async move { copy(dest) });
+            cx.spawn(async move |cx| {
+                let result = task.await;
+                let _ = cx.update(|cx| done(result, cx));
+            })
+            .detach();
+        }
+        SaveTarget::Ask => {
+            let _ = std::fs::create_dir_all(&s.save_dir);
+            let rx = cx.prompt_for_new_path(&s.save_dir, Some(&format!("{stem}.mp4")));
+            cx.spawn(async move |cx| {
+                let Ok(Ok(Some(path))) = rx.await else {
+                    let _ = cx.update(|cx| done(Err(anyhow::anyhow!("cancelled")), cx));
+                    return;
+                };
+                let result = cx.background_spawn(async move { copy(path) }).await;
+                let _ = cx.update(|cx| done(result, cx));
+            })
+            .detach();
+        }
+    }
 }
 
 fn save_to(item: Item, img: Arc<RgbaImage>, target: SaveTarget, cx: &mut App, done: Done) {
