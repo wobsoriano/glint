@@ -1,4 +1,4 @@
-use glint_media::{CaptureSource, Fps, RecordOptions, Recorder, VideoReader};
+use glint_media::{microphones, read_wav, CaptureSource, Fps, RecordOptions, Recorder, VideoReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -11,8 +11,8 @@ fn session(name: &str) -> PathBuf {
     dir
 }
 
-fn start(dir: &PathBuf) -> Recorder {
-    let opts = RecordOptions {
+fn options(dir: &PathBuf) -> RecordOptions {
+    RecordOptions {
         source: CaptureSource::Display(0),
         session_dir: dir.clone(),
         fps: Fps::F30,
@@ -21,8 +21,11 @@ fn start(dir: &PathBuf) -> Recorder {
         camera: None,
         record_input: false,
         mic_tap: None,
-    };
-    Recorder::start(opts).unwrap()
+    }
+}
+
+fn start(dir: &PathBuf) -> Recorder {
+    Recorder::start(options(dir)).unwrap()
 }
 
 fn let_it_die() {
@@ -70,4 +73,22 @@ fn the_recorder_reports_live_until_the_screen_thread_dies() {
     let lived = started.elapsed();
     assert!((Duration::from_millis(500)..Duration::from_secs(2)).contains(&lived), "died after {lived:?}, expected about 0.67 s");
     assert_eq!(rec.stop().files, vec![dir.join("screen.mp4")]);
+}
+
+#[test]
+fn the_audio_tracks_end_where_the_screen_ended() {
+    let dir = session("tracks");
+    let mic = microphones().unwrap_or_default().into_iter().next().map(|m| m.id);
+    let rec = Recorder::start(RecordOptions { system_audio: true, mic: mic.clone(), ..options(&dir) }).unwrap();
+    let_it_die();
+    let summary = rec.stop();
+
+    assert_eq!(summary.warnings, vec![format!("the screen capture failed; the recording ends there: GLINT_FAIL_SCREEN_AFTER: injected failure after {FRAMES} frames")]);
+    assert_eq!(summary.duration_ms, FRAMES * 1000 / 30);
+    let wavs: Vec<_> = summary.files.iter().filter(|f| f.extension().is_some_and(|e| e == "wav")).collect();
+    assert_eq!(wavs.len(), 1 + mic.is_some() as usize);
+    for wav in wavs {
+        let data = read_wav(wav).unwrap();
+        assert_eq!(data.frames() as u64, FRAMES * 48000 / 30, "{}", wav.display());
+    }
 }
