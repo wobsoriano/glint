@@ -4,8 +4,9 @@
 //! While playing, the clock is the audio device's played position when the file has audio,
 //! otherwise the wall clock. Late frames are dropped so video keeps up with the clock.
 
-use glint_media::{read_mp4_audio, AudioOutput, FrameReader, WavData};
+use glint_media::{AudioOutput, AudioReader, FrameReader};
 use gpui::RenderImage;
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -14,6 +15,9 @@ use std::time::Instant;
 
 /// Longest side of preview frames; the window never shows them larger.
 const PREVIEW_MAX: (u32, u32) = (1280, 720);
+
+/// Samples (half a second of 48 kHz stereo) the player keeps decoded ahead of the device.
+const QUEUE_AHEAD: usize = AudioOutput::SAMPLE_RATE as usize * AudioOutput::CHANNELS as usize / 2;
 
 pub struct Player {
     shared: Arc<Shared>,
@@ -28,8 +32,8 @@ struct Shared {
     frame_serial: AtomicU64,
     position_ms: AtomicU64,
     playing: AtomicBool,
-    /// 48 kHz stereo, or `None` when the file has no audio track. Unset while loading.
-    audio: OnceLock<Option<Arc<Vec<f32>>>>,
+    /// Whether the file has an audio track. Unset until the player thread has opened it.
+    has_audio: OnceLock<bool>,
     error: Mutex<Option<String>>,
 }
 
@@ -47,18 +51,6 @@ impl Player {
     pub fn new(path: PathBuf) -> Self {
         let shared = Arc::new(Shared::default());
         shared.ctl.lock().unwrap().seek = Some(0);
-        let sh = shared.clone();
-        let audio_path = path.clone();
-        std::thread::spawn(move || {
-            let pcm = match read_mp4_audio(&audio_path) {
-                Ok(a) => a.map(|a| Arc::new(to_stereo_48k(&a))),
-                Err(e) => {
-                    *sh.error.lock().unwrap() = Some(format!("audio unavailable: {e:#}"));
-                    None
-                }
-            };
-            let _ = sh.audio.set(pcm);
-        });
         let sh = shared.clone();
         let thread = std::thread::Builder::new()
             .name("glint-clip-player".into())
@@ -99,9 +91,9 @@ impl Player {
         self.shared.position_ms.load(Ordering::Relaxed)
     }
 
-    /// `Some(true)` once the audio track is decoded, `Some(false)` when there is none.
+    /// `Some(true)` once the audio track is open, `Some(false)` when there is none.
     pub fn has_audio(&self) -> Option<bool> {
-        self.shared.audio.get().map(Option::is_some)
+        self.shared.has_audio.get().copied()
     }
 
     pub fn error(&self) -> Option<String> {
@@ -162,6 +154,14 @@ fn interrupted(sh: &Shared) -> bool {
 
 fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
     let mut reader = FrameReader::open(path)?;
+    let mut audio = match AudioReader::open(path) {
+        Ok(a) => a.map(Soundtrack::new),
+        Err(e) => {
+            *sh.error.lock().unwrap() = Some(format!("audio unavailable: {e:#}"));
+            None
+        }
+    };
+    let _ = sh.has_audio.set(audio.is_some());
     let frame_ms = 1000.0 / reader.fps().max(1.0);
     let mut buffer = Vec::new();
     let publish = |frame: &glint_media::frames::Nv12Frame, buffer: &mut Vec<u8>| {
@@ -182,17 +182,17 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
             }
             Next::Play { until, muted } => {
                 let start = sh.position_ms.load(Ordering::Relaxed);
-                let audio = (!muted).then(|| sh.audio.get().cloned().flatten()).flatten();
-                let output = audio.and_then(|pcm| {
-                    let mut at = (start as usize * 48 * 2).min(pcm.len());
-                    AudioOutput::start(move |out: &mut [f32]| {
-                        let n = out.len().min(pcm.len() - at);
-                        out[..n].copy_from_slice(&pcm[at..at + n]);
-                        out[n..].fill(0.0);
-                        at += n;
-                    })
-                    .ok()
-                });
+                let mut track = audio.as_mut().filter(|_| !muted);
+                let output = match &mut track {
+                    Some(t) => {
+                        t.seek(start)?;
+                        t.output().ok()
+                    }
+                    None => None,
+                };
+                if output.is_none() {
+                    track = None;
+                }
                 let began = Instant::now();
                 let clock = || match &output {
                     Some(o) => start + o.clock().played_ms() as u64,
@@ -201,6 +201,9 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
                 let finished = loop {
                     if interrupted(sh) {
                         break false;
+                    }
+                    if let Some(t) = &mut track {
+                        t.top_up()?;
                     }
                     let Some(frame) = reader.next_frame()? else { break true };
                     if frame.t_ms >= until {
@@ -211,6 +214,9 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
                         continue;
                     }
                     while clock() < frame.t_ms && !interrupted(sh) {
+                        if let Some(t) = &mut track {
+                            t.top_up()?;
+                        }
                         std::thread::sleep(std::time::Duration::from_millis(2));
                     }
                     publish(&frame, &mut buffer);
@@ -245,24 +251,115 @@ fn preview_image(rgba: &image::RgbaImage) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(smallvec::smallvec![image::Frame::new(img)]))
 }
 
-/// Resamples to [`AudioOutput`]'s 48 kHz stereo: mono doubles up, extra channels drop.
-fn to_stereo_48k(a: &WavData) -> Vec<f32> {
-    let ch = a.channels.max(1) as usize;
-    let frames = a.samples.len() / ch;
-    let at = |i: usize, c: usize| a.samples[i * ch + c.min(ch - 1)];
-    let out_frames = (frames as u64 * AudioOutput::SAMPLE_RATE as u64 / a.sample_rate.max(1) as u64) as usize;
-    let step = a.sample_rate as f64 / AudioOutput::SAMPLE_RATE as f64;
-    let mut out = Vec::with_capacity(out_frames * 2);
-    for i in 0..out_frames {
-        let x = i as f64 * step;
-        let i0 = (x as usize).min(frames.saturating_sub(1));
-        let i1 = (i0 + 1).min(frames.saturating_sub(1));
-        let f = (x - i0 as f64) as f32;
-        for c in 0..2 {
-            out.push(at(i0, c) + (at(i1, c) - at(i0, c)) * f);
-        }
+/// The file's audio for playback: the player thread decodes chunks into a queue of 48 kHz
+/// stereo samples that the output device drains, so only [`QUEUE_AHEAD`] samples are ever
+/// held in memory.
+struct Soundtrack {
+    reader: AudioReader,
+    resampler: Resampler,
+    queue: Arc<Mutex<VecDeque<f32>>>,
+    chunk: Vec<f32>,
+    scratch: Vec<f32>,
+    ended: bool,
+}
+
+impl Soundtrack {
+    fn new(reader: AudioReader) -> Self {
+        let resampler = Resampler::new(reader.sample_rate(), reader.channels());
+        Self { reader, resampler, queue: Arc::default(), chunk: Vec::new(), scratch: vec![0.0; 4096], ended: false }
     }
-    out
+
+    /// Restarts decoding at `ms` with the queue primed.
+    fn seek(&mut self, ms: u64) -> anyhow::Result<()> {
+        self.reader.seek(ms)?;
+        self.resampler.reset();
+        self.queue.lock().unwrap().clear();
+        self.ended = false;
+        self.top_up()
+    }
+
+    /// Decodes until the queue holds [`QUEUE_AHEAD`] samples or the track ends.
+    fn top_up(&mut self) -> anyhow::Result<()> {
+        while self.queue.lock().unwrap().len() < QUEUE_AHEAD {
+            let n = self.resampler.pull(&mut self.scratch, self.ended);
+            if n > 0 {
+                self.queue.lock().unwrap().extend(&self.scratch[..n]);
+            } else if self.ended {
+                return Ok(());
+            } else {
+                self.chunk.clear();
+                self.ended = !self.reader.next_chunk(&mut self.chunk)?;
+                self.resampler.push(&self.chunk);
+            }
+        }
+        Ok(())
+    }
+
+    /// Starts the device on the queue. It plays silence once the queue runs dry.
+    fn output(&self) -> anyhow::Result<AudioOutput> {
+        let queue = self.queue.clone();
+        AudioOutput::start(move |out: &mut [f32]| {
+            let mut q = queue.lock().unwrap_or_else(|e| e.into_inner());
+            let n = out.len().min(q.len());
+            for (o, s) in out[..n].iter_mut().zip(q.drain(..n)) {
+                *o = s;
+            }
+            out[n..].fill(0.0);
+        })
+    }
+}
+
+/// Converts decoded frames to [`AudioOutput`]'s 48 kHz stereo as they are pulled: mono
+/// doubles up, extra channels drop, and other rates interpolate linearly.
+struct Resampler {
+    channels: usize,
+    /// Source frames per output frame.
+    step: f64,
+    /// Source frames not yet consumed; `pos` is the fractional index of the next output frame.
+    pending: Vec<f32>,
+    pos: f64,
+}
+
+impl Resampler {
+    fn new(sample_rate: u32, channels: u16) -> Self {
+        let step = sample_rate.max(1) as f64 / AudioOutput::SAMPLE_RATE as f64;
+        Self { channels: channels.max(1) as usize, step, pending: Vec::new(), pos: 0.0 }
+    }
+
+    fn reset(&mut self) {
+        self.pending.clear();
+        self.pos = 0.0;
+    }
+
+    fn push(&mut self, chunk: &[f32]) {
+        self.pending.extend_from_slice(chunk);
+    }
+
+    /// Fills `out` with the stereo frames the pending input covers and returns the sample
+    /// count. The last input frame is only used up once `ended` says nothing follows it.
+    fn pull(&mut self, out: &mut [f32], ended: bool) -> usize {
+        let ch = self.channels;
+        let frames = self.pending.len() / ch;
+        let mut written = 0;
+        for o in out.chunks_exact_mut(2) {
+            let i0 = self.pos as usize;
+            if i0 >= frames || (i0 + 1 >= frames && !ended) {
+                break;
+            }
+            let i1 = (i0 + 1).min(frames - 1);
+            let f = (self.pos - i0 as f64) as f32;
+            for c in 0..2 {
+                let (a, b) = (self.pending[i0 * ch + c.min(ch - 1)], self.pending[i1 * ch + c.min(ch - 1)]);
+                o[c] = a + (b - a) * f;
+            }
+            self.pos += self.step;
+            written += 2;
+        }
+        let used = (self.pos as usize).min(frames);
+        self.pending.drain(..used * ch);
+        self.pos -= used as f64;
+        written
+    }
 }
 
 #[cfg(test)]
@@ -270,10 +367,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn audio_becomes_48k_stereo() {
-        let mono = WavData { sample_rate: 24_000, channels: 1, samples: vec![0.0, 1.0, 0.0] };
-        assert_eq!(to_stereo_48k(&mono), vec![0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0]);
-        let quad = WavData { sample_rate: 48_000, channels: 4, samples: vec![0.1, 0.2, 0.3, 0.4] };
-        assert_eq!(to_stereo_48k(&quad), vec![0.1, 0.2]);
+    fn chunks_become_48k_stereo() {
+        let mut mono = Resampler::new(24_000, 1);
+        let mut out = [0.0; 12];
+        let mut got = Vec::new();
+        mono.push(&[0.0, 1.0]);
+        let n = mono.pull(&mut out, false);
+        got.extend_from_slice(&out[..n]);
+        mono.push(&[0.0]);
+        let n = mono.pull(&mut out, false);
+        got.extend_from_slice(&out[..n]);
+        let n = mono.pull(&mut out, true);
+        got.extend_from_slice(&out[..n]);
+        assert_eq!(got, vec![0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(mono.pull(&mut out, true), 0);
+
+        let mut quad = Resampler::new(48_000, 4);
+        quad.push(&[0.1, 0.2, 0.3, 0.4]);
+        let n = quad.pull(&mut out, true);
+        assert_eq!(&out[..n], &[0.1, 0.2]);
     }
 }
