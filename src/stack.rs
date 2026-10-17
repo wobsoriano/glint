@@ -237,6 +237,7 @@ impl Stack {
         self.press = None;
         let Some(card) = self.card(id) else { return };
         let item = card.entry.item().clone();
+        let thumb = card.thumb.clone();
         let image = match &card.entry {
             Entry::Shot(s) => Some(s.image.clone()),
             Entry::Recording(_) => None,
@@ -248,7 +249,7 @@ impl Stack {
         // The drag loop pumps messages, so it must run outside any GPUI update.
         cx.spawn(async move |_, cx| {
             Timer::after(Duration::from_millis(1)).await;
-            let dropped = actions::drag_file(&item).and_then(|path| shell::drag_out(&path, image.as_deref()));
+            let dropped = actions::drag_file(&item).and_then(|path| shell::drag_out(&path, image.as_deref(), &thumb));
             let _ = handle.update(cx, |_, window, cx| {
                 let _ = this.update(cx, |s, cx| match dropped {
                     Ok(true) if dismiss => s.remove(id, window, cx),

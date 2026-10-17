@@ -7,14 +7,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{implement, w, BOOL, HRESULT, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{
     DATA_S_SAMEFORMATETC, DV_E_FORMATETC, DV_E_TYMED, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, HANDLE, HGLOBAL, HWND, LPARAM,
-    OLE_E_ADVISENOTSUPPORTED, POINT, RECT, S_OK,
+    COLORREF, OLE_E_ADVISENOTSUPPORTED, POINT, RECT, SIZE, S_OK,
 };
 use windows::Win32::Graphics::Gdi::{
-    ClientToScreen, GetMonitorInfoW, MonitorFromPoint, BITMAPINFOHEADER, BI_RGB, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    ClientToScreen, CreateDIBSection, DeleteObject, GetMonitorInfoW, MonitorFromPoint, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+    DIB_RGB_COLORS, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Com::{
-    IAdviseSink, IDataObject, IDataObject_Impl, IEnumFORMATETC, IEnumSTATDATA, DATADIR_GET, DVASPECT_CONTENT, FORMATETC,
-    STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL,
+    CoCreateInstance, IAdviseSink, IDataObject, IDataObject_Impl, IEnumFORMATETC, IEnumSTATDATA, CLSCTX_INPROC_SERVER,
+    DATADIR_GET, DVASPECT_CONTENT, FORMATETC, IStream, STGMEDIUM, STGMEDIUM_0, STREAM_SEEK_SET, TYMED_HGLOBAL, TYMED_ISTREAM,
 };
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
@@ -23,13 +24,14 @@ use windows::Win32::System::Registry::{RegGetValueW, RegSetKeyValueW, HKEY_CURRE
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::Controls::{
-    TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOG_BUTTON, TDCBF_CANCEL_BUTTON,
+    TaskDialogIndirect, CLR_NONE, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOG_BUTTON, TDCBF_CANCEL_BUTTON,
     TDF_ALLOW_DIALOG_CANCELLATION, TD_WARNING_ICON,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    ILCreateFromPathW, ILFindLastID, ILFree, SHCreateStdEnumFmtEtc, SHDoDragDrop, SHOpenFolderAndSelectItems, DROPFILES,
+    IDragSourceHelper, ILCreateFromPathW, ILFindLastID, ILFree, SHCreateMemStream, SHCreateStdEnumFmtEtc, SHDoDragDrop,
+    SHOpenFolderAndSelectItems, CLSID_DragDropHelper, DROPFILES, SHDRAGIMAGE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumThreadWindows, GetAncestor, GetClientRect, GetCursorPos, GetWindowRect, SetWindowDisplayAffinity, SetWindowPos, EVENT_OBJECT_SHOW,
@@ -149,61 +151,148 @@ pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow
     }
 }
 
-/// Runs a modal OLE drag of one file, with its pixels attached for apps that take bitmaps.
-/// Call it while no GPUI borrow is held: the drag loop pumps window messages.
-pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>) -> anyhow::Result<bool> {
-    let mut data = DragData::default();
-    data.set(CF_HDROP.0, drop_files(std::slice::from_ref(&path.to_path_buf())));
+/// Runs a modal OLE drag of one file, with its pixels attached for apps that take bitmaps and
+/// `thumb` floating under the cursor. Call it while no GPUI borrow is held: the drag loop
+/// pumps window messages.
+pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>, thumb: &gpui::RenderImage) -> anyhow::Result<bool> {
+    let data = DragData::default();
+    data.set(CF_HDROP.0, Medium::HGlobal, drop_files(std::slice::from_ref(&path.to_path_buf())));
     if let Some(img) = image {
-        data.set(CF_DIB.0, dib(img));
+        data.set(CF_DIB.0, Medium::HGlobal, dib(img));
     }
     let data: IDataObject = data.into();
+    if let Err(e) = set_drag_image(&data, thumb) {
+        eprintln!("dragging without a thumbnail: {e:#}");
+    }
     unsafe {
         let effect = SHDoDragDrop(None, &data, None, DROPEFFECT_COPY)?;
         Ok(effect != DROPEFFECT_NONE)
     }
 }
 
-fn hglobal_format(cf: u16) -> FORMATETC {
-    FORMATETC { cfFormat: cf, ptd: std::ptr::null_mut(), dwAspect: DVASPECT_CONTENT.0, lindex: -1, tymed: TYMED_HGLOBAL.0 as u32 }
+/// Without an image on the data object, SHDoDragDrop drags only the cursor. The thumbnail is
+/// fitted to 96 DIPs, the size of Explorer's own drag thumbnails.
+fn set_drag_image(data: &IDataObject, thumb: &gpui::RenderImage) -> anyhow::Result<()> {
+    let size = thumb.size(0);
+    let bgra = thumb
+        .as_bytes(0)
+        .and_then(|b| image::RgbaImage::from_raw(size.width.0 as u32, size.height.0 as u32, b.to_vec()))
+        .context("the card thumbnail has no pixels")?;
+    let fit = 96.0 * work_area_at_cursor().1 / bgra.width().max(bgra.height()) as f32;
+    let (w, h) = (((bgra.width() as f32 * fit).round() as u32).max(1), ((bgra.height() as f32 * fit).round() as u32).max(1));
+    let small = image::imageops::thumbnail(&bgra, w, h);
+    unsafe {
+        let helper: IDragSourceHelper = CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER)?;
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w as i32,
+                biHeight: -(h as i32),
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits = std::ptr::null_mut();
+        let bitmap = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0)?;
+        let dst = std::slice::from_raw_parts_mut(bits as *mut u8, (w * h * 4) as usize);
+        for (d, p) in dst.chunks_exact_mut(4).zip(small.pixels()) {
+            let a = p[3] as u32;
+            d.copy_from_slice(&[(p[0] as u32 * a / 255) as u8, (p[1] as u32 * a / 255) as u8, (p[2] as u32 * a / 255) as u8, p[3]]);
+        }
+        let image = SHDRAGIMAGE {
+            sizeDragImage: SIZE { cx: w as i32, cy: h as i32 },
+            ptOffset: POINT { x: w as i32 / 2, y: h as i32 / 2 },
+            hbmpDragImage: bitmap,
+            crColorKey: COLORREF(CLR_NONE as u32),
+        };
+        helper.InitializeFromBitmap(&image, data).inspect_err(|_| {
+            let _ = DeleteObject(bitmap.into());
+        })?;
+    }
+    Ok(())
 }
 
-/// The data object behind a card drag: HGLOBAL formats only, each handed out as a fresh
-/// GMEM_MOVEABLE block, which is what Explorer's drags deliver and what GPUI 0.2.2's drop
-/// target can read. That target dereferences the CF_HDROP handle as a moveable handle's
-/// pointer slot; the GMEM_FIXED blocks the shell's own data objects return crash it.
+/// How a stored format travels. The drag image helper stores its DragContext as a stream.
+#[derive(Clone, Copy)]
+enum Medium {
+    HGlobal,
+    Stream,
+}
+
+impl Medium {
+    fn tymed(self) -> u32 {
+        match self {
+            Medium::HGlobal => TYMED_HGLOBAL.0 as u32,
+            Medium::Stream => TYMED_ISTREAM.0 as u32,
+        }
+    }
+}
+
+fn stored_format(cf: u16, medium: Medium) -> FORMATETC {
+    FORMATETC { cfFormat: cf, ptd: std::ptr::null_mut(), dwAspect: DVASPECT_CONTENT.0, lindex: -1, tymed: medium.tymed() }
+}
+
+/// The data object behind a card drag: each format kept as bytes and handed out fresh per
+/// GetData, HGLOBALs as GMEM_MOVEABLE blocks, which is what Explorer's drags deliver and what
+/// GPUI 0.2.2's drop target can read. That target dereferences the CF_HDROP handle as a
+/// moveable handle's pointer slot; the GMEM_FIXED blocks the shell's own data objects return
+/// crash it.
 #[implement(IDataObject)]
 #[derive(Default)]
-struct DragData(RefCell<Vec<(u16, Vec<u8>)>>);
+struct DragData(RefCell<Vec<(u16, Medium, Vec<u8>)>>);
 
 impl DragData {
-    fn set(&mut self, cf: u16, bytes: Vec<u8>) {
-        let entries = self.0.get_mut();
-        match entries.iter_mut().find(|(f, _)| *f == cf) {
-            Some((_, b)) => *b = bytes,
-            None => entries.push((cf, bytes)),
+    fn set(&self, cf: u16, medium: Medium, bytes: Vec<u8>) {
+        let mut entries = self.0.borrow_mut();
+        match entries.iter_mut().find(|(f, _, _)| *f == cf) {
+            Some(entry) => *entry = (cf, medium, bytes),
+            None => entries.push((cf, medium, bytes)),
         }
     }
 
     fn has(&self, fmt: &FORMATETC) -> bool {
-        fmt.tymed & TYMED_HGLOBAL.0 as u32 != 0
-            && fmt.dwAspect == DVASPECT_CONTENT.0
-            && self.0.borrow().iter().any(|(f, _)| *f == fmt.cfFormat)
+        fmt.dwAspect == DVASPECT_CONTENT.0
+            && self.0.borrow().iter().any(|(f, m, _)| *f == fmt.cfFormat && fmt.tymed & m.tymed() != 0)
     }
 
-    fn get(&self, fmt: &FORMATETC) -> Option<Vec<u8>> {
+    fn get(&self, fmt: &FORMATETC) -> Option<(Medium, Vec<u8>)> {
         if !self.has(fmt) {
             return None;
         }
-        self.0.borrow().iter().find(|(f, _)| *f == fmt.cfFormat).map(|(_, b)| b.clone())
+        self.0.borrow().iter().find(|(f, _, _)| *f == fmt.cfFormat).map(|(_, m, b)| (*m, b.clone()))
+    }
+}
+
+unsafe fn read_stream(stream: &IStream) -> windows::core::Result<Vec<u8>> {
+    unsafe {
+        stream.Seek(0, STREAM_SEEK_SET, None)?;
+        let mut out = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            let mut n = 0u32;
+            stream.Read(buf.as_mut_ptr().cast(), buf.len() as u32, Some(&mut n)).ok()?;
+            if n == 0 {
+                return Ok(out);
+            }
+            out.extend_from_slice(&buf[..n as usize]);
+        }
     }
 }
 
 impl IDataObject_Impl for DragData_Impl {
     fn GetData(&self, fmt: *const FORMATETC) -> windows::core::Result<STGMEDIUM> {
-        let bytes = self.get(unsafe { &*fmt }).ok_or(DV_E_FORMATETC)?;
-        let block = hglobal(&bytes).map_err(|_| E_OUTOFMEMORY)?;
-        Ok(STGMEDIUM { tymed: TYMED_HGLOBAL.0 as u32, u: STGMEDIUM_0 { hGlobal: block }, pUnkForRelease: std::mem::ManuallyDrop::new(None) })
+        let (medium, bytes) = self.get(unsafe { &*fmt }).ok_or(DV_E_FORMATETC)?;
+        let u = match medium {
+            Medium::HGlobal => STGMEDIUM_0 { hGlobal: hglobal(&bytes).map_err(|_| E_OUTOFMEMORY)? },
+            Medium::Stream => {
+                let stream = unsafe { SHCreateMemStream(Some(&bytes)) }.ok_or(E_OUTOFMEMORY)?;
+                STGMEDIUM_0 { pstm: std::mem::ManuallyDrop::new(Some(stream)) }
+            }
+        };
+        Ok(STGMEDIUM { tymed: medium.tymed(), u, pUnkForRelease: std::mem::ManuallyDrop::new(None) })
     }
 
     fn GetDataHere(&self, _: *const FORMATETC, _: *mut STGMEDIUM) -> windows::core::Result<()> {
@@ -231,24 +320,25 @@ impl IDataObject_Impl for DragData_Impl {
 
     fn SetData(&self, fmt: *const FORMATETC, medium: *const STGMEDIUM, release: BOOL) -> windows::core::Result<()> {
         let (fmt, medium) = unsafe { (&*fmt, &*medium) };
-        if medium.tymed != TYMED_HGLOBAL.0 as u32 {
+        let (kind, bytes) = if medium.tymed == TYMED_HGLOBAL.0 as u32 {
+            let bytes = unsafe {
+                let h = medium.u.hGlobal;
+                let p = GlobalLock(h) as *const u8;
+                if p.is_null() {
+                    return Err(E_INVALIDARG.into());
+                }
+                let bytes = std::slice::from_raw_parts(p, GlobalSize(h)).to_vec();
+                let _ = GlobalUnlock(h);
+                bytes
+            };
+            (Medium::HGlobal, bytes)
+        } else if medium.tymed == TYMED_ISTREAM.0 as u32 {
+            let stream = unsafe { medium.u.pstm.as_ref() }.ok_or(E_INVALIDARG)?;
+            (Medium::Stream, unsafe { read_stream(stream) }?)
+        } else {
             return Err(DV_E_TYMED.into());
-        }
-        let bytes = unsafe {
-            let h = medium.u.hGlobal;
-            let p = GlobalLock(h) as *const u8;
-            if p.is_null() {
-                return Err(E_INVALIDARG.into());
-            }
-            let bytes = std::slice::from_raw_parts(p, GlobalSize(h)).to_vec();
-            let _ = GlobalUnlock(h);
-            bytes
         };
-        let mut entries = self.0.borrow_mut();
-        match entries.iter_mut().find(|(f, _)| *f == fmt.cfFormat) {
-            Some((_, b)) => *b = bytes,
-            None => entries.push((fmt.cfFormat, bytes)),
-        }
+        self.set(fmt.cfFormat, kind, bytes);
         if release.as_bool() {
             unsafe { ReleaseStgMedium(medium as *const _ as *mut _) };
         }
@@ -259,7 +349,7 @@ impl IDataObject_Impl for DragData_Impl {
         if direction != DATADIR_GET.0 as u32 {
             return Err(E_NOTIMPL.into());
         }
-        let formats: Vec<FORMATETC> = self.0.borrow().iter().map(|(cf, _)| hglobal_format(*cf)).collect();
+        let formats: Vec<FORMATETC> = self.0.borrow().iter().map(|(cf, m, _)| stored_format(*cf, *m)).collect();
         unsafe { SHCreateStdEnumFmtEtc(&formats) }
     }
 
@@ -561,6 +651,10 @@ mod drag_data {
     use super::*;
     use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 
+    fn hglobal_format(cf: u16) -> FORMATETC {
+        stored_format(cf, Medium::HGlobal)
+    }
+
     /// GPUI 0.2.2's DragEnter: GetData(CF_HDROP), dereference the HGLOBAL as a pointer to an
     /// HDROP, DragQueryFileW on what came out.
     unsafe fn read_like_gpui(data: &IDataObject) -> Vec<String> {
@@ -583,8 +677,8 @@ mod drag_data {
     #[test]
     fn the_drag_data_object_survives_gpuis_hdrop_read_twice() {
         let path = PathBuf::from(r"C:\Glint\Drag\Capture.png");
-        let mut data = DragData::default();
-        data.set(CF_HDROP.0, drop_files(std::slice::from_ref(&path)));
+        let data = DragData::default();
+        data.set(CF_HDROP.0, Medium::HGlobal, drop_files(std::slice::from_ref(&path)));
         let data: IDataObject = data.into();
         let got = unsafe { read_like_gpui(&data) };
         assert_eq!(got, vec![r"C:\Glint\Drag\Capture.png".to_string()]);
@@ -624,6 +718,18 @@ mod drag_data {
             assert_eq!(data.SetData(&fmt, &medium, false).unwrap_err().code(), E_INVALIDARG);
             assert_eq!(data.QueryGetData(&fmt), DV_E_FORMATETC);
         }
+    }
+
+    #[test]
+    fn the_shell_takes_a_card_thumbnail_as_the_drag_image() {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+        use windows::Win32::System::DataExchange::RegisterClipboardFormatW;
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        let data: IDataObject = DragData::default().into();
+        let thumb = crate::win::render_image(&image::RgbaImage::from_pixel(64, 36, image::Rgba([40, 120, 220, 255])));
+        set_drag_image(&data, &thumb).unwrap();
+        let bits = unsafe { RegisterClipboardFormatW(w!("DragImageBits")) } as u16;
+        assert_eq!(unsafe { data.QueryGetData(&hglobal_format(bits)) }, S_OK);
     }
 
     #[test]
