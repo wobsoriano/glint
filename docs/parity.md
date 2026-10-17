@@ -8,19 +8,19 @@ calls the real code. The evidence column points at that proof.
 
 - [x] Capture display, window, area as screenshot — W4 drove area/CLI captures; window via picker
 - [x] Global hotkeys for full screen, window, area, recording picker, capture text; rebinding in Settings with failure message and fallback — W4 30-rebind-fail, 31-rebind-ok
-- [ ] Self-timer 3/5/10 s
+- [x] Self-timer 3/5/10 s — W11 11-timer-toast (3 s chip and toast); W12 07/08-timer5 (capture landed 4.8 s after the tray click), 09-tray-menu-10s, 11-timer10-card (9.9 s)
 - [x] PNG or JPEG with quality; export folder; Save bypasses dialog option — W6 s7-saved (JPEG to export folder)
-- [ ] Optional window shadow on window captures
+- [x] Optional window shadow on window captures — W12 17-window-shadow-on (1666x984, transparent corners) vs 18-window-shadow-off (1582x891, opaque)
 - [x] Glint windows excluded from captures by default, opt-in to include — W4 28-excluded
-- [ ] Capture Text: OCR to clipboard in reading order, toast, nothing saved
+- [x] Capture Text: OCR to clipboard in reading order, toast, nothing saved — W12 20-text-toast; two-column clipboard text read back line by line; Library and export file counts unchanged
 - [x] Every capture is imported into the Library before automation runs — store.rs import tests; W6 s2-card
 
 ## After capture and preview stack
 
 - [x] Screenshot automation: show preview, copy, save, open editor, pin (any combination) — W4 settings pane + W6 flow
-- [ ] Recording automation: show preview, copy, save, open Studio
+- [x] Recording automation: show preview, copy, save, open Studio — W12 42-rec-preview-card, 43-rec-copy (clipboard FileDrop of the .mp4), 43-rec-save (2.9 s mp4 in export folder), 43-rec-studio
 - [x] Floating preview stack, multiple cards, left or right side, auto close delay, dismiss after drag — W4 05-stack, 33/34-throw
-- [ ] Card actions: copy, drag out to other apps, save, compress to JPEG, pin, quick look, annotate/edit, delete, dismiss, copy text (OCR)
+- [x] Card actions: copy, drag out to other apps, save, compress to JPEG, pin, quick look, annotate/edit, delete, dismiss, copy text (OCR) — W12 22-card-copy through 32-card-edit, 60/61-dragout (PNG dropped into Explorer, app alive); clipboard and files read back
 - [x] Rearrangeable card actions: four corner slots, center buttons, hidden tray (Settings > Overlay) — W4 12-overlay-reordered
 - [x] Collapsed stack becomes a peek tab — W4 04-peek-b
 - [x] Save failure dialog with retry or choose another location — W4 26-save-failed
@@ -33,7 +33,7 @@ calls the real code. The evidence column points at that proof.
 - [x] Quick look on double-click or Space; Edit reopens editor or Studio with saved edits — W4 22-quicklook, W6 s5, W8b actions::edit
 - [x] Multi-select (Ctrl-click, Shift-click, Ctrl+A); copy, export, reveal in Explorer, move to Recycle Bin — W4 19-20 (copy/export/reveal not clicked)
 - [x] Rename with Enter (title stored in metadata) — W4 rename test + 32-grid-hover
-- [ ] Opens from tray and Ctrl+Shift+L; normal launch opens Library, autostart stays in tray
+- [x] Opens from tray and Ctrl+Shift+L; normal launch opens Library, autostart stays in tray — W12 01-launch-library, 02-autostart-tray, 03-ctrl-shift-l, 06-tray-open-library, 13/14 (launched with the Run entry's own `--background` command line: no windows)
 - [x] Open images from Explorer (Open with Glint), imports a copy, opens editor per image — W4 27-open-with, W6 s1-openwith
 
 ## Annotation editor
@@ -51,13 +51,14 @@ calls the real code. The evidence column points at that proof.
 - [x] Perspective, rotation, zoom, pan mockup controls — W5 s17/s43
 - [x] Progressive blur, radial or directional, clipped or bleeding — W5 s19/s20
 - [x] Canvas zoom: fit (Ctrl+1), actual (Ctrl+0), in/out to 1000%, Ctrl+scroll around pointer, scroll pans — W5 s31
-- [ ] Save, Done, copy, pin; failed save keeps editor open
+- [x] Save, Done, copy, pin; failed save keeps editor open — W12 33-editor-copy, 34-editor-pin, 35-editor-save (1774x1083 PNG exported), 36-done-failed (blocked write, editor stays), 37-done-ok (closes, edit.json has both arrows)
 
 ## Screen recording
 
 - [x] Picker: display, window, area; camera; microphone; system audio toggle; 1/3/5 s timer; teleprompter script — W7 a1-picker
 - [x] Countdown cancellable with Cancel or Esc — W7 c1/c2
-- [ ] Live camera preview before recording; missing devices warn and continue
+- [x] Missing devices warn and continue — W12 54-picker-camera-unavailable, 56-rec-warns, 57-rec-continued-card (remembered camera and mic absent; 2.8 s screen.mp4 recorded)
+- [ ] Live camera preview before recording — not verifiable: no camera on the test machine
 - [x] Area guide: highlighted region, dimmed rest, click-through, excluded from recording — W7 a1, b2-frame
 - [x] Control bar: elapsed time, pause/resume, restart, stop, delete — W7 p1, f1
 - [x] Separate masters: screen without cursor, camera, mic, system audio, input timeline — W1 record.rs run, w1-input.png
