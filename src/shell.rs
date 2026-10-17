@@ -443,13 +443,19 @@ fn command_exe(command: &str) -> Option<PathBuf> {
     Some(PathBuf::from(&quoted[..quoted.find('"')?]))
 }
 
+/// True when the registered open command already launches this exe, so a newer build at
+/// another path takes the registration over and the same build leaves it alone.
+fn registered_here(command: &str, exe: &Path) -> bool {
+    command_exe(command).is_some_and(|p| p.as_os_str().eq_ignore_ascii_case(exe.as_os_str()))
+}
+
 pub fn register_open_with() -> anyhow::Result<()> {
     let app = r"Software\Classes\Applications\glint.exe";
     let command_key = format!(r"{app}\shell\open\command");
-    if reg_get(&command_key).and_then(|c| command_exe(&c)).is_some_and(|exe| exe.is_file()) {
+    let exe = std::env::current_exe()?;
+    if reg_get(&command_key).is_some_and(|c| registered_here(&c, &exe)) {
         return Ok(());
     }
-    let exe = std::env::current_exe()?;
     let command = format!("\"{}\" \"%1\"", exe.display());
     reg_set(app, Some("FriendlyAppName"), "Glint")?;
     reg_set(&command_key, None, &command)?;
@@ -514,6 +520,14 @@ mod tests {
         assert_eq!(command_exe(command), Some(PathBuf::from(r"C:\Program Files\Glint\glint.exe")));
         assert_eq!(command_exe(r#"glint.exe "%1""#), None);
         assert_eq!(command_exe(r#""unterminated"#), None);
+    }
+
+    #[test]
+    fn only_a_command_for_this_exe_counts_as_registered() {
+        let exe = Path::new(r"C:\Users\me\Glint\glint.exe");
+        assert!(registered_here(r#""C:\Users\ME\glint\GLINT.EXE" "%1""#, exe));
+        assert!(!registered_here(r#""C:\Users\me\old-build\glint.exe" "%1""#, exe));
+        assert!(!registered_here("glint.exe %1", exe));
     }
 }
 
