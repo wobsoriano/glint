@@ -1,6 +1,3 @@
-//! Rendering the edited recording: the Export dialog, and the Copy and Save quick actions,
-//! which render with the project's remembered export options.
-
 use super::{Notice, Studio};
 use crate::settings::Settings;
 use crate::shell;
@@ -13,11 +10,8 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Job {
-    /// Render with the dialog's options and save to the export folder.
     Export,
-    /// Render with the project's options and save to the export folder.
     Save,
-    /// Render with the project's options and put the file on the clipboard.
     Copy,
 }
 
@@ -77,7 +71,6 @@ impl Studio {
         cx.notify();
     }
 
-    /// Renders on a background thread and finishes `job` with the file.
     pub(super) fn run_job(&mut self, job: Job, cx: &mut Context<Self>) {
         if self.export.is_running() {
             return;
@@ -89,7 +82,6 @@ impl Studio {
                     snap.project.audio.mic.enabled = false;
                     snap.project.audio.system.enabled = false;
                 }
-                // Confirmed options become the project's own, used by Copy and Save.
                 let opts = *opts;
                 if self.session.project.export != opts {
                     self.session.project.export = opts;

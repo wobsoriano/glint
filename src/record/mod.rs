@@ -1,6 +1,3 @@
-//! Screen recording: the picker, start countdown, area guide, control bar and teleprompter,
-//! and the session lifecycle that writes each recording into the Library as `<id>.glintrec`.
-
 mod bar;
 mod chrome;
 mod countdown;
@@ -20,18 +17,14 @@ use std::time::Duration;
 pub use bar::clock;
 pub use target::Target;
 
-/// Where a recording is in its life. Each stage owns what only exists during it.
 #[derive(Default)]
 enum Stage {
     #[default]
     Idle,
-    /// The picker is up, or the overlay is choosing a source for it.
     Picking,
     Countdown { left: u32 },
-    /// `Recorder::start` is running in the background.
     Starting,
     Live(Box<Live>),
-    /// The files are being finalized and moved into the Library.
     Finishing,
 }
 
@@ -54,14 +47,10 @@ struct Windows {
 #[derive(Default)]
 pub struct Rec {
     stage: Stage,
-    /// Bumped whenever a pending countdown or start is superseded, so its continuation can
-    /// tell it lost.
     epoch: u64,
     target: Option<Target>,
-    /// Meters the chosen microphone while the picker is open.
     monitor: Option<MicMonitor>,
     windows: Windows,
-    /// [`quit`] was asked for; the app quits once the current stage has settled.
     quitting: bool,
 }
 
@@ -81,7 +70,6 @@ fn update_prefs(cx: &mut App, f: impl FnOnce(&mut RecordPrefs)) {
     s.save();
 }
 
-/// The record action (hotkey, tray, `--record`): opens the picker, or stops what is running.
 pub fn toggle(cx: &mut App) {
     match rec(cx).stage {
         Stage::Idle => open_picker(cx),
@@ -95,8 +83,6 @@ pub fn toggle(cx: &mut App) {
     }
 }
 
-/// Quits the app, after finishing a recording in progress into the Library like Stop would.
-/// A picker or countdown is cancelled instead.
 pub fn quit(cx: &mut App) {
     rec(cx).quitting = true;
     match rec(cx).stage {
@@ -112,7 +98,6 @@ pub fn quit(cx: &mut App) {
             cx.quit();
         }
         Stage::Live(_) => stop(cx),
-        // Their continuations read `quitting` and carry on from there.
         Stage::Starting | Stage::Finishing => {}
     }
 }
@@ -134,14 +119,12 @@ fn open_picker(cx: &mut App) {
     camera_bubble(cx);
 }
 
-/// Brings the picker back after the overlay was dismissed with Esc.
 pub fn reopen_picker(cx: &mut App) {
     if matches!(rec(cx).stage, Stage::Picking) {
         open_picker(cx);
     }
 }
 
-/// The overlay finished choosing a window or an area (or the whole display).
 pub fn picked(rect: [i32; 4], window: Option<(isize, String)>, cx: &mut App) {
     let target = match window {
         Some((hwnd, title)) => Target::window(hwnd, title).map(Some),
@@ -168,7 +151,6 @@ pub fn picked(rect: [i32; 4], window: Option<(isize, String)>, cx: &mut App) {
     open_picker(cx);
 }
 
-/// Switches the kind of source. Window and area hand over to the overlay picker.
 fn choose(kind: RecordTarget, cx: &mut App) {
     if !matches!(rec(cx).stage, Stage::Picking) {
         return;
@@ -197,7 +179,6 @@ fn hide_picker_chrome(cx: &mut App) {
     }
 }
 
-/// Closes the picker and everything it opened.
 fn close_picker(cx: &mut App) {
     rec(cx).epoch += 1;
     hide_picker_chrome(cx);
@@ -229,7 +210,6 @@ fn show_guide(cx: &mut App) {
     rec(cx).windows.guide = guide::open(target, cx);
 }
 
-/// The Record button: runs the start timer, then starts.
 fn record(cx: &mut App) {
     if !matches!(rec(cx).stage, Stage::Picking) {
         return;
@@ -287,7 +267,6 @@ fn countdown_left(cx: &App) -> Option<u32> {
     }
 }
 
-/// Starts recording the chosen target into a fresh Library staging directory.
 fn begin(cx: &mut App) {
     let Some(target) = rec(cx).target.clone() else { return };
     let p = prefs(cx);
@@ -295,7 +274,6 @@ fn begin(cx: &mut App) {
     r.epoch += 1;
     let epoch = r.epoch;
     r.stage = Stage::Starting;
-    // The recorder opens the microphone and camera itself.
     r.monitor = None;
     let countdown = r.windows.countdown.take();
     chrome::close(countdown, cx);
@@ -385,8 +363,6 @@ fn begin(cx: &mut App) {
     .detach();
 }
 
-/// Stops on the user's behalf when the screen capture ends before they do, because its
-/// window closed or it failed; `stop` then says why in a toast.
 fn watch_live(epoch: u64, cx: &mut App) {
     cx.spawn(async move |cx| loop {
         Timer::after(Duration::from_millis(250)).await;
@@ -408,7 +384,6 @@ fn watch_live(epoch: u64, cx: &mut App) {
     .detach();
 }
 
-/// Closes every recording window and returns to idle.
 fn end(cx: &mut App) {
     let r = rec(cx);
     r.epoch += 1;
@@ -442,7 +417,6 @@ fn pause_toggle(cx: &mut App) {
     with_live(cx, |l| if l.recorder.is_paused() { l.recorder.resume() } else { l.recorder.pause() });
 }
 
-/// Discards what was recorded and starts again on the same source.
 fn restart(cx: &mut App) {
     let Some(live) = take_live(cx) else { return };
     let prompter = rec(cx).windows.prompter.take();
@@ -457,7 +431,6 @@ fn restart(cx: &mut App) {
     .detach();
 }
 
-/// Throws the recording away.
 fn delete(cx: &mut App) {
     let Some(live) = take_live(cx) else { return };
     end(cx);
@@ -465,7 +438,6 @@ fn delete(cx: &mut App) {
     toast::show("Recording deleted", cx);
 }
 
-/// Stops, finalizes the package into the Library, then runs the after-recording actions.
 fn stop(cx: &mut App) {
     let Some(live) = take_live(cx) else { return };
     end(cx);
@@ -520,8 +492,6 @@ fn automate(item: Item, cx: &mut App) {
     }
 }
 
-/// One short line for start-up warnings: each warning up to its error detail, which can be
-/// a long device path. The full text goes to stderr.
 fn warning_summary(warnings: &[String]) -> String {
     warnings.iter().map(|w| w.split(": ").next().unwrap_or(w)).collect::<Vec<_>>().join(" · ")
 }

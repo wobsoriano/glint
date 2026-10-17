@@ -1,5 +1,3 @@
-//! Quick Look: a large preview of one capture. Space or Esc closes it.
-
 use crate::library::{CaptureKind, Item};
 use crate::ui::{self, FONT};
 use crate::{actions, shell, win};
@@ -22,7 +20,6 @@ pub struct QuickLook {
     focus: FocusHandle,
 }
 
-/// Shows `item`, reusing the open Quick Look window if there is one.
 pub fn open(item: Item, cx: &mut App) {
     if let Some(h) = cx.default_global::<QuickLookState>().0 {
         let reused = h.update(cx, |this, window, cx| {

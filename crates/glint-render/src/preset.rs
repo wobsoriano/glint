@@ -1,5 +1,3 @@
-//! Named looks (style + effects) and the portable `.glintpreset` exchange format.
-
 use crate::doc::{EditDoc, Effects};
 use crate::style::{Background, Style};
 use anyhow::{bail, ensure, Context as _};
@@ -46,12 +44,10 @@ struct PortablePreset {
     style: Style,
     #[serde(default)]
     effects: Effects,
-    /// Settings that could not travel, such as a local background image.
     #[serde(default)]
     omitted: Vec<String>,
 }
 
-/// A style with local file references removed; a missing image becomes no background.
 fn portable_style(style: &Style) -> (Style, Vec<String>) {
     let mut style = style.clone();
     let mut omitted = Vec::new();
@@ -78,7 +74,6 @@ pub fn export(presets: &[Preset]) -> String {
     serde_json::to_string_pretty(&file).expect("presets serialize")
 }
 
-/// Parses a `.glintpreset` document.
 pub fn import(json: &str) -> anyhow::Result<Vec<Preset>> {
     ensure!(!json.trim().is_empty(), "The preset file is empty");
     ensure!(json.len() <= MAX_FILE_BYTES, "The preset file is too large");

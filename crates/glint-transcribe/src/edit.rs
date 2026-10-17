@@ -2,8 +2,6 @@ use std::ops::Range;
 
 use crate::transcript::{TimeRange, Word};
 
-/// A word cut reaches at most this far into the pause around it, so the splice lands in the
-/// pause instead of clipping a neighbor.
 const MAX_WORD_PADDING_MS: u64 = 120;
 
 /// Source-time ranges that remove the selected words, sorted and merged. Each cut extends into

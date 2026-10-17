@@ -1,6 +1,3 @@
-//! The screen master: Windows.Graphics.Capture frames, cropped on the GPU, encoded at a
-//! constant frame rate on media time.
-
 use crate::clock::MediaClock;
 use crate::d3d::D3dDevice;
 use crate::devices::{PhysicalPixels, Rect};
@@ -26,24 +23,19 @@ use windows::Win32::System::WinRT::Direct3D11::IDirect3DDxgiInterfaceAccess;
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
-/// What the screen track captures, resolved to handles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScreenSource {
-    /// A whole monitor, or the `crop` rectangle of it in monitor-local physical pixels.
     Monitor { hmonitor: isize, crop: Option<Rect> },
     Window { hwnd: isize },
 }
 
-/// Which Win32 rectangle matches what WGC captures for a window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WindowBounds {
-    /// `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)`: the visible frame.
     Dwm,
     /// `GetWindowRect`: includes invisible resize borders.
     WindowRect,
 }
 
-/// The rectangle WGC captures for `hwnd` right now, in virtual-desktop physical pixels.
 pub(crate) fn window_capture_rect(hwnd: isize, bounds: WindowBounds) -> Option<Rect> {
     let _physical = PhysicalPixels::enter();
     let hwnd = HWND(hwnd as *mut _);
@@ -63,12 +55,10 @@ fn media_100ns(clock: &MediaClock) -> i64 {
     clock.now().as_nanos() as i64 / 100
 }
 
-/// Fixed facts about a started screen track that other tracks (input mapping) need.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ScreenGeometry {
     pub width: u32,
     pub height: u32,
-    /// For window sources: which rectangle the frames correspond to.
     pub window_bounds: Option<WindowBounds>,
 }
 
@@ -77,7 +67,6 @@ pub(crate) struct ScreenStats {
     pub frames: u64,
     pub bytes: u64,
     pub hardware: bool,
-    /// The captured window closed before `stop` was called.
     pub source_closed: bool,
 }
 
@@ -89,8 +78,6 @@ pub(crate) struct ScreenTrack {
 }
 
 impl ScreenTrack {
-    /// Opens capture and the encoder, waits for the first frame, then returns. Frames are
-    /// written only while `clock` runs.
     pub fn start(source: ScreenSource, fps: u32, path: &Path, clock: Arc<MediaClock>) -> anyhow::Result<(Self, ScreenGeometry)> {
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<(ScreenGeometry, Vec<String>)>>();
@@ -126,7 +113,6 @@ impl ScreenTrack {
         }
     }
 
-    /// False once the capture thread has ended on its own: its source closed or it failed.
     pub fn is_live(&self) -> bool {
         self.thread.as_ref().is_some_and(|t| !t.is_finished())
     }
@@ -153,7 +139,6 @@ struct Capture {
     pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
     pool_size: SizeInt32,
-    /// Most recent captured frame, already cropped to the output size.
     latest: ID3D11Texture2D,
     have_frame: bool,
     crop_origin: (u32, u32),
@@ -166,8 +151,6 @@ struct Capture {
     fail_after: Option<u64>,
 }
 
-/// `GLINT_FAIL_SCREEN_AFTER=<n>` makes the frame write fail once `n` frames are in the file,
-/// to exercise the capture thread's failure path. Unset, nothing is injected.
 fn injected_failure() -> Option<u64> {
     std::env::var("GLINT_FAIL_SCREEN_AFTER").ok()?.parse().ok()
 }
@@ -265,13 +248,10 @@ impl Capture {
         Ok(())
     }
 
-    /// Copies every pending WGC frame into `latest`, keeping only the newest.
     fn drain(&mut self) -> anyhow::Result<()> {
         while let Ok(frame) = self.pool.TryGetNextFrame() {
             let content = frame.ContentSize()?;
             if content != self.pool_size && content.Width > 0 && content.Height > 0 {
-                // The window was resized: resize the pool and start from a black frame so the
-                // uncovered area does not keep stale pixels.
                 self.pool.Recreate(&self.d3d.winrt_device()?, DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, content)?;
                 self.pool_size = content;
                 let g = self.geometry;
@@ -294,8 +274,6 @@ impl Capture {
         Ok(())
     }
 
-    /// Writes `latest` once for every frame slot due up to the current media time, so the
-    /// stream stays constant-rate whether or not WGC delivered anything new.
     fn catch_up(&mut self, clock: &MediaClock, frame_dur: i64, next_index: &mut i64) -> anyhow::Result<()> {
         let target_index = media_100ns(clock) / frame_dur;
         while *next_index <= target_index {
@@ -310,9 +288,6 @@ impl Capture {
         Ok(())
     }
 
-    /// Captures until `stop`, the source closing, or a failure. The session is closed and the
-    /// sink finalized whichever way the loop ended, so the file plays up to the last frame
-    /// written, and a failure is returned only once it has been.
     fn run(mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<ScreenStats> {
         let captured = self.capture(clock, stop);
         let _ = self.session.Close();
@@ -327,7 +302,6 @@ impl Capture {
         Ok(ScreenStats { frames, bytes, hardware, source_closed })
     }
 
-    /// The capture loop. True when the source closed before `stop`.
     fn capture(&mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<bool> {
         let frame_dur = self.sink.params().frame_duration();
         let mut next_index: i64 = 0;

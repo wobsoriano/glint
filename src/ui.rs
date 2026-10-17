@@ -1,6 +1,3 @@
-//! Glint's widget kit and Windows 11 look: one theme that follows the system light/dark
-//! setting and accent color, 8 px cards, 4 px controls, 1 px borders.
-
 use gpui::prelude::*;
 use gpui::{
     canvas, div, linear_color_stop, linear_gradient, px, relative, rgba, svg, AnyView, App, Bounds, ClickEvent,
@@ -15,20 +12,15 @@ use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_R
 
 pub const FONT: &str = "Segoe UI Variable Text";
 
-/// Corner radius of windows, cards and panels.
 pub const RADIUS_WINDOW: f32 = 8.;
-/// Corner radius of buttons, fields and other controls.
 pub const RADIUS_CONTROL: f32 = 4.;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Theme {
     pub dark: bool,
     pub accent: Rgba,
-    /// Text and icons on accent fills.
     pub on_accent: Rgba,
-    /// Window surface over the Mica backdrop.
     pub base: Rgba,
-    /// Toolbars and sidebars.
     pub layer: Rgba,
     pub card: Rgba,
     pub control: Rgba,
@@ -36,11 +28,8 @@ pub struct Theme {
     pub border: Rgba,
     pub text: Rgba,
     pub muted: Rgba,
-    /// Behind images: the editor canvas and thumbnail wells.
     pub canvas: Rgba,
-    /// Text box fill.
     pub field: Rgba,
-    /// Menus, tooltips and other popups.
     pub flyout: Rgba,
 }
 
@@ -53,7 +42,6 @@ fn reg_dword(key: PCWSTR, value: PCWSTR) -> Option<u32> {
     r.is_ok().then_some(v)
 }
 
-/// Reads the system light/dark setting and accent color.
 fn read_theme() -> Theme {
     let light = reg_dword(w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"), w!("AppsUseLightTheme")) == Some(1);
     // AccentColor is stored as 0xAABBGGRR.
@@ -61,7 +49,6 @@ fn read_theme() -> Theme {
         .map(|v| (v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF))
         .unwrap_or((0x00, 0x67, 0xC0));
     if !light && r.max(g).max(b) < 0x90 {
-        // Dark surfaces need a light enough accent to read; lift dim accents toward white.
         let lift = |c: u32| c + (0xFF - c) / 3;
         (r, g, b) = (lift(r), lift(g), lift(b));
     }
@@ -107,12 +94,10 @@ fn read_theme() -> Theme {
 
 static THEME: LazyLock<RwLock<Theme>> = LazyLock::new(|| RwLock::new(read_theme()));
 
-/// The current system theme.
 pub fn theme() -> Theme {
     *THEME.read().unwrap()
 }
 
-/// Re-reads the system theme. Returns true when it changed and windows need a redraw.
 pub fn refresh_theme() -> bool {
     let next = read_theme();
     let mut t = THEME.write().unwrap();
@@ -163,7 +148,6 @@ pub fn tooltip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) 
     move |_, cx| cx.new(|_| Tip(text.clone())).into()
 }
 
-/// A square toolbar button holding one icon; `active` fills it with the accent.
 pub fn icon_button(
     id: impl Into<ElementId>,
     icon_name: &str,
@@ -275,7 +259,6 @@ pub fn toggle(
         .on_click(on_click)
 }
 
-/// A color swatch; with two or more colors it shows a gradient.
 pub fn swatch(
     id: impl Into<ElementId>,
     colors: &[Rgba],
@@ -308,7 +291,6 @@ pub fn swatch(
         .on_click(on_click)
 }
 
-/// A card with a title, used for inspector sections.
 pub fn section(title: &str) -> gpui::Div {
     let t = theme();
     div()
@@ -335,7 +317,6 @@ fn hash(s: &str) -> u64 {
     h.finish()
 }
 
-/// A horizontal slider track. Keeps tracking the pointer outside its bounds while dragging.
 pub fn slider_track(key: &str, value: f32, min: f32, max: f32, on_change: OnValue) -> gpui::Stateful<gpui::Div> {
     let t = theme();
     let id = hash(key);
@@ -416,7 +397,6 @@ pub fn slider_track(key: &str, value: f32, min: f32, max: f32, on_change: OnValu
         )
 }
 
-/// Labeled slider with its value on the right.
 pub fn slider(key: &str, label: &str, value: f32, min: f32, max: f32, display: String, on_change: OnValue) -> impl IntoElement {
     let t = theme();
     div()
@@ -434,7 +414,6 @@ pub fn slider(key: &str, label: &str, value: f32, min: f32, max: f32, display: S
         .child(slider_track(key, value, min, max, on_change))
 }
 
-/// Keycap-style label for shortcuts.
 pub fn kbd(text: &str) -> impl IntoElement {
     let t = theme();
     div().flex().gap_1().children(text.split('+').map(move |k| {
@@ -459,8 +438,6 @@ pub enum Edit {
     Ignored,
 }
 
-/// Applies one key press to a single-line text value (type, Backspace, Ctrl+Backspace,
-/// Ctrl+V, Enter, Esc). The caret is always at the end.
 pub fn edit_text(text: &mut String, e: &gpui::KeyDownEvent) -> Edit {
     let k = &e.keystroke;
     let ctrl = k.modifiers.control;
@@ -499,7 +476,6 @@ pub fn edit_text(text: &mut String, e: &gpui::KeyDownEvent) -> Edit {
     }
 }
 
-/// A single-line text box drawn for a value edited with [`edit_text`].
 pub fn text_box(value: &str, placeholder: &str, focused: bool) -> gpui::Div {
     let t = theme();
     div()

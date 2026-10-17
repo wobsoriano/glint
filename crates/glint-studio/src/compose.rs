@@ -1,10 +1,3 @@
-//! The frame compositor: background, the zoomed screen card, cursor, click highlights,
-//! keystroke captions, camera bubble and spoken captions, drawn with tiny-skia.
-//!
-//! Background and shadows are drawn once per output size and design into a cached stage,
-//! and motion is precomputed once per project state, so a frame costs one copy of the stage
-//! plus the moving layers.
-
 use crate::motion::Motion;
 use crate::overlays::CaptionWord;
 use crate::project::{AspectPreset, Project};
@@ -34,8 +27,6 @@ pub struct CursorImage {
     pub scale: f32,
 }
 
-/// Session data the compositor needs besides the project: the input timeline, cursor
-/// sprites and caption words (source time). Also holds the per-project caches.
 pub struct Assets {
     input: InputTimeline,
     cursors: HashMap<u32, CursorImage>,
@@ -73,7 +64,6 @@ impl Assets {
         &self.input
     }
 
-    /// Motion for the project, rebuilt only when a field it depends on changed.
     pub fn motion(&self, project: &Project) -> Arc<Motion> {
         let key = serde_json::to_string(&(
             &project.clips,
@@ -133,11 +123,9 @@ pub struct FrameInputs<'a> {
     pub output_ms: f64,
 }
 
-/// Where things sit on the canvas.
 struct Layout {
     card: R,
     radius: f32,
-    /// Size the cropped screen draws at with no zoom; larger than the card in Fill mode.
     fill_w: f64,
     fill_h: f64,
     bubble: Option<(R, f32)>,
@@ -170,7 +158,6 @@ fn layout(project: &Project, src: (u32, u32), out: (u32, u32)) -> Layout {
     Layout { card, radius: d.corner_radius * short, fill_w, fill_h, bubble }
 }
 
-/// The static part of a frame for one size and design.
 struct Stage {
     layout: Layout,
     base: Pixmap,
@@ -206,7 +193,6 @@ impl Stage {
     }
 }
 
-/// Maps screen-master pixels to canvas pixels for one camera state.
 #[derive(Clone, Copy)]
 struct ScreenXf {
     k: f64,
@@ -232,13 +218,10 @@ impl ScreenXf {
     }
 }
 
-/// Composes the frame at `inputs.output_ms` without motion blur (preview).
 pub fn compose_frame(project: &Project, assets: &Assets, inputs: &FrameInputs, out_size: (u32, u32)) -> RgbaImage {
     compose(project, assets, inputs, out_size, false)
 }
 
-/// Composes an export frame: with `export.motion_blur` on and the camera moving, the screen
-/// layer is the average of sub-frames spread over a one-frame shutter.
 pub fn compose_frame_motion_blur(
     project: &Project,
     assets: &Assets,
@@ -262,11 +245,9 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     let mut pm = canvas_from(&stage.base);
     let samples = if blur { shutter_samples(project, t, &xf_at, l) } else { vec![xf] };
     for (i, s) in samples.iter().enumerate() {
-        // Drawing sample i at 1/(i+1) keeps the result the running average.
         draw_screen(&mut pm, &stage.card_mask, &l.card, inputs.screen, *s, 256 / (i as u32 + 1));
     }
 
-    // Overlays inside the card do not grow with zoom: they scale with the unzoomed card.
     if project.click_highlights {
         let base = l.fill_h * 21.0 / 1080.0 * project.design.cursor.size as f64;
         for c in motion.clicks.at(t, base) {
@@ -301,9 +282,6 @@ fn compose(project: &Project, assets: &Assets, inputs: &FrameInputs, out: (u32, 
     rgba_from_opaque_pixmap(pm)
 }
 
-/// Bilinear blit of the opaque screen frame through `xf`, clipped by the card mask and mixed
-/// over what is there with `weight`/256. tiny-skia's general pattern pipeline costs about
-/// 19 ms for a 1080p card; this scale-and-translate special case splits rows across threads.
 fn draw_screen(pm: &mut Pixmap, mask: &Mask, card: &R, src: &RgbaImage, xf: ScreenXf, weight: u32) {
     let (pw, ph) = (pm.width() as usize, pm.height() as usize);
     let x0 = (card.x.floor().max(0.0) as usize).min(pw);
@@ -316,7 +294,6 @@ fn draw_screen(pm: &mut Pixmap, mask: &Mask, card: &R, src: &RgbaImage, xf: Scre
     let (sw, sh) = (src.width() as usize, src.height() as usize);
     let src = src.as_raw();
     let inv = 1.0 / xf.k;
-    // Source column pair and 8-bit fraction for each destination column.
     let cols: Vec<(usize, usize, u32)> = (x0..x1)
         .map(|x| {
             let sx = ((x as f64 + 0.5 - xf.tx) * inv - 0.5).clamp(0.0, (sw - 1) as f64);
@@ -365,8 +342,6 @@ fn draw_screen(pm: &mut Pixmap, mask: &Mask, card: &R, src: &RgbaImage, xf: Scre
     });
 }
 
-/// Camera states across a one-frame shutter centred on `t`. A settled camera gets one
-/// sample; a moving one gets roughly one sample per two pixels of travel, capped.
 fn shutter_samples(project: &Project, t: f64, xf_at: &dyn Fn(f64) -> ScreenXf, l: &Layout) -> Vec<ScreenXf> {
     let shutter = 1000.0 / project.export.fps.value() as f64;
     let corners = |x: ScreenXf| {
@@ -382,7 +357,6 @@ fn shutter_samples(project: &Project, t: f64, xf_at: &dyn Fn(f64) -> ScreenXf, l
         .collect()
 }
 
-/// White marks over a faint dark halo, so a click reads on light and dark content alike.
 fn draw_click(pm: &mut Pixmap, x: f32, y: f32, c: &crate::overlays::ClickFrame, mask: &Mask) {
     let color = |base: Color, a: f64| {
         let mut p = Paint { anti_alias: true, ..Default::default() };
@@ -419,8 +393,6 @@ fn alpha(a: f64) -> u8 {
     (a.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// A pill pinned to one of six spots on the card edge, unaffected by zoom. It steps clear
-/// of the caption bar instead of covering it.
 fn draw_keystroke(
     pm: &mut Pixmap,
     card: &R,
@@ -478,8 +450,6 @@ fn draw_camera(pm: &mut Pixmap, b: &R, radius: f32, cam: &RgbaImage) {
 const KARAOKE: Color = Color::rgb(0xFFD60A);
 const CAPTION_MAX_LINES: usize = 3;
 
-/// A centred bar on the canvas; long text wraps, and shrinks past three lines.
-/// Returns the bar's rect.
 fn draw_captions(pm: &mut Pixmap, project: &Project, c: &crate::overlays::CaptionFrame) -> R {
     let (w, h) = (pm.width() as f32, pm.height() as f32);
     let s = &project.captions;
@@ -532,13 +502,10 @@ fn draw_captions(pm: &mut Pixmap, project: &Project, c: &crate::overlays::Captio
     bar
 }
 
-/// Arrow drawn when a recording has no sprite for a cursor id.
 fn sprite_for(assets: &Assets, id: u32) -> &CursorImage {
     assets.cursors.get(&id).unwrap_or_else(|| fallback_cursor())
 }
 
-/// Sprite scale that makes a 16 logical px cursor 3.2% of the card height, so the cursor reads
-/// the same at any recording resolution or display scale.
 fn cursor_scale(card_h: f64, sprite: &CursorImage) -> f64 {
     card_h * 0.032 / 16.0 / sprite.scale.max(0.5) as f64
 }
@@ -565,12 +532,9 @@ fn fallback_cursor() -> &'static CursorImage {
     })
 }
 
-/// Frames handed back by consumers, reused as canvases: a fresh multi-megabyte buffer per
-/// frame costs more in page faults than drawing the frame.
 static CANVASES: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
 const MAX_POOLED: usize = 8;
 
-/// Returns a finished frame's buffer for reuse by later frames.
 pub fn recycle_frame(frame: RgbaImage) {
     let mut pool = CANVASES.lock().unwrap_or_else(|e| e.into_inner());
     if pool.len() < MAX_POOLED {
@@ -591,7 +555,6 @@ fn canvas_from(base: &Pixmap) -> Pixmap {
     }
 }
 
-/// Unpremultiplies in place; opaque pixels, nearly all of them, are left untouched.
 fn rgba_from_opaque_pixmap(pm: Pixmap) -> RgbaImage {
     let (w, h) = (pm.width(), pm.height());
     let mut data = pm.take();
@@ -612,8 +575,6 @@ mod tests {
     use crate::project::Resolution;
     use glint_media::input::{CursorSprite, InputTimeline, PointerSample};
 
-    /// A 4K recording from a 150% display, whose arrow is a 48 px sprite, exported at 1080p
-    /// with the pointer resting at (1000, 1000). Returns the drawn cursor's size in canvas px.
     fn cursor_size_at_1080p(multiplier: f32) -> (u32, u32) {
         let input = InputTimeline {
             version: 1,
@@ -651,7 +612,6 @@ mod tests {
 
     #[test]
     fn cursor_is_sized_relative_to_the_card() {
-        // A 48 px sprite at 150% is 32 logical px: 2 x 3.2% of the 1080 px card, times the multiplier.
         assert_eq!(cursor_size_at_1080p(1.0), (69, 69));
         assert_eq!(cursor_size_at_1080p(0.5), (35, 35));
     }

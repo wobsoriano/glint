@@ -1,8 +1,3 @@
-//! Fast sequential decode for playback and export. Frames come out of the decoder (on the
-//! GPU when it can) as NV12 and are converted to RGBA on demand, across all cores, by whoever
-//! needs the pixels. [`crate::VideoReader`] instead converts on the decoding thread through
-//! Media Foundation's single-threaded RGB32 path, which caps 4K decode near 50 fps.
-
 use crate::d3d::D3dDevice;
 use crate::mf::{self, pcwstr, unpack2, wide};
 use anyhow::Context;
@@ -17,7 +12,6 @@ use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::StructuredStorage::{PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0};
 use windows::Win32::System::Variant::VT_I8;
 
-/// Sequential and seekable NV12 frames from the video track of an MP4.
 pub struct FrameReader {
     reader: IMFSourceReader,
     width: u32,
@@ -27,7 +21,6 @@ pub struct FrameReader {
     matrix: Matrix,
     skip_until_ms: Option<u64>,
     d3d: Option<D3dDevice>,
-    /// Readback target for hardware frames, by texture size.
     staging: Option<((u32, u32), ID3D11Texture2D)>,
 }
 
@@ -42,7 +35,6 @@ pub struct Nv12Frame {
     matrix: Matrix,
 }
 
-/// Y'CbCr to RGB coefficients, 16.16 fixed point, for limited-range input.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Matrix {
     rv: i32,
@@ -56,7 +48,6 @@ const BT601: Matrix = Matrix { rv: 104_597, gu: -25_675, gv: -53_279, bu: 132_20
 const Y_SCALE: i32 = 76_309;
 
 impl FrameReader {
-    /// Opens `path`, decoding on the GPU when a hardware decoder is available.
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         mf::init()?;
         match D3dDevice::new().and_then(|d3d| Self::open_with(path, Some(d3d))) {
@@ -176,9 +167,6 @@ impl FrameReader {
         }
     }
 
-    /// Copies the planes out of the decoder's buffer without row padding. A hardware frame is
-    /// read back through a staging texture kept for the next frame; Media Foundation's own
-    /// `Lock2D` readback allocates one per call.
     fn copy_out(&mut self, t_ms: u64, sample: &IMFSample) -> anyhow::Result<Nv12Frame> {
         let (w, h) = (self.width as usize, self.height as usize);
         let mut data = take_buffer(w * h + w * h.div_ceil(2));
@@ -246,8 +234,6 @@ impl FrameReader {
     }
 }
 
-/// Copies an NV12 image whose luma plane spans `y_rows` rows of `pitch` bytes into `out`,
-/// packed at `w` bytes per row.
 fn copy_planes(src: &[u8], pitch: usize, y_rows: usize, w: usize, out: &mut [u8]) {
     let h = out.len() / w * 2 / 3;
     let (luma, chroma) = out.split_at_mut(w * h);
@@ -260,8 +246,6 @@ fn copy_planes(src: &[u8], pitch: usize, y_rows: usize, w: usize, out: &mut [u8]
     }
 }
 
-/// Plane buffers of dropped frames. Reusing them avoids faulting in fresh pages for every
-/// frame, which costs more than the copy at 4K.
 static POOL: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
 const MAX_POOLED: usize = 8;
 
@@ -326,7 +310,6 @@ mod tests {
 
     #[test]
     fn nv12_converts_limited_range_bt709() {
-        // 2x2 frames: a white and a black column, then flat pure red.
         let mut out = vec![0u8; 16];
         nv12_to_rgba(&[235, 16, 235, 16, 128, 128], 2, 2, BT709, &mut out);
         assert_eq!(out, [255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255]);

@@ -1,7 +1,3 @@
-//! Pure geometry for the Studio window: where the screen card and camera bubble sit on the
-//! preview, crop rectangles, and the timeline's time-to-pixel mapping. All preview values
-//! are logical pixels relative to the displayed frame's top-left corner.
-
 use glint_studio::{CameraSettings, CropRect, Project};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -18,7 +14,6 @@ impl Rect {
     }
 }
 
-/// The screen card in a Fit-mode frame of `size`, matching the compositor's layout.
 pub fn card_rect(project: &Project, source: (u32, u32), size: (f32, f32)) -> Rect {
     let (w, h) = size;
     let inset = project.design.padding.clamp(0.0, 0.475) * w.min(h);
@@ -28,7 +23,6 @@ pub fn card_rect(project: &Project, source: (u32, u32), size: (f32, f32)) -> Rec
     Rect { x: (w - cw) / 2.0, y: (h - ch) / 2.0, w: cw, h: ch }
 }
 
-/// The camera bubble's square in a frame of `size`, matching the compositor's clamping.
 pub fn bubble_rect(cam: &CameraSettings, size: (f32, f32)) -> Rect {
     let (w, h) = size;
     let short = w.min(h);
@@ -41,7 +35,6 @@ pub fn bubble_rect(cam: &CameraSettings, size: (f32, f32)) -> Rect {
     Rect { x: cx - dia / 2.0, y: cy - dia / 2.0, w: dia, h: dia }
 }
 
-/// Crop aspect presets for the screen card.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CropRatio {
     Freeform,
@@ -76,7 +69,6 @@ impl CropRatio {
         }
     }
 
-    /// Width over height in source pixels.
     pub fn value(self, source: (u32, u32)) -> Option<f32> {
         match self {
             CropRatio::Freeform => None,
@@ -92,13 +84,10 @@ impl CropRatio {
 
 pub const MIN_CROP: f32 = 0.05;
 
-/// Width over height of a normalized crop for a pixel ratio.
 fn normalized_ratio(ratio: f32, source: (u32, u32)) -> f32 {
     ratio * source.1 as f32 / source.0.max(1) as f32
 }
 
-/// The crop spanned from `anchor` toward `to` (normalized source points), held to `ratio`
-/// and kept inside the source.
 pub fn crop_from_drag(anchor: (f32, f32), to: (f32, f32), ratio: Option<f32>, source: (u32, u32)) -> CropRect {
     let (sx, sy) = (if to.0 >= anchor.0 { 1.0 } else { -1.0 }, if to.1 >= anchor.1 { 1.0 } else { -1.0 });
     let room_w = if sx > 0.0 { 1.0 - anchor.0 } else { anchor.0 };
@@ -120,7 +109,6 @@ pub fn crop_from_drag(anchor: (f32, f32), to: (f32, f32), ratio: Option<f32>, so
     CropRect { x: x.clamp(0.0, 1.0 - w), y: y.clamp(0.0, 1.0 - h), w, h }
 }
 
-/// The largest crop of `ratio` that fits the source, centered on `around`'s center.
 pub fn crop_for_ratio(around: CropRect, ratio: Option<f32>, source: (u32, u32)) -> CropRect {
     let Some(r) = ratio.map(|r| normalized_ratio(r, source)) else { return around };
     let (w, h) = if r >= 1.0 { (1.0, 1.0 / r) } else { (r, 1.0) };
@@ -128,7 +116,6 @@ pub fn crop_for_ratio(around: CropRect, ratio: Option<f32>, source: (u32, u32)) 
     CropRect { x: (cx - w / 2.0).clamp(0.0, 1.0 - w), y: (cy - h / 2.0).clamp(0.0, 1.0 - h), w, h }
 }
 
-/// Maps output time to timeline pixels: `start_ms` sits at x = 0.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TimeScale {
     pub start_ms: f64,
@@ -136,7 +123,6 @@ pub struct TimeScale {
 }
 
 impl TimeScale {
-    /// `zoom` 1 shows the whole `duration_ms` across `width`.
     pub fn new(duration_ms: f64, width: f32, zoom: f64, start_ms: f64) -> Self {
         let visible = duration_ms.max(1.0) / zoom.max(1.0);
         let start = start_ms.clamp(0.0, (duration_ms - visible).max(0.0));
@@ -152,13 +138,11 @@ impl TimeScale {
     }
 }
 
-/// The timeline start that keeps `anchor_ms` under pixel `anchor_x` after zooming.
 pub fn zoom_around(duration_ms: f64, width: f32, zoom: f64, anchor_ms: f64, anchor_x: f32) -> f64 {
     let visible = duration_ms / zoom.max(1.0);
     (anchor_ms - anchor_x as f64 * visible / width.max(1.0) as f64).clamp(0.0, (duration_ms - visible).max(0.0))
 }
 
-/// `m:ss.t` for the transport and the ruler.
 pub fn format_time(ms: f64) -> String {
     let tenths = (ms.max(0.0) / 100.0).floor() as u64;
     format!("{}:{:02}.{}", tenths / 600, tenths / 10 % 60, tenths % 10)

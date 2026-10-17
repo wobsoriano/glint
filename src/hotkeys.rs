@@ -1,6 +1,3 @@
-//! Global shortcuts: registration at startup and rebinding from Settings. A rebinding that
-//! cannot be registered keeps the previous, working shortcut.
-
 use crate::settings::{HotkeyAction, Settings};
 use global_hotkey::hotkey::HotKey;
 use global_hotkey::GlobalHotKeyManager;
@@ -9,7 +6,6 @@ use gpui::{App, Global};
 pub struct Hotkeys {
     manager: Option<GlobalHotKeyManager>,
     bindings: Vec<(HotKey, HotkeyAction)>,
-    /// Actions whose saved shortcut could not be registered at startup, with the reason.
     pub failures: Vec<(HotkeyAction, String)>,
 }
 
@@ -42,8 +38,6 @@ impl Hotkeys {
         }
     }
 
-    /// Releases every shortcut so Settings can record a combo that is currently bound.
-    /// `register_all` restores them.
     pub fn suspend(&mut self) {
         let Some(manager) = &self.manager else { return };
         for (hk, _) in self.bindings.drain(..) {
@@ -87,7 +81,6 @@ impl Hotkeys {
     }
 }
 
-/// Binds `accel` to `action` and saves it, or explains why not and keeps the old shortcut.
 pub fn rebind(action: HotkeyAction, accel: &str, cx: &mut App) -> Result<(), String> {
     cx.global_mut::<Hotkeys>().rebind(action, accel)?;
     let s = cx.global_mut::<Settings>();
@@ -97,7 +90,6 @@ pub fn rebind(action: HotkeyAction, accel: &str, cx: &mut App) -> Result<(), Str
     Ok(())
 }
 
-/// Builds an accelerator like "Ctrl+Shift+4" from a key press, or None for a lone modifier.
 pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     let key = match k.key.as_str() {
         "control" | "shift" | "alt" | "platform" | "function" | "" => return Ok(None),
@@ -129,7 +121,6 @@ pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     parse(&accel).map(|_| Some(accel)).map_err(|_| format!("{key} cannot be used in a global shortcut"))
 }
 
-/// How a stored accelerator reads in the UI.
 pub fn display(accel: &str) -> String {
     accel.replace("Super", "Win")
 }

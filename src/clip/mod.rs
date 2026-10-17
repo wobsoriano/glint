@@ -1,6 +1,3 @@
-//! Trim & Compress: a small window that keeps a span of any video file and re-encodes it
-//! smaller, next to the original. The original is only ever read.
-
 mod model;
 mod player;
 
@@ -31,7 +28,6 @@ const THUMB_H: u32 = 112;
 const STRIP_H: f32 = 56.;
 const HANDLE_W: f32 = 12.;
 
-/// Asks for a video file, then opens it.
 pub fn pick(cx: &mut App) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
@@ -50,7 +46,6 @@ pub fn pick(cx: &mut App) {
     .detach();
 }
 
-/// Opens `path` in a new Trim & Compress window.
 pub fn open(path: PathBuf, cx: &mut App) {
     if !is_video(&path) {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -88,7 +83,6 @@ enum Stage {
     Ready(Box<Edit>),
 }
 
-/// An open file with its selection and settings.
 struct Edit {
     source: Source,
     player: Player,
@@ -163,7 +157,6 @@ impl ClipEditor {
         Self { stage: Stage::Opening, focus: cx.focus_handle(), strip: Rc::default() }
     }
 
-    /// Picks up new preview frames and export progress.
     fn tick(&mut self, cx: &mut Context<Self>) {
         let Stage::Ready(edit) = &mut self.stage else { return };
         let seen = edit.frame.as_ref().map_or(0, |f| f.0);
@@ -355,8 +348,6 @@ fn thumbnails(path: &Path) -> anyhow::Result<Vec<Arc<RenderImage>>> {
         .collect())
 }
 
-/// Encodes beside the destination and moves the result into place, so a failed or
-/// cancelled export never leaves a broken file under the chosen name.
 fn write_clip(src: &Path, dest: &Path, topts: &TranscodeOptions, cancel: &AtomicBool, progress: &AtomicU32) -> anyhow::Result<u64> {
     if dest.exists() && std::fs::canonicalize(dest).ok() == std::fs::canonicalize(src).ok() {
         bail!("choose another name: the original is never overwritten");
@@ -471,7 +462,6 @@ impl ClipEditor {
         };
         let weak: WeakEntity<Self> = cx.entity().downgrade();
         let strip = self.strip.clone();
-        // The handles hang outside the strip, so the padded row takes the presses.
         div().id("scrubber").px(px(HANDLE_W + 12.)).pt_2().cursor_pointer().on_mouse_down(MouseButton::Left, cx.listener(|this, ev: &gpui::MouseDownEvent, _, cx| this.press(ev.position, cx))).child(
             div()
                 .relative()

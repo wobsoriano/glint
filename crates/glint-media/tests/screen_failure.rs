@@ -1,9 +1,3 @@
-//! The screen capture thread dies mid-recording (`GLINT_FAIL_SCREEN_AFTER` injects the
-//! failure): `stop` must still hand back a playable `screen.mp4`, `cancel` must still delete.
-//!
-//! Records display 0 for real, so it needs a desktop session. Its own test binary, because
-//! the environment variable would leak into any other test that records.
-
 use glint_media::{CaptureSource, Fps, RecordOptions, Recorder, VideoReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -31,7 +25,6 @@ fn start(dir: &PathBuf) -> Recorder {
     Recorder::start(opts).unwrap()
 }
 
-/// Past the injected failure point (20 frames at 30 fps is 0.67 s), with margin.
 fn let_it_die() {
     std::thread::sleep(Duration::from_secs(2));
 }

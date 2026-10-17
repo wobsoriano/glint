@@ -1,6 +1,3 @@
-//! The preview: the player's latest frame fit to the available space, with the camera
-//! bubble handle, the crop editor and the zoom focus pad drawn over it.
-
 use super::geometry::{bubble_rect, card_rect, crop_for_ratio, crop_from_drag, CropRatio, Rect};
 use super::{Drag, Mode, Notice, Studio, Tab};
 use crate::shell;
@@ -15,7 +12,6 @@ use gpui::{
 const HANDLE: f32 = 12.0;
 
 impl Studio {
-    /// The displayed frame's size in logical pixels.
     fn frame_size(&self) -> (f32, f32) {
         let b = self.frame_bounds.get();
         (f32::from(b.size.width), f32::from(b.size.height))
@@ -30,12 +26,10 @@ impl Studio {
         self.session.tracks.camera.is_some() && self.project().design.camera.visible
     }
 
-    /// The screen card on the displayed frame while cropping or setting a focus point.
     fn card(&self) -> Rect {
         card_rect(&self.preview_project(), self.session.source_size, self.frame_size())
     }
 
-    /// A frame point as a normalized point inside the card.
     fn in_card(&self, local: (f32, f32)) -> (f32, f32) {
         let c = self.card();
         (((local.0 - c.x) / c.w).clamp(0.0, 1.0), ((local.1 - c.y) / c.h).clamp(0.0, 1.0))
@@ -300,7 +294,6 @@ impl Studio {
                 .border_2()
                 .border_color(ui::accent())
         };
-        // Shades the card outside `inner`.
         let mask = |card: Rect, inner: Rect| {
             div()
                 .absolute()

@@ -1,6 +1,3 @@
-//! Named Studio presets: a saved `Design` (background, layout, cursor, camera).
-//! Each preset is `<dir>/<slug>.json`; the default's name lives in `<dir>/default.txt`.
-
 use crate::project::{Design, Project};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -112,7 +109,6 @@ impl PresetStore {
     }
 }
 
-/// File stem for a preset name: lowercase alphanumerics with single dashes.
 fn slug(name: &str) -> String {
     let mut s = String::new();
     for c in name.trim().chars() {

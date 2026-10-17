@@ -1,11 +1,8 @@
-//! WAV files: the recorder writes 48 kHz float32 tracks, Studio reads them back.
-
 use anyhow::{bail, Context};
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
-/// Interleaved float samples read from a WAV file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WavData {
     pub sample_rate: u32,
@@ -95,7 +92,6 @@ fn decode_samples(body: &[u8], tag: u16, bits: u16) -> anyhow::Result<Vec<f32>> 
     Ok(out)
 }
 
-/// Streams interleaved float32 frames to a WAV file and patches the sizes on finish.
 pub(crate) struct WavWriter {
     file: BufWriter<File>,
     channels: u16,
@@ -129,7 +125,6 @@ impl WavWriter {
         self.frames
     }
 
-    /// Appends interleaved samples. The slice length must be a multiple of the channel count.
     pub fn write(&mut self, samples: &[f32]) -> anyhow::Result<()> {
         let mut bytes = Vec::with_capacity(samples.len() * 4);
         for s in samples {
@@ -140,7 +135,6 @@ impl WavWriter {
         Ok(())
     }
 
-    /// Appends `frames` frames of silence.
     pub fn write_silence(&mut self, frames: u64) -> anyhow::Result<()> {
         let zeros = vec![0u8; 4096];
         let mut left = frames * self.channels as u64 * 4;
@@ -153,7 +147,6 @@ impl WavWriter {
         Ok(())
     }
 
-    /// Writes the final chunk sizes and returns the number of bytes on disk.
     pub fn finish(mut self) -> anyhow::Result<u64> {
         let data_len = self.frames * self.channels as u64 * 4;
         self.file.flush()?;

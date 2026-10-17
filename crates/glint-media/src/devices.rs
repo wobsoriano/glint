@@ -1,5 +1,3 @@
-//! Enumeration of displays, microphones and cameras.
-
 use crate::mf;
 use anyhow::Context;
 use std::fmt;
@@ -67,7 +65,6 @@ impl fmt::Display for DeviceId {
     }
 }
 
-/// One attached display.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplayInfo {
     /// Index into [`displays()`]; the primary display is 0.
@@ -78,19 +75,16 @@ pub struct DisplayInfo {
     pub rect: Rect,
     /// DPI scale factor (1.0 = 96 dpi).
     pub scale: f32,
-    /// The `HMONITOR` handle as an integer.
     pub hmonitor: isize,
     pub primary: bool,
 }
 
-/// A microphone (capture endpoint).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioDevice {
     pub id: DeviceId,
     pub name: String,
 }
 
-/// A camera (video capture source).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CameraDevice {
     pub id: DeviceId,
@@ -135,7 +129,6 @@ pub fn displays() -> anyhow::Result<Vec<DisplayInfo>> {
     Ok(out)
 }
 
-/// `(GDI device name, monitor friendly name)` pairs for every active display path.
 fn monitor_names() -> Vec<(String, String)> {
     let mut out = Vec::new();
     unsafe {
@@ -231,7 +224,6 @@ pub fn cameras() -> anyhow::Result<Vec<CameraDevice>> {
     }
 }
 
-/// Activates the camera whose symbolic link is `id`.
 pub(crate) fn camera_activate(id: &DeviceId) -> anyhow::Result<IMFActivate> {
     mf::init()?;
     unsafe {

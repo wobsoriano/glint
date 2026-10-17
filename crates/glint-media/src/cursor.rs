@@ -1,12 +1,9 @@
-//! Rendering the current cursor shape into an RGBA sprite.
-
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetObjectW, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
     DIB_RGB_COLORS, HDC, HGDIOBJ,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DrawIconEx, GetIconInfo, HCURSOR, HICON, ICONINFO, DI_NORMAL};
 
-/// A cursor shape as straight-alpha RGBA pixels.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CursorImage {
     pub width: u32,
@@ -16,7 +13,6 @@ pub(crate) struct CursorImage {
 }
 
 impl CursorImage {
-    /// Content hash used to recognise a shape seen before.
     pub fn hash(&self) -> u64 {
         let mut h: u64 = 0xcbf29ce484222325;
         for b in &self.rgba {
@@ -27,8 +23,6 @@ impl CursorImage {
     }
 }
 
-/// Draws the cursor on black and on white and recovers colour and alpha from the pair.
-/// Inverting (XOR) cursors come out white and opaque, which keeps them visible.
 pub(crate) fn render(cursor: HCURSOR) -> Option<CursorImage> {
     unsafe {
         let icon = HICON(cursor.0);
@@ -60,7 +54,6 @@ unsafe fn bitmap_size(info: &ICONINFO) -> (u32, u32) {
     (bm.bmWidth.max(0) as u32, h.max(0) as u32)
 }
 
-/// Renders the icon over a solid grey level and returns BGRA rows, top-down.
 unsafe fn draw(icon: HICON, width: u32, height: u32, fill: u8) -> Option<Vec<u8>> {
     let dc: HDC = unsafe { CreateCompatibleDC(None) };
     if dc.is_invalid() {
@@ -99,7 +92,6 @@ unsafe fn draw(icon: HICON, width: u32, height: u32, fill: u8) -> Option<Vec<u8>
 fn merge(on_black: &[u8], on_white: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(on_black.len());
     for (b, w) in on_black.chunks_exact(4).zip(on_white.chunks_exact(4)) {
-        // Over black a pixel shows colour * alpha; over white it adds (255 - alpha).
         let alpha = (255 - (w[0] as i32 - b[0] as i32).clamp(0, 255)) as u8;
         let unpremul = |c: u8| if alpha == 0 { 0 } else { ((c as u32 * 255) / alpha as u32).min(255) as u8 };
         out.extend([unpremul(b[2]), unpremul(b[1]), unpremul(b[0]), alpha]);

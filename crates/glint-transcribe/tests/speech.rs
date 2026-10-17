@@ -1,8 +1,3 @@
-//! End-to-end check against real speech: synthesizes narration with Windows SAPI, downloads
-//! real models, and runs both the batch and live paths. Needs network on first run.
-//!
-//! cargo test -p glint-transcribe --release --test speech -- --ignored --nocapture
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::AtomicBool;

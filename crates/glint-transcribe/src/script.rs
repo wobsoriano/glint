@@ -1,7 +1,5 @@
 use crate::transcript::normalize_word;
 
-/// How far past the current position a spoken word may land, so a skipped or misheard word
-/// doesn't stall the prompter but a common word can't yank it far ahead.
 const LOOKAHEAD: usize = 8;
 
 struct ScriptWord {
@@ -13,7 +11,6 @@ struct ScriptWord {
 pub struct ScriptTracker {
     words: Vec<ScriptWord>,
     display_len: usize,
-    /// Number of `words` read so far.
     position: usize,
     previous_spoken: String,
 }
@@ -65,8 +62,6 @@ impl ScriptTracker {
     }
 }
 
-/// Exact match, or a close spelling for words long enough that a near miss is still telling
-/// ("colour" for "color", "recognise" for "recognize").
 fn matches(script: &str, spoken: &str) -> bool {
     if script == spoken {
         return true;

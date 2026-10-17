@@ -1,6 +1,3 @@
-//! The settings sidebar. Every control edits the project through `Studio::edit`, so each
-//! change reaches the player and the undo history.
-
 use super::{Mode, Selection, Studio, Tab, TABS};
 use crate::style::{Background, Color, Gradient, GRADIENTS, SOLIDS};
 use crate::ui::{self, OnValue, ToRgba};
@@ -14,7 +11,6 @@ pub(super) fn eid(prefix: &str, i: usize) -> ElementId {
     ElementId::Name(format!("{prefix}-{i}").into())
 }
 
-/// A slider callback that edits the project; drags of one slider coalesce into one undo step.
 fn value(weak: &WeakEntity<Studio>, group: &'static str, f: impl Fn(&mut Project, f32) + 'static) -> OnValue {
     let weak = weak.clone();
     Rc::new(move |v, _, cx| {

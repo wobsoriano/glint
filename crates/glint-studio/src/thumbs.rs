@@ -1,5 +1,3 @@
-//! Timeline thumbnails: frames spread across the recording, cached in `render/` as one strip.
-
 use crate::session::Session;
 use anyhow::Context;
 use glint_media::FrameReader;

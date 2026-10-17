@@ -2,16 +2,12 @@ use std::ops::Range;
 
 use crate::transcript::{normalize_word, Word};
 
-/// Hesitation sounds that never carry meaning.
 const HESITATIONS: &[&str] = &[
     "um", "umm", "ummm", "uh", "uhh", "uhhh", "uhm", "er", "erm", "ah", "ahh", "hmm", "hm", "mm", "mmm", "mhm",
 ];
 
-/// Discourse fillers that are also ordinary words ("I like it", "do you know her"), so they only
-/// count when set apart by punctuation or a pause.
 const DISCOURSE: &[&[&str]] = &[&["you", "know"], &["i", "mean"], &["like"]];
 
-/// A pause at least this long on both sides sets a word apart even without punctuation.
 const STANDALONE_PAUSE_MS: u64 = 250;
 
 /// Word index ranges that are filler, in order and non-overlapping.

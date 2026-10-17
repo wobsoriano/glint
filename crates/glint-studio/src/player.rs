@@ -1,10 +1,3 @@
-//! The Studio preview engine. A background thread decodes, composes and publishes frames;
-//! the UI thread sends commands and polls [`Player::latest_frame`] each time it paints.
-//!
-//! While playing, the clock is the audio device's played position when the project has
-//! audible audio, otherwise the wall clock. Each frame shows the clock's current time, so a
-//! slow composite skips frames instead of falling behind.
-
 use crate::compose::{compose_frame, recycle_frame, Assets, FrameInputs};
 use crate::feed::FrameFeed;
 use crate::mix::{AudioMixer, AudioSources};
@@ -48,7 +41,6 @@ struct Control {
 }
 
 impl Player {
-    /// Starts the engine on `session`'s current project, showing the first frame.
     pub fn new(session: &Session) -> anyhow::Result<Self> {
         let shared = Arc::new(Shared::default());
         {
@@ -103,7 +95,6 @@ impl Player {
         self.shared.wake.notify_one();
     }
 
-    /// Moves the playhead; playback continues from there if playing.
     pub fn seek(&self, output_ms: f64) {
         self.send(|c| c.seek = Some(output_ms));
     }
@@ -117,12 +108,10 @@ impl Player {
         self.send(|c| c.play = false);
     }
 
-    /// Replaces the project after an edit and redraws the current frame.
     pub fn set_project(&self, project: Project) {
         self.send(|c| c.project = Some(project));
     }
 
-    /// Replaces the assets, e.g. after [`Session::set_transcript`].
     pub fn set_assets(&self, assets: Arc<Assets>) {
         self.send(|c| c.assets = Some(assets));
     }
@@ -156,7 +145,6 @@ impl Player {
         self.shared.playing.load(Ordering::Relaxed)
     }
 
-    /// The last decode or audio problem, for display.
     pub fn error(&self) -> Option<String> {
         self.shared.error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -171,7 +159,6 @@ impl Drop for Player {
     }
 }
 
-/// Output time while playing, readable from any thread.
 #[derive(Clone)]
 enum Clock {
     Audio { played: AudioClock, from_ms: f64 },
@@ -340,7 +327,6 @@ impl Engine {
     }
 }
 
-/// The largest even size with `out`'s aspect inside `bounds`.
 pub(crate) fn fit(out: (u32, u32), bounds: (u32, u32)) -> (u32, u32) {
     let k = (bounds.0 as f64 / out.0 as f64).min(bounds.1 as f64 / out.1 as f64);
     let even = |v: u32| (((v as f64 * k).floor() as u32) & !1).max(2);

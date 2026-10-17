@@ -1,7 +1,3 @@
-//! Command line parsing and forwarding a second launch to the running instance.
-//! The running instance owns a hidden message-only window; a later `glint.exe` finds it,
-//! sends its requests as JSON in WM_COPYDATA, and exits.
-
 use anyhow::{bail, Context as _, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -33,14 +29,9 @@ pub enum CaptureCmd {
 pub enum Request {
     Capture(CaptureCmd),
     Library,
-    /// Opens the recording picker, or stops the recording in progress.
     Record,
-    /// A video to open in Trim & Compress. Always absolute.
     Trim(PathBuf),
-    /// An image to open in the editor: a Library capture as it is, any other file imported
-    /// as a copy first. Always absolute.
     Open(PathBuf),
-    /// A recording session directory to open in Studio. Always absolute.
     Studio(PathBuf),
 }
 
@@ -90,7 +81,6 @@ pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
 
 static INBOX: Mutex<Vec<Request>> = Mutex::new(Vec::new());
 
-/// Requests forwarded by later launches since the last call.
 pub fn drain() -> Vec<Request> {
     std::mem::take(&mut *INBOX.lock().unwrap())
 }
@@ -110,7 +100,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
-/// Starts the receiving window on its own thread. Call once, in the first instance.
 pub fn listen() {
     std::thread::spawn(|| unsafe {
         let Ok(module) = GetModuleHandleW(None) else { return };
@@ -139,7 +128,6 @@ pub fn listen() {
     });
 }
 
-/// Sends requests to the running instance, waiting a few seconds for it to finish starting.
 pub fn forward(requests: &[Request]) -> Result<()> {
     let payload = serde_json::to_vec(requests)?;
     let mut target = None;

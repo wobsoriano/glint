@@ -1,6 +1,3 @@
-//! A recording session package (`<id>.glintrec`) opened for Studio: the project, the
-//! compositor assets, which tracks exist, and the transcript.
-
 use crate::compose::Assets;
 use crate::overlays::CaptionWord;
 use crate::project::{CaptionCue, Project};
@@ -100,7 +97,6 @@ impl Session {
     }
 }
 
-/// Transcript words as caption words on the source timeline.
 pub fn caption_words(transcript: &Transcript) -> Vec<CaptionWord> {
     transcript
         .words
@@ -109,8 +105,6 @@ pub fn caption_words(transcript: &Transcript) -> Vec<CaptionWord> {
         .collect()
 }
 
-/// Caption lines for a fresh transcript: at most 42 characters or 4 s, and a new line after
-/// a 0.9 s pause, so each reads at a glance.
 pub fn caption_cues(transcript: &Transcript) -> Vec<CaptionCue> {
     caption_lines(&transcript.words, &CaptionOptions::default())
         .into_iter()
@@ -118,9 +112,6 @@ pub fn caption_cues(transcript: &Transcript) -> Vec<CaptionCue> {
         .collect()
 }
 
-/// Reads and parses `dir/name`. A missing file is `None`. So is one that does not parse or
-/// comes from a newer Glint: it is renamed to `<name>.broken`, replacing an older one, and a
-/// notice says so, because one bad sidecar must not make the recording unopenable.
 fn read_sidecar<T>(
     dir: &Path,
     name: &str,
@@ -143,7 +134,6 @@ fn read_sidecar<T>(
     Ok(None)
 }
 
-/// A session recorded with input capture off has no `input.json`: it gets an empty timeline.
 fn load_assets(dir: &Path, source_size: (u32, u32), transcript: Option<&Transcript>) -> anyhow::Result<Assets> {
     let captions = transcript.map(caption_words).unwrap_or_default();
     if dir.join(InputTimeline::FILE).is_file() {

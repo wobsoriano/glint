@@ -1,6 +1,3 @@
-//! The editing canvas: renders only the visible part of the composition at the zoom's scale,
-//! maps pointer positions to image coordinates and draws selection and crop overlays.
-
 use super::viewport::View;
 use super::{Editor, Typing};
 use crate::annotate::{pt, Pt, Shape, Tool, R};
@@ -18,21 +15,15 @@ use std::sync::Arc;
 pub(super) struct Preview {
     image: Arc<RenderImage>,
     key: String,
-    /// Document geometry at `scale`.
     pub frame: Frame,
-    /// Render scale: canvas pixels per full-resolution canvas pixel.
     pub scale: f32,
     pub view: View,
-    /// Full-resolution canvas size.
     pub canvas: (f32, f32),
-    /// Physical offset and size of the rendered image inside the canvas area.
     pos: (f32, f32),
     size: (f32, f32),
     pub sf: f32,
 }
 
-/// Straight BGRA for GPUI, optionally enlarged `k` times with nearest-neighbor sampling so
-/// zoomed-in pixels stay crisp.
 fn to_bgra(pm: &tiny_skia::Pixmap, k: f32) -> image::RgbaImage {
     let (sw, sh) = (pm.width() as usize, pm.height() as usize);
     let (dw, dh) = (((sw as f32 * k).round() as usize).max(1), ((sh as f32 * k).round() as usize).max(1));
@@ -57,7 +48,6 @@ fn to_bgra(pm: &tiny_skia::Pixmap, k: f32) -> image::RgbaImage {
 }
 
 impl Editor {
-    /// The document as the canvas shows it: crop mode shows the whole flat image.
     fn view_doc(&self) -> EditDoc {
         let mut d = self.doc.clone();
         if self.crop.is_some() {
@@ -129,7 +119,6 @@ impl Editor {
         }
     }
 
-    /// Window position -> image coordinates (base pixels while cropping).
     pub(super) fn to_image(&self, pos: Point<Pixels>) -> Option<Pt> {
         let p = self.preview.as_ref()?;
         let a = self.area.get();
@@ -138,7 +127,6 @@ impl Editor {
         p.frame.to_image(pt(c.x * p.scale, c.y * p.scale))
     }
 
-    /// Image coordinates -> logical pixels inside the canvas area.
     fn to_local(&self, p: Pt) -> Pt {
         let Some(pv) = self.preview.as_ref() else { return p };
         let c = pv.frame.to_canvas(p);
@@ -146,7 +134,6 @@ impl Editor {
         pt(s.x / pv.sf, s.y / pv.sf)
     }
 
-    /// Image pixels per logical pixel (ignoring perspective).
     pub(super) fn image_per_logical(&self) -> f32 {
         match &self.preview {
             Some(p) => p.sf * p.scale / (p.frame.layout.scale * p.view.zoom),
@@ -168,7 +155,6 @@ impl Editor {
         }
     }
 
-    /// Zooms to the next standard level, around the middle of the view.
     pub(super) fn zoom_step(&mut self, up: bool) {
         let z = self.preview.as_ref().map_or(1.0, |p| p.view.zoom);
         self.zoom_to(Some(super::viewport::step(z, up)), None);

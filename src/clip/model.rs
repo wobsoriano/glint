@@ -1,10 +1,6 @@
-//! What the trim-and-compress window edits: a selection inside the source and the output
-//! settings, and how they turn into a transcode. Nothing here touches GPUI.
-
 use glint_media::{TranscodeOptions, VideoCodec};
 use std::path::{Path, PathBuf};
 
-/// Files the window opens. Media Foundation decodes all of them on Windows 11.
 pub const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "mov", "m4v", "wmv", "avi"];
 
 pub fn is_video(path: &Path) -> bool {
@@ -13,10 +9,8 @@ pub fn is_video(path: &Path) -> bool {
         .is_some_and(|e| VIDEO_EXTENSIONS.iter().any(|v| v.eq_ignore_ascii_case(e)))
 }
 
-/// AAC bytes per second the Media Foundation encoder writes.
 const AUDIO_BYTES_PER_SEC: u64 = 24_000;
 
-/// The file being edited, as probed when the window opens.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Source {
     pub path: PathBuf,
@@ -26,7 +20,6 @@ pub struct Source {
     pub bytes: u64,
 }
 
-/// The kept span of the source, never shorter than [`Trim::MIN_MS`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Trim {
     pub start_ms: u64,
@@ -124,7 +117,6 @@ impl Default for Options {
     }
 }
 
-/// Output pixels: the short side shrunk to the resolution's, never upscaled, both even.
 pub fn output_size((w, h): (u32, u32), resolution: Resolution) -> (u32, u32) {
     match resolution.short_side() {
         Some(s) if s < w.min(h) => {
@@ -140,7 +132,6 @@ fn video_bitrate(source: &Source, opts: &Options) -> u32 {
     glint_studio::bitrate(w, h, source.fps, opts.quality.studio())
 }
 
-/// Expected file size: the encoders hold close to their average bitrate.
 pub fn estimate_bytes(source: &Source, trim: Trim, opts: &Options, has_audio: bool) -> u64 {
     let secs = trim.duration_ms() as f64 / 1000.0;
     let video = video_bitrate(source, opts) as f64 / 8.0 * secs;
@@ -158,13 +149,11 @@ pub fn transcode_options(source: &Source, trim: Trim, opts: &Options) -> Transco
     }
 }
 
-/// The suggested output name, `<stem> (trimmed)`. Callers pick a free path with it.
 pub fn output_stem(source: &Path) -> String {
     let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Video".into());
     format!("{stem} (trimmed)")
 }
 
-/// `m:ss.t` for times, `h:mm:ss` past an hour.
 pub fn clock(ms: u64) -> String {
     let s = ms / 1000;
     if s >= 3600 {
@@ -228,7 +217,6 @@ mod tests {
         let s = source(1920, 1080);
         let two = Trim { start_ms: 0, end_ms: 2_000 };
         let high = Options { quality: Quality::High, ..Default::default() };
-        // 1920x1080x30x0.1 bits per second = 6.2208 Mbit/s for two seconds, plus 2 s of AAC.
         assert_eq!(estimate_bytes(&s, two, &high, true), 1_555_200 + 48_000);
         assert_eq!(estimate_bytes(&s, two, &Options { keep_audio: false, ..high }, true), 1_555_200);
         assert_eq!(estimate_bytes(&s, two, &high, false), 1_555_200);

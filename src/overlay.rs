@@ -1,5 +1,3 @@
-//! Full-screen frozen overlay for picking an area or a window.
-
 use crate::capture::{Capture, MonitorShot, WinInfo};
 use crate::flow::{self, AppState};
 use crate::settings::Settings;
@@ -18,7 +16,6 @@ use std::sync::Arc;
 pub enum Mode {
     Image,
     Text,
-    /// Picks what to record: an area, a window, or (Space) the whole display.
     Record,
 }
 
@@ -28,7 +25,6 @@ pub struct Overlay {
     origin: (i32, i32),
     dpi: f32,
     image: Arc<RenderImage>,
-    /// Window rects relative to this monitor, physical pixels.
     windows: Vec<WinInfo>,
     drag_start: Option<(f32, f32)>,
     cursor: Option<(f32, f32)>,
@@ -46,7 +42,6 @@ pub fn open(shots: Vec<MonitorShot>, windows: Vec<WinInfo>, mode: Mode, cx: &mut
     let show_loupe = cx.global::<Settings>().show_loupe;
     let mut handles = Vec::new();
     for (i, m) in shots.iter().enumerate() {
-        // Match the GPUI display whose (logical) origin corresponds to this monitor.
         let display = displays.iter().find(|d| {
             let b = d.bounds();
             ((f32::from(b.origin.x) * m.scale) - m.x as f32).abs() < 4.0
@@ -170,7 +165,6 @@ impl Overlay {
                 }
             }
         }
-        // Outline the center pixel.
         let c0 = (N as u32 / 2) * zoom;
         for i in 0..=zoom {
             for (x, y) in [(c0 + i, c0), (c0 + i, c0 + zoom), (c0, c0 + i), (c0 + zoom, c0 + i)] {
@@ -304,7 +298,6 @@ impl Render for Overlay {
         let vw = f32::from(window.viewport_size().width);
         let vh = f32::from(window.viewport_size().height);
 
-        // The highlighted region: selection, or the hovered window.
         let focus_rect = self.selection.or_else(|| {
             self.hover.map(|i| {
                 let r = self.windows[i].rect;
@@ -378,7 +371,6 @@ impl Render for Overlay {
             None => root = root.child(dim(0., 0., vw, vh).bg(rgba(0x00000040))),
         }
 
-        // Hint bar.
         let hint = match self.mode {
             Mode::Image => "Drag to capture an area  ·  Click a window  ·  Space for full screen  ·  Esc to cancel",
             Mode::Text => "Select text to copy  ·  Esc to cancel",
@@ -411,7 +403,6 @@ impl Render for Overlay {
             ),
         );
 
-        // Magnifier.
         if let (Some((cxp, cyp)), Some((loupe, _, c))) = (self.cursor, &self.loupe) {
             let (lx, ly) = (cxp / s, cyp / s);
             let side = 120.;

@@ -1,6 +1,3 @@
-//! Renders an [`EditDoc`] over its base image: the editor preview and the exported file both
-//! come from [`Compositor::render`], so the preview shows exactly what gets saved.
-
 use crate::annotate::{pt, Annotation, Pt, R};
 use crate::doc::{BlurEdge, EditDoc};
 use crate::effects::{self, Homography};
@@ -31,7 +28,6 @@ impl Frame {
         Frame { layout, border, projection }
     }
 
-    /// Bordered card.
     pub fn outer_card(&self) -> R {
         self.layout.card.inflate(self.border)
     }
@@ -61,16 +57,13 @@ impl Frame {
     }
 }
 
-/// Decoded images a document can reference.
 pub struct Sources<'a> {
     pub base: &'a RgbaImage,
-    /// Decoded `Background::Image`, if the document uses one.
     pub bg_image: Option<&'a Pixmap>,
     /// `render::make_blur_bg(base)`, if the document uses `Background::Blurred`.
     pub blur_bg: Option<&'a Pixmap>,
 }
 
-/// Renders documents, keeping the layers that did not change since the previous call.
 #[derive(Default)]
 pub struct Compositor {
     prepared: Option<((u32, u32, u32, u32, u32, u32), Pixmap)>,
@@ -109,7 +102,6 @@ impl Compositor {
         let lc = l.translated(-card_region.x, -card_region.y);
         let (mut card, mask) = self.card(doc, src, &f, card_region);
         render::draw_highlights(&mut card, &lc, &doc.annotations, mask.as_ref());
-        // Annotations belong to the screenshot: whatever a crop cut away stays hidden.
         let mut marks = Pixmap::new(card.width(), card.height()).unwrap();
         for a in doc.annotations.iter().filter(|a| !a.is_redaction()) {
             render::draw_annotation(&mut marks, &lc, a);
@@ -142,7 +134,6 @@ impl Compositor {
         }
     }
 
-    /// Background and shadow for `rp`.
     fn scene(&mut self, doc: &EditDoc, src: &Sources, f: &Frame, rp: R) -> Pixmap {
         let st = &doc.style;
         let key = format!("{:?}|{:?}|{:?}|{:?}", st, f, rp, doc.effects.perspective);
@@ -169,7 +160,6 @@ impl Compositor {
         pm
     }
 
-    /// The flat card (border, chrome, screenshot, redactions) for `cr`, and the screenshot mask.
     fn card(&mut self, doc: &EditDoc, src: &Sources, f: &Frame, cr: R) -> (Pixmap, Option<tiny_skia::Mask>) {
         let (bw, bh) = (src.base.width(), src.base.height());
         let crop = doc.crop_rect(bw, bh);
@@ -203,7 +193,6 @@ impl Compositor {
     }
 }
 
-/// Bounding box of the points that `h` maps into `r`, when all of `r` is in front of the camera.
 fn preimage(h: &Homography, r: R) -> Option<R> {
     let inv = h.inverse()?;
     let corners = [pt(r.x, r.y), pt(r.right(), r.y), pt(r.right(), r.bottom()), pt(r.x, r.bottom())];
@@ -218,7 +207,6 @@ fn preimage(h: &Homography, r: R) -> Option<R> {
     Some(R::new(x0, y0, x1 - x0, y1 - y0))
 }
 
-/// Points around a rounded rectangle, clockwise from the top-left corner.
 fn rounded_outline(r: R, radius: f32) -> Vec<Pt> {
     let rad = radius.min(r.w / 2.0).min(r.h / 2.0).max(0.0);
     let centers = [
@@ -277,7 +265,6 @@ pub fn load_background(path: &Path) -> Option<Pixmap> {
     Some(render::pixmap_from_rgba(&img))
 }
 
-/// The full-resolution deliverable for `base` edited by `doc`.
 pub fn render_doc(base: &RgbaImage, doc: &EditDoc) -> RgbaImage {
     let bg_image = match &doc.style.background {
         Background::Image(p) => load_background(p),
@@ -325,7 +312,6 @@ mod tests {
         let part = Compositor::default().render(&doc, &src, 1.0, Some(region));
         assert_eq!((part.width(), part.height()), (150, 120));
         let expect = crop_pixmap(&full, region);
-        // Gradient shaders round differently by at most one step when translated.
         let diff = part.data().iter().zip(expect.data()).map(|(a, b)| (*a as i32 - *b as i32).abs()).max().unwrap();
         assert!(diff <= 1, "max channel difference {diff}");
     }
@@ -370,9 +356,6 @@ mod tests {
         assert!(diff <= 2, "max channel difference {diff}");
     }
 
-    /// Renders a saved capture directory (base.png + edit.json) headlessly and compares it
-    /// with the image.png the editor saved. Run with:
-    /// GLINT_DOC_DIR=<dir> cargo test -p glint-render saved_doc -- --ignored --nocapture
     #[test]
     #[ignore]
     fn saved_doc_matches_headless_render() {
@@ -387,8 +370,6 @@ mod tests {
         println!("{}x{} max channel difference {diff}", saved.width(), saved.height());
         assert_eq!(diff, 0);
 
-        // GLINT_SCREEN=<png>,<x>,<y>: a screen capture of the editor at 100% zoom, with the
-        // canvas near (x, y). Finds the exact offset and reports how far the pixels differ.
         if let Ok(spec) = std::env::var("GLINT_SCREEN") {
             let parts: Vec<&str> = spec.split(',').collect();
             let screen = image::open(parts[0]).unwrap().to_rgba8();
@@ -421,8 +402,6 @@ mod tests {
         }
     }
 
-    /// Writes sample renders of every effect. Run with:
-    /// GLINT_SAMPLES=<dir> cargo test -p glint-render effect_samples -- --ignored
     #[test]
     #[ignore]
     fn write_effect_samples() {

@@ -1,6 +1,3 @@
-//! Session loading and export against a small generated recording: a 3 s screen master whose
-//! frames get redder over time, plus a 440 Hz system-audio tone.
-
 use glint_media::{read_mp4_audio, VideoCodec, VideoParams, VideoReader, VideoWriter};
 use glint_studio::{export, Clip, Format, Fps, Project, Session};
 use std::path::{Path, PathBuf};
@@ -46,7 +43,6 @@ fn write_tone_wav(path: &Path, seconds: f32) {
     std::fs::write(path, b).unwrap();
 }
 
-/// Red channel at the canvas centre of each frame, which sits inside the screen card.
 fn centre_reds(path: &Path) -> Vec<u8> {
     let mut r = VideoReader::open(path).unwrap();
     let mut out = Vec::new();
@@ -116,8 +112,6 @@ fn export_follows_the_clip_map_and_caches() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Writes `bytes` as `file` in a fresh session that already holds an older `<file>.broken`,
-/// opens it, and returns the session, its directory and what `<file>.broken` holds afterwards.
 fn open_with_broken(name: &str, file: &str, bytes: &[u8]) -> (Session, PathBuf, Vec<u8>) {
     let dir = make_session(name);
     let broken = dir.join(format!("{file}.broken"));

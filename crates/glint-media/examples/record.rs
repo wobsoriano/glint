@@ -1,11 +1,3 @@
-//! Records a few seconds and reads every output back.
-//!
-//! ```text
-//! cargo run -p glint-media --example record -- [--source display:0 | window:<hwnd> | area:<display>,<x>,<y>,<w>,<h>]
-//!     [--seconds 3] [--fps 30|60] [--pause-ms 0] [--out <dir>] [--no-system-audio] [--mic default|<id>]
-//!     [--camera <id>] [--no-input]
-//! ```
-
 use glint_media::input::InputTimeline;
 use glint_media::{read_wav, CaptureSource, DeviceId, Fps, RecordOptions, Recorder, Rect, VideoReader};
 use std::path::PathBuf;

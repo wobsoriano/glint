@@ -1,6 +1,3 @@
-//! Windows shell integration: exports, file clipboard, drag out, Explorer, Open With,
-//! task dialogs and keeping Glint's own windows out of screen captures.
-
 use crate::settings::ExportFormat;
 use anyhow::Context as _;
 use std::os::windows::ffi::OsStrExt;
@@ -46,7 +43,6 @@ pub fn encode(img: &image::RgbaImage, format: ExportFormat, quality: u8) -> anyh
     Ok(out.into_inner())
 }
 
-/// Writes an export, creating the folder. Never overwrites: a taken name gets " (2)".
 pub fn export(img: &image::RgbaImage, dir: &Path, stem: &str, format: ExportFormat, quality: u8) -> anyhow::Result<PathBuf> {
     let bytes = encode(img, format, quality)?;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
@@ -65,7 +61,6 @@ pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     p
 }
 
-/// Makes a title safe as a Windows file name.
 pub fn sanitize(name: &str) -> String {
     let s: String = name
         .chars()
@@ -92,7 +87,6 @@ fn dib(img: &image::RgbaImage) -> Vec<u8> {
         ..Default::default()
     };
     let mut out = Vec::with_capacity(header.biSize as usize + (w * h * 4) as usize);
-    // SAFETY: BITMAPINFOHEADER is plain old data.
     out.extend_from_slice(unsafe { std::slice::from_raw_parts(&header as *const _ as *const u8, header.biSize as usize) });
     for row in img.rows().rev() {
         for p in row {
@@ -104,7 +98,6 @@ fn dib(img: &image::RgbaImage) -> Vec<u8> {
 
 fn drop_files(paths: &[PathBuf]) -> Vec<u8> {
     let header = DROPFILES { pFiles: std::mem::size_of::<DROPFILES>() as u32, fWide: true.into(), ..Default::default() };
-    // SAFETY: DROPFILES is plain old data.
     let mut out =
         unsafe { std::slice::from_raw_parts(&header as *const _ as *const u8, std::mem::size_of::<DROPFILES>()).to_vec() };
     for p in paths {
@@ -126,7 +119,6 @@ fn hglobal(bytes: &[u8]) -> anyhow::Result<HGLOBAL> {
     }
 }
 
-/// Puts files on the clipboard (paste into Explorer or a chat app), plus pixels for one image.
 pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow::Result<()> {
     unsafe {
         let mut opened = false;
@@ -220,7 +212,6 @@ pub fn reveal(paths: &[PathBuf]) {
     });
 }
 
-/// The physical work area (without the taskbar) and DPI scale of the monitor under the cursor.
 pub fn work_area_at_cursor() -> ([i32; 4], f32) {
     unsafe {
         let mut pt = POINT::default();
@@ -297,7 +288,6 @@ pub enum SaveChoice {
     Cancel,
 }
 
-/// Blocking task dialog shown when an export cannot be written. Call it off the main thread.
 pub fn save_failed_dialog(detail: &str) -> SaveChoice {
     let detail = HSTRING::from(detail);
     let retry = HSTRING::from("Retry");
@@ -334,7 +324,6 @@ pub fn save_failed_dialog(detail: &str) -> SaveChoice {
 
 pub const OPEN_WITH_TYPES: [&str; 6] = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"];
 const PROGID: &str = "Glint.Image";
-/// Videos open in Trim & Compress.
 pub const OPEN_WITH_VIDEO_TYPES: [&str; 3] = [".mp4", ".mov", ".m4v"];
 const VIDEO_PROGID: &str = "Glint.Video";
 
@@ -369,15 +358,11 @@ fn reg_get(key: &str) -> Option<String> {
     }
 }
 
-/// The program a shell command like `"C:\Glint\glint.exe" "%1"` runs.
 fn command_exe(command: &str) -> Option<PathBuf> {
     let quoted = command.strip_prefix('"')?;
     Some(PathBuf::from(&quoted[..quoted.find('"')?]))
 }
 
-/// Registers "Open with Glint" under HKCU: images open in the editor, videos in Trim &
-/// Compress. An existing registration is kept while the exe it runs still exists, so
-/// starting another build (a debug one, say) never takes the file types away from the install.
 pub fn register_open_with() -> anyhow::Result<()> {
     let app = r"Software\Classes\Applications\glint.exe";
     let command_key = format!(r"{app}\shell\open\command");
@@ -428,9 +413,6 @@ unsafe extern "system" fn each_window(h: HWND, _: LPARAM) -> windows::core::BOOL
     true.into()
 }
 
-/// Keeps every Glint top-level window out of screen captures unless `include` is set.
-/// Hooks window creation once so later windows (editor, pins, cards) are covered too.
-/// Call it on the main thread, which owns every Glint window.
 pub fn exclude_own_windows_from_capture(include: bool) {
     static HOOKED: AtomicBool = AtomicBool::new(false);
     INCLUDE_OWN.store(include, Ordering::Relaxed);

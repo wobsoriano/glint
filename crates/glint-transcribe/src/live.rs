@@ -11,8 +11,6 @@ use crate::transcript::Word;
 
 const WINDOW_MS: u64 = 8_000;
 const STEP_MS: u64 = 1_000;
-/// A word ending this close to the window edge was probably cut off mid-sound, so it waits for
-/// the next pass.
 const EDGE_HOLD_MS: u64 = 250;
 
 const fn samples(ms: u64) -> usize {
@@ -80,7 +78,6 @@ impl Drop for LiveTranscriber {
 struct Worker {
     engine: Engine,
     out: Sender<Vec<Word>>,
-    /// The most recent `WINDOW_MS` of 16 kHz audio.
     window: Vec<f32>,
     total_samples: usize,
     pending_samples: usize,
@@ -123,7 +120,6 @@ impl Worker {
         self.window.drain(..excess);
     }
 
-    /// Returns false once the receiving side is gone.
     fn pass(&mut self, last: bool) -> bool {
         self.pending_samples = 0;
         let offset_ms = ((self.total_samples - self.window.len()) as u64) * 1000 / WHISPER_SAMPLE_RATE as u64;

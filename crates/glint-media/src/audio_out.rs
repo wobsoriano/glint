@@ -1,6 +1,3 @@
-//! WASAPI shared-mode playback to the default output device, with a clock that reports how
-//! much audio the device has actually played so video can follow it.
-
 use crate::mf;
 use anyhow::Context;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +13,6 @@ use windows::Win32::Media::KernelStreaming::WAVE_FORMAT_EXTENSIBLE;
 use windows::Win32::Media::Multimedia::KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
 
-/// Fills interleaved stereo f32 at [`AudioOutput::SAMPLE_RATE`].
 type FillFn = Box<dyn FnMut(&mut [f32]) + Send>;
 
 /// A running output stream. Dropping it stops playback at once.
@@ -26,16 +22,13 @@ pub struct AudioOutput {
     clock: AudioClock,
 }
 
-/// How much audio an [`AudioOutput`] has played, readable from any thread.
 #[derive(Clone)]
 pub struct AudioClock(Arc<Mutex<DeviceClock>>);
 
-/// The device position at the last reading, extrapolated between readings.
 #[derive(Clone)]
 struct DeviceClock {
     played_ms: f64,
     read_at: Instant,
-    /// Why the stream stopped early, e.g. the device was unplugged.
     error: Option<String>,
 }
 
@@ -43,8 +36,6 @@ impl AudioOutput {
     pub const SAMPLE_RATE: u32 = 48_000;
     pub const CHANNELS: u16 = 2;
 
-    /// Opens the default output device and starts pulling samples from `fill` on a
-    /// dedicated thread. The engine converts to the device's mix format.
     pub fn start(fill: impl FnMut(&mut [f32]) + Send + 'static) -> anyhow::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let clock = AudioClock(Arc::new(Mutex::new(DeviceClock { played_ms: 0.0, read_at: Instant::now(), error: None })));
@@ -79,7 +70,6 @@ impl AudioOutput {
         }
     }
 
-    /// The stream's clock: how much audio the device has played since `start`.
     pub fn clock(&self) -> AudioClock {
         self.clock.clone()
     }
@@ -98,11 +88,9 @@ impl AudioClock {
         if c.played_ms == 0.0 {
             return 0.0;
         }
-        // Readings come every few milliseconds; never extrapolate across a stall.
         c.played_ms + since.min(20.0)
     }
 
-    /// Why the stream stopped early, if it did.
     pub fn error(&self) -> Option<String> {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).error.clone()
     }
@@ -167,7 +155,6 @@ impl Stream {
         Ok(())
     }
 
-    /// Tops the device buffer up with fresh samples.
     fn feed(&self, fill: &mut FillFn) -> anyhow::Result<()> {
         unsafe {
             let free = self.buffer_frames - self.client.GetCurrentPadding()?;

@@ -1,6 +1,3 @@
-//! The floating preview stack: one card per recent capture, docked to the left or right
-//! edge of the display the capture came from. It collapses into a small peek tab.
-
 use crate::cards::{CardAction, CardLayout, Corner};
 use crate::flow::Shot;
 use crate::settings::{Settings, Side};
@@ -31,7 +28,6 @@ struct StackState(Option<WindowHandle<Stack>>);
 
 impl Global for StackState {}
 
-/// What a card shows: a screenshot with what the editor needs, or a recording.
 #[derive(Clone)]
 enum Entry {
     Shot(Shot),
@@ -59,12 +55,10 @@ pub struct Stack {
     cards: Vec<Card>,
     collapsed: bool,
     hovered: bool,
-    /// Physical work area and scale of the display the stack lives on.
     area: [i32; 4],
     scale: f32,
     side: Side,
     press: Option<(u64, Point<Pixels>)>,
-    /// The card whose More menu is open.
     more: Option<u64>,
     next_id: u64,
 }
@@ -82,12 +76,10 @@ impl Stack {
         (PAD * 2. + CARD_W, PAD * 2. + HEADER_H + GAP + n * (CARD_H + GAP) - GAP)
     }
 
-    /// Physical rectangle for the current state, anchored to the bottom of the docked edge.
     fn rect(&self) -> [i32; 4] {
         let (w, h) = self.size();
         let (pw, ph) = ((w * self.scale).round() as i32, (h * self.scale).round() as i32);
         let [ax, ay, aw, ah] = self.area;
-        // The peek tab sits flush against the edge; the open stack keeps a margin.
         let edge = if self.collapsed { 0 } else { (EDGE * self.scale).round() as i32 };
         let x = match self.side {
             Side::Left => ax + edge,
@@ -233,7 +225,6 @@ impl Stack {
         }
     }
 
-    /// Starts a system drag of the card's file once the pointer travels past the slop.
     fn on_move(&mut self, id: u64, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some((pid, start)) = self.press else { return };
         if pid != id || e.pressed_button != Some(MouseButton::Left) {
@@ -298,8 +289,6 @@ impl Stack {
     }
 }
 
-/// True when the pointer was released at or beyond the docked screen edge: a card thrown
-/// off the screen there is dismissed.
 fn past_edge(area: [i32; 4], side: Side) -> bool {
     let (x, _) = crate::capture::cursor_pos();
     match side {
@@ -312,7 +301,6 @@ fn thumb_of(shot: &Shot) -> Arc<RenderImage> {
     win::render_image(&crate::library::thumbnail(&shot.image))
 }
 
-/// Shows a capture's new deliverable on every card of it, after an edit was saved.
 pub fn show_edit(item: &Item, image: Arc<image::RgbaImage>, cx: &mut App) {
     let Some(h) = cx.default_global::<StackState>().0 else { return };
     let _ = h.update(cx, |this, _, cx| {
@@ -329,13 +317,11 @@ pub fn show_edit(item: &Item, image: Arc<image::RgbaImage>, cx: &mut App) {
     });
 }
 
-/// Adds a screenshot to the stack, opening the stack on the display under the pointer.
 pub fn push(shot: Shot, cx: &mut App) {
     let thumb = thumb_of(&shot);
     push_entry(Entry::Shot(shot), thumb, cx);
 }
 
-/// Adds a finished recording, shown by its thumbnail with a duration badge.
 pub fn push_recording(item: Item, cx: &mut App) {
     let thumb = image::open(item.thumb()).map(|i| i.to_rgba8()).unwrap_or_else(|_| image::RgbaImage::from_pixel(16, 9, image::Rgba([17, 17, 19, 255])));
     push_entry(Entry::Recording(item), win::render_image(&thumb), cx);
@@ -405,7 +391,6 @@ fn push_entry(entry: Entry, thumb: Arc<RenderImage>, cx: &mut App) {
     }
 }
 
-/// Re-reads overlay settings (side, layout) into an open stack.
 pub fn refresh(cx: &mut App) {
     let side = cx.global::<Settings>().overlay.side;
     if let Some(h) = cx.default_global::<StackState>().0 {
@@ -470,13 +455,10 @@ fn pill(id: SharedString, action: CardAction) -> gpui::Stateful<gpui::Div> {
         .tooltip(ui::tooltip(action.help()))
 }
 
-/// Actions that only make sense for an image.
 fn image_only(a: CardAction) -> bool {
     matches!(a, CardAction::Compress | CardAction::CopyText | CardAction::QuickLook | CardAction::Pin)
 }
 
-/// The action overlay of one card, laid out from the user's card layout. Recordings skip
-/// the image-only actions.
 pub fn card_actions(
     layout: &CardLayout,
     key: &str,

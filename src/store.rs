@@ -1,6 +1,3 @@
-//! The Library as app state: the scanned items, kept in sync with every import, rename
-//! and delete so open windows (Library, preview cards) observe one source of truth.
-
 use crate::library::{self, Item, Library};
 use gpui::{App, AppContext as _, Global};
 use std::path::{Path, PathBuf};
@@ -21,7 +18,6 @@ pub fn init(cx: &mut App) {
         let items = scan.await;
         let _ = cx.update(|cx| {
             let store = cx.global_mut::<Store>();
-            // Imports that finished while scanning are already in `items`; keep them.
             for item in items {
                 if !store.items.iter().any(|i| i.dir == item.dir) {
                     store.items.push(item);
@@ -42,7 +38,6 @@ pub fn get(dir: &Path, cx: &App) -> Option<Item> {
     cx.global::<Store>().items.iter().find(|i| i.dir == dir).cloned()
 }
 
-/// Inserts a new item or replaces the one with the same directory.
 pub fn upsert(item: Item, cx: &mut App) {
     let store = cx.global_mut::<Store>();
     match store.items.iter_mut().find(|i| i.dir == item.dir) {
@@ -61,7 +56,6 @@ pub fn rename(dir: &Path, title: &str, cx: &mut App) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Moves captures to the Recycle Bin off the main thread, then drops them from the store.
 pub fn recycle(dirs: Vec<PathBuf>, cx: &mut App, done: impl FnOnce(anyhow::Result<()>, &mut App) + 'static) {
     let to_trash = dirs.clone();
     let task = cx.background_spawn(async move { library::recycle(&to_trash) });

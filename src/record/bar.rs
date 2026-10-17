@@ -1,5 +1,3 @@
-//! The control bar while recording: elapsed time, pause or resume, restart, stop, delete.
-
 use super::chrome::{self, Kind, Placement};
 use super::target::work_area;
 use super::{Stage, Target};
@@ -11,7 +9,6 @@ use std::time::Instant;
 const W: f32 = 300.;
 const H: f32 = 48.;
 const MARGIN: f32 = 28.;
-/// Height of the bar's top edge above the bottom of the work area, in DIP.
 pub const TOP: f32 = MARGIN + H;
 
 pub fn open(target: &Target, cx: &mut App) -> Option<AnyWindowHandle> {
@@ -30,7 +27,6 @@ struct Bar {
     born: Instant,
 }
 
-/// Elapsed media time and whether it is paused; `None` while the recorder is (re)starting.
 fn progress(cx: &App) -> Option<(u64, bool)> {
     match &cx.try_global::<super::Rec>()?.stage {
         Stage::Live(live) => Some((live.recorder.elapsed().as_millis() as u64, live.recorder.is_paused())),
@@ -61,7 +57,6 @@ fn button(id: &'static str, icon: &str, danger: bool, on: impl Fn(&ClickEvent, &
         .on_click(on)
 }
 
-/// Runs a lifecycle step after this event; the step may close this very window.
 fn later(f: fn(&mut App)) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     move |_, _, cx| cx.defer(f)
 }
@@ -118,7 +113,6 @@ impl Render for Bar {
             Some((ms, paused)) => (SharedString::from(clock(ms)), paused),
             None => ("Starting".into(), false),
         };
-        // The dot blinks while recording and holds still when paused.
         let lit = paused || self.born.elapsed().as_millis() / 600 % 2 == 0;
         shell
             .child(

@@ -1,5 +1,3 @@
-//! Mockup effects: projective card mapping, progressive blur and text watermarks.
-
 use crate::annotate::{pt, Pt, R};
 use crate::doc::{BlurMode, Perspective, Placement, ProgressiveBlur, Watermark};
 use crate::fonts;
@@ -22,7 +20,6 @@ impl Homography {
         let p: Vec<(f64, f64)> = quad.iter().map(|q| (q.x as f64, q.y as f64)).collect();
         let (dx1, dx2, dx3) = (p[1].0 - p[2].0, p[3].0 - p[2].0, p[0].0 - p[1].0 + p[2].0 - p[3].0);
         let (dy1, dy2, dy3) = (p[1].1 - p[2].1, p[3].1 - p[2].1, p[0].1 - p[1].1 + p[2].1 - p[3].1);
-        // Unit square -> quad.
         let unit = if dx3.abs() < 1e-9 && dy3.abs() < 1e-9 {
             [p[1].0 - p[0].0, p[3].0 - p[0].0, p[0].0, p[1].1 - p[0].1, p[3].1 - p[0].1, p[0].1, 0.0, 0.0, 1.0]
         } else {
@@ -44,14 +41,12 @@ impl Homography {
                 1.0,
             ]
         };
-        // Compose with src rect -> unit square.
         let (sx, sy) = (1.0 / src.w as f64, 1.0 / src.h as f64);
         let (ox, oy) = (src.x as f64, src.y as f64);
         let n = Homography([sx, 0.0, -ox * sx, 0.0, sy, -oy * sy, 0.0, 0.0, 1.0]);
         Some(Homography(unit).then_after(&n))
     }
 
-    /// `self ∘ first`: applies `first`, then `self`.
     fn then_after(&self, first: &Homography) -> Homography {
         let (a, b) = (&self.0, &first.0);
         let mut m = [0.0; 9];
@@ -107,13 +102,10 @@ impl Homography {
     }
 }
 
-/// Where a point of the flat card plane lands in the mockup, for a card `card` on a `canvas_w`×
-/// `canvas_h` canvas (both in the same pixels).
 fn project_point(p: Pt, card: R, canvas_w: f32, canvas_h: f32, s: &Perspective) -> Pt {
     let pivot = card.center();
     let (mut x, mut y, mut z) = ((p.x - pivot.x) as f64, (p.y - pivot.y) as f64, 0.0f64);
     let rad = |d: f32| (d as f64).to_radians();
-    // Rotation around the horizontal axis, then the vertical one.
     let (sa, ca) = rad(s.rot_x).sin_cos();
     (y, z) = (y * ca - z * sa, y * sa + z * ca);
     let (sb, cb) = rad(s.rot_y).sin_cos();
@@ -152,7 +144,6 @@ pub fn projection(card: R, canvas_w: f32, canvas_h: f32, s: &Perspective) -> Opt
 pub fn warp_onto(dst: &mut Pixmap, dst_origin: Pt, src: &Pixmap, src_origin: Pt, h: &Homography) {
     let Some(inv) = h.inverse() else { return };
     let (sw, sh) = (src.width() as i64, src.height() as i64);
-    // Only visit destination pixels covered by the projected source.
     let corners = [pt(0.0, 0.0), pt(sw as f32, 0.0), pt(sw as f32, sh as f32), pt(0.0, sh as f32)]
         .map(|c| pt(c.x + src_origin.x, c.y + src_origin.y));
     let (dw, dh) = (dst.width() as i64, dst.height() as i64);
@@ -287,7 +278,6 @@ pub fn progressive_blur(pm: &mut Pixmap, area: R, extent: R, s: &ProgressiveBlur
             base[y * aw * 4..(y + 1) * aw * 4].copy_from_slice(&data[s0..s0 + aw * 4]);
         }
     }
-    // Sharp, then three increasingly blurred copies; each pixel blends the two nearest levels.
     let mut levels = vec![base];
     for f in [0.25f32, 0.5, 1.0] {
         let mut l = levels[0].clone();
@@ -360,7 +350,6 @@ pub fn draw_watermark(pm: &mut Pixmap, image: R, unit: f32, wm: &Watermark, mask
     }
 }
 
-/// Fills a mask with the polygon through `points`.
 pub fn polygon_mask(w: u32, h: u32, points: &[Pt]) -> Option<Mask> {
     let mut pb = tiny_skia::PathBuilder::new();
     pb.move_to(points[0].x, points[0].y);
@@ -395,7 +384,6 @@ mod tests {
         for (c, q) in corners.iter().zip(quad) {
             assert!(close(inv.apply(q), *c));
         }
-        // Projective, not affine: the center of the source is not the quad's centroid.
         let mid = h.apply(src.center());
         assert!(!close(mid, pt(152.5, 137.5)), "{mid:?}");
     }
@@ -409,14 +397,11 @@ mod tests {
         let tr = h.apply(pt(500.0, 100.0));
         let br = h.apply(pt(500.0, 400.0));
         let bl = h.apply(pt(100.0, 400.0));
-        // Rotating around the vertical axis turns the right edge away: it shrinks, the left grows.
         let left_h = bl.y - tl.y;
         let right_h = br.y - tr.y;
         assert!(left_h > 300.0 && right_h < 300.0, "left {left_h} right {right_h}");
-        // The vertical center line stays put and the card stays horizontally symmetric about y.
         assert!((tl.y + bl.y - 500.0).abs() < 1e-3 && (tr.y + br.y - 500.0).abs() < 1e-3);
         assert!(close(h.apply(pt(300.0, 250.0)), pt(300.0, 250.0)), "pivot is fixed");
-        // The exact corner positions for this camera.
         let focal = 400.0 * (0.35 + 0.5 / (12.0f64.to_radians()).tan());
         let z = 200.0 * 30.0f64.to_radians().sin();
         let x = 200.0 * 30.0f64.to_radians().cos();

@@ -1,5 +1,3 @@
-//! The start timer: big numerals centered on what is about to be recorded.
-
 use super::chrome::{self, Kind, Placement};
 use super::Target;
 use crate::ui::FONT;

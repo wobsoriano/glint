@@ -1,5 +1,3 @@
-//! Transient toast notifications at the bottom of the active display.
-
 use crate::ui::{self, FONT};
 use crate::win;
 use gpui::prelude::*;
@@ -42,7 +40,6 @@ pub fn show(msg: impl Into<SharedString>, cx: &mut App) {
     show_at(msg, 24., cx)
 }
 
-/// Like [`show`], with the toast's bottom edge `bottom` pixels (DIP) above the work area's.
 pub fn show_at(msg: impl Into<SharedString>, bottom: f32, cx: &mut App) {
     if let Some(h) = cx.default_global::<ToastState>().0.take() {
         let _ = h.update(cx, |_, window, _| window.remove_window());

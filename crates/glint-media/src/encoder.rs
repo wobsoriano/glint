@@ -15,7 +15,6 @@ use windows::Win32::Graphics::Direct3D11::{ID3D11Texture2D, D3D11_BIND_RENDER_TA
 use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_UI4};
 
-/// Video codec written into the MP4.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VideoCodec {
     H264,
@@ -38,7 +37,6 @@ impl VideoCodec {
     }
 }
 
-/// Video stream parameters for an MP4 writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VideoParams {
     pub width: u32,
@@ -62,14 +60,12 @@ impl VideoParams {
     }
 }
 
-/// AAC audio stream parameters for an MP4 writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AudioParams {
     pub sample_rate: u32,
     pub channels: u16,
 }
 
-/// One MP4 file being written. Video samples carry explicit timestamps; audio is sequential.
 pub(crate) struct Mp4Sink {
     writer: IMFSinkWriter,
     video_stream: u32,
@@ -84,8 +80,6 @@ pub(crate) struct Mp4Sink {
 }
 
 impl Mp4Sink {
-    /// Creates the file. With `d3d`, the sink writer may pick a hardware encoder and accept
-    /// GPU textures; without it everything runs in software from CPU buffers.
     pub fn create(path: &Path, video: VideoParams, audio: Option<AudioParams>, d3d: Option<&D3dDevice>) -> anyhow::Result<Self> {
         mf::init()?;
         if video.width % 2 != 0 || video.height % 2 != 0 || video.width == 0 || video.height == 0 {
@@ -166,7 +160,6 @@ impl Mp4Sink {
         self.video
     }
 
-    /// True when the sink writer picked a hardware encoder MFT.
     pub fn hardware(&self) -> bool {
         self.hardware
     }
@@ -175,7 +168,6 @@ impl Mp4Sink {
         self.frames
     }
 
-    /// Writes an already-filled sample (from a [`SampleAllocator`]) at media time `t` (100 ns).
     pub fn write_sample(&mut self, sample: &IMFSample, t: i64) -> anyhow::Result<()> {
         unsafe {
             sample.SetSampleTime(t)?;
@@ -187,19 +179,15 @@ impl Mp4Sink {
         Ok(())
     }
 
-    /// Writes a top-down BGRA frame (`width * height * 4` bytes) at media time `t` (100 ns).
     pub fn write_bgra(&mut self, bgra: &[u8], t: i64) -> anyhow::Result<()> {
         self.write_rgb(bgra, 2, t)
     }
 
-    /// Writes the next video frame from RGBA pixels at the constant frame rate.
     pub fn write_rgba_sequential(&mut self, rgba: &[u8]) -> anyhow::Result<()> {
         let t = self.frames as i64 * self.video.frame_duration();
         self.write_rgb(rgba, 0, t)
     }
 
-    /// Converts a 4-byte-per-pixel frame with red at channel `r` (blue at `2 - r`) to NV12
-    /// and writes it at media time `t`.
     fn write_rgb(&mut self, pixels: &[u8], r: usize, t: i64) -> anyhow::Result<()> {
         let (w, h) = (self.video.width as usize, self.video.height as usize);
         if pixels.len() != w * h * 4 {
@@ -224,7 +212,6 @@ impl Mp4Sink {
         written
     }
 
-    /// Appends interleaved float samples to the AAC track, continuing from the last write.
     pub fn write_audio(&mut self, interleaved: &[f32]) -> anyhow::Result<()> {
         let (Some(stream), Some(audio)) = (self.audio_stream, self.audio) else {
             bail!("this MP4 has no audio track");
@@ -255,7 +242,6 @@ impl Mp4Sink {
         Ok(())
     }
 
-    /// Flushes the encoder and writes the MP4 index.
     pub fn finish(self) -> anyhow::Result<()> {
         unsafe { self.writer.Finalize().context("IMFSinkWriter::Finalize") }
     }
@@ -263,7 +249,6 @@ impl Mp4Sink {
 
 const AMD_VENDOR: &str = "VEN_1002";
 
-/// BT.709 RGB to limited-range Y'CbCr, 16.16 fixed point.
 const Y_R: i32 = 11_966;
 const Y_G: i32 = 40_254;
 const Y_B: i32 = 4_064;
@@ -274,8 +259,6 @@ const CR_R: i32 = 28_784;
 const CR_G: i32 = -26_145;
 const CR_B: i32 = -2_639;
 
-/// Converts a 4-byte-per-pixel frame (red at channel `r`, blue at `2 - r`) to NV12 with the
-/// BT.709 matrix, chroma averaged over each 2x2 block, splitting row pairs across all cores.
 fn rgb_to_nv12(px: &[u8], r: usize, w: usize, h: usize, out: &mut [u8]) {
     let b = 2 - r;
     let (luma, chroma) = out.split_at_mut(w * h);
@@ -362,7 +345,6 @@ unsafe fn add_aac_stream(writer: &IMFSinkWriter, audio: AudioParams) -> anyhow::
     Ok(stream)
 }
 
-/// The attributes of the encoder MFT the sink writer picked for `stream`.
 unsafe fn encoder_attributes(writer: &IMFSinkWriter, stream: u32) -> Option<IMFAttributes> {
     let mut raw = std::ptr::null_mut();
     writer.GetServiceForStream(stream, &GUID::zeroed(), &IMFTransform::IID, &mut raw).ok()?;
@@ -449,8 +431,6 @@ fn transform_count(category: GUID, subtype: GUID) -> u32 {
     count
 }
 
-/// A pool of GPU-backed samples the encoder consumes asynchronously. A sample's texture returns
-/// to the pool when the encoder releases it, so a frame is never overwritten mid-encode.
 pub(crate) struct SampleAllocator {
     allocator: IMFVideoSampleAllocatorEx,
 }
@@ -473,7 +453,6 @@ impl SampleAllocator {
         }
     }
 
-    /// A free sample and its texture, or `None` while the encoder holds every sample.
     pub fn take(&self) -> anyhow::Result<Option<(IMFSample, ID3D11Texture2D)>> {
         unsafe {
             let sample = match self.allocator.AllocateSample() {
@@ -499,7 +478,6 @@ mod tests {
 
     #[test]
     fn nv12_conversion_is_bt709_limited_range() {
-        // 2x2 blocks: white, black, pure red (RGBA order), then the same frame as BGRA.
         let rgba = [255, 255, 255, 255, 0, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255];
         let mut out = vec![0u8; 6];
         rgb_to_nv12(&rgba[..8].repeat(2), 0, 2, 2, &mut out);

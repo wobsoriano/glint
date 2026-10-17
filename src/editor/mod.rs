@@ -1,6 +1,3 @@
-//! The screenshot editor. It edits an [`EditDoc`] over an untouched base image and hands the
-//! flattened image plus the document to a save callback, so every edit stays re-editable.
-
 mod canvas;
 mod gallery;
 mod input;
@@ -34,14 +31,11 @@ fn next_id() -> u64 {
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-/// What a save hands to its owner: the flattened full-resolution image and the document that
-/// reproduces it from the base image.
 pub struct SaveRequest {
     pub image: Arc<image::RgbaImage>,
     pub doc: EditDoc,
 }
 
-/// Commits an edit to its owner. When the task fails the editor stays open with its edits.
 pub type OnSave = Rc<dyn Fn(SaveRequest, &mut App) -> Task<anyhow::Result<()>>>;
 
 pub fn redactions_from(findings: &[redact::Finding], kind: RedactStyle) -> Vec<Annotation> {
@@ -56,8 +50,6 @@ pub fn redactions_from(findings: &[redact::Finding], kind: RedactStyle) -> Vec<A
         .collect()
 }
 
-/// A document holding only automatic redactions and no frame, so it renders to the
-/// screenshot with the findings hidden and reopens with them still editable.
 pub fn redaction_doc(findings: &[redact::Finding], kind: RedactStyle, dpi: f32) -> EditDoc {
     let style = Style {
         background: Background::None,
@@ -74,8 +66,6 @@ pub fn redaction_doc(findings: &[redact::Finding], kind: RedactStyle, dpi: f32) 
     doc
 }
 
-/// Opens the editor on `base` with `doc`. Done, Save and Save As commit through `on_save`;
-/// closing with uncommitted edits asks first.
 pub fn open_doc(base: Arc<image::RgbaImage>, doc: EditDoc, title: String, on_save: OnSave, cx: &mut App) {
     let bounds = Bounds::centered(None, size(px(1360.), px(880.)), cx);
     let _ = cx.open_window(
@@ -113,15 +103,12 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: EditDoc, title: String, on_sav
     );
 }
 
-/// What follows a successful commit.
 #[derive(Clone, Copy, PartialEq)]
 enum AfterSave {
     Close,
-    /// Also export a copy: to the export folder per settings, or through a dialog when `ask`.
     Export { ask: bool },
 }
 
-/// Drawing defaults for new annotations, in points.
 #[derive(Clone)]
 struct Ink {
     color: Color,
@@ -132,7 +119,6 @@ struct Ink {
     redact_strength: f32,
 }
 
-/// Where typed characters go.
 #[derive(Clone, Copy, PartialEq)]
 enum Typing {
     Text(u64),
@@ -156,7 +142,6 @@ const CROP_PRESETS: [(&str, CropPreset); 7] = [
     ("3:2", CropPreset::Ratio(3.0, 2.0)),
 ];
 
-/// A crop being edited, in base-image pixels. Applied as one undoable step.
 #[derive(Clone, Copy)]
 struct CropEdit {
     rect: R,
@@ -173,7 +158,6 @@ enum Drag {
     CropHandle { idx: usize },
 }
 
-/// Undo stack of whole documents. Repeated edits of one control within a moment coalesce.
 #[derive(Default)]
 struct History {
     undo: Vec<EditDoc>,
@@ -185,7 +169,6 @@ pub struct Editor {
     base: Arc<image::RgbaImage>,
     title: String,
     doc: EditDoc,
-    /// The document as last committed; closing with a different one asks first.
     saved: EditDoc,
     on_save: OnSave,
     tool: Tool,
@@ -196,7 +179,6 @@ pub struct Editor {
     drag: Option<Drag>,
     crop: Option<CropEdit>,
     viewport: viewport::Viewport,
-    /// The font family list is open.
     font_menu: bool,
     focus: FocusHandle,
     auto_colors: Vec<Color>,
@@ -228,7 +210,6 @@ impl Editor {
         gallery::scan();
         let presets = preset::load_store(&presets_path()).unwrap_or_default();
         let auto_colors = crate::render::auto_gradient(&base);
-        // Poll for wallpaper thumbnails while they decode in the background.
         cx.spawn(async move |this: WeakEntity<Editor>, cx| loop {
             Timer::after(Duration::from_millis(400)).await;
             let alive = this.update(cx, |this, cx| {
@@ -284,8 +265,6 @@ impl Editor {
         (self.base.width(), self.base.height())
     }
 
-    // --- undo -----------------------------------------------------------------------------
-
     fn checkpoint(&mut self) {
         self.history.undo.push(self.doc.clone());
         if self.history.undo.len() > 200 {
@@ -295,8 +274,6 @@ impl Editor {
         self.history.last = None;
     }
 
-    /// Checkpoints unless the previous checkpoint came from the same control a moment ago, so a
-    /// slider drag is one undo step.
     fn checkpoint_for(&mut self, control: &'static str) {
         let now = Instant::now();
         let recent = self
@@ -315,7 +292,6 @@ impl Editor {
         }
     }
 
-    /// An undoable document change from a control.
     fn edit(&mut self, control: &'static str, f: impl FnOnce(&mut EditDoc)) {
         self.checkpoint_for(control);
         f(&mut self.doc);
@@ -342,8 +318,6 @@ impl Editor {
         let ids: Vec<u64> = self.doc.annotations.iter().map(|a| a.id).collect();
         self.selected.retain(|id| ids.contains(id));
     }
-
-    // --- helpers ----------------------------------------------------------------------------
 
     fn ann_mut(&mut self, id: u64) -> Option<&mut Annotation> {
         self.doc.annotations.iter_mut().find(|a| a.id == id)
@@ -375,7 +349,6 @@ impl Editor {
         }
     }
 
-    /// Applies a change to every selected annotation as one undoable step.
     fn modify_selected(&mut self, control: &'static str, f: impl Fn(&mut Annotation)) {
         if self.selected.is_empty() {
             return;
@@ -449,8 +422,6 @@ impl Editor {
         cx.notify();
     }
 
-    // --- export -----------------------------------------------------------------------------
-
     fn ensure_sources(&mut self) {
         if matches!(self.doc.style.background, Background::Blurred) && self.blur_bg.is_none() {
             self.blur_bg = Some(crate::render::make_blur_bg(&self.base));
@@ -486,8 +457,6 @@ impl Editor {
         (l.width, l.height)
     }
 
-    // --- actions ------------------------------------------------------------------------------
-
     fn copy(&mut self, cx: &mut Context<Self>) {
         let img = self.export();
         match win::copy_image(&img) {
@@ -500,8 +469,6 @@ impl Editor {
         self.doc != self.saved
     }
 
-    /// Commits the edit through the owner's callback, then closes or exports a copy. A failure
-    /// keeps the editor open with its changes.
     fn commit(&mut self, then: AfterSave, window: &mut Window, cx: &mut Context<Self>) {
         if self.crop.is_some() {
             self.apply_crop();
@@ -548,7 +515,6 @@ impl Editor {
         );
     }
 
-    /// Closes the window, asking to save first when there are uncommitted edits.
     fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_text();
         if !self.is_dirty() {
@@ -581,7 +547,6 @@ impl Editor {
         pin::open(Arc::new(img), self.doc.dpi, cx);
     }
 
-    /// The cropped region of the base image.
     fn cropped_base(&self) -> image::RgbaImage {
         let (w, h) = self.base_size();
         let c = self.doc.crop_rect(w, h);
@@ -614,7 +579,6 @@ impl Editor {
     }
 
     fn add_findings(&mut self, findings: Vec<redact::Finding>, kind: RedactStyle, strength: f32, cx: &mut Context<Self>) {
-        // Skip anything already covered by an existing redaction.
         let fresh: Vec<_> = findings
             .into_iter()
             .filter(|f| {
@@ -688,8 +652,6 @@ impl Editor {
         self.doc.annotations.retain(|a| !sel.contains(&a.id));
         self.typing = None;
     }
-
-    // --- presets ------------------------------------------------------------------------------
 
     fn save_presets(&mut self, cx: &mut Context<Self>) {
         if let Err(e) = preset::save_store(&presets_path(), &self.presets) {

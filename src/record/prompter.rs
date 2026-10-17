@@ -1,8 +1,3 @@
-//! The teleprompter: a pill under the top edge of the recorded display that shows a few lines
-//! of the script. With a voice source it follows along: microphone buffers go to on-device
-//! recognition on its own thread, and recognized words advance a `ScriptTracker`. Without
-//! one, or when recognition fails, the user scrolls it.
-
 use super::chrome::{self, Kind, Placement};
 use super::Target;
 use crate::ui::{self, FONT};
@@ -25,10 +20,7 @@ const WORD_GAP: f32 = 5.;
 const FONT_SIZE: f32 = 16.;
 const STATUS_H: f32 = 22.;
 const PAD_Y: f32 = 10.;
-/// Microphone buffers (about 10 ms each) that may wait for the recognizer before new ones
-/// are dropped.
 pub const AUDIO_QUEUE: usize = 200;
-/// Sample rate of the buffers the recorder's microphone tap delivers.
 pub const TAP_RATE: u32 = 48_000;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,15 +37,12 @@ struct Shared {
     index: Mutex<Option<usize>>,
 }
 
-/// Recognition running for one recording. Dropping it stops the thread.
 pub struct Follower {
     shared: Arc<Shared>,
     cancel: Arc<AtomicBool>,
 }
 
 impl Follower {
-    /// Starts following `script` from `audio`, mono buffers at `rate`. Downloads the speech
-    /// model into `data_dir` first when it is missing.
     pub fn start(script: String, audio: Receiver<Vec<f32>>, rate: u32, data_dir: PathBuf) -> Self {
         let shared = Arc::new(Shared::default());
         let cancel = Arc::new(AtomicBool::new(false));
@@ -98,7 +87,6 @@ fn follow(script: &str, audio: &Receiver<Vec<f32>>, rate: u32, data_dir: &Path, 
         Ok(l) => l,
         Err(e) => return set(Status::Failed(format!("{e:#}"))),
     };
-    // Speech from before the model was ready is stale; start from now.
     while audio.try_recv().is_ok() {}
     set(Status::Listening);
     let mut tracker = ScriptTracker::new(script);
@@ -121,8 +109,6 @@ fn follow(script: &str, audio: &Receiver<Vec<f32>>, rate: u32, data_dir: &Path, 
     }
 }
 
-/// Plays a WAV file into `tx` in real time, as if it were the microphone. Used by
-/// `GLINT_TELEPROMPTER_WAV` to exercise the follow path without a speaker in the room.
 pub fn feed_wav(path: PathBuf, tx: SyncSender<Vec<f32>>) {
     let _ = std::thread::Builder::new().name("glint-prompter-wav".into()).spawn(move || {
         let Ok(wav) = glint_media::read_wav(&path) else { return };
@@ -143,7 +129,6 @@ pub fn feed_wav(path: PathBuf, tx: SyncSender<Vec<f32>>) {
     });
 }
 
-/// Opens the pill centered under the top edge of the recorded display.
 pub fn open(target: &Target, script: &str, lines: usize, follower: Option<Follower>, cx: &mut App) -> Option<AnyWindowHandle> {
     let d = target.display();
     let scale = d.scale;
@@ -156,7 +141,6 @@ pub fn open(target: &Target, script: &str, lines: usize, follower: Option<Follow
     Some(handle.into())
 }
 
-/// Word index ranges, one per line, wrapping greedily at `max` width.
 pub fn wrap(widths: &[f32], space: f32, max: f32) -> Vec<Range<usize>> {
     let mut lines = Vec::new();
     let (mut start, mut used) = (0, 0.);
@@ -174,8 +158,6 @@ pub fn wrap(widths: &[f32], space: f32, max: f32) -> Vec<Range<usize>> {
     lines
 }
 
-/// First visible line: the line being read sits at the top, and finishing a line's last word
-/// already brings the next one up.
 pub fn top_line(lines: &[Range<usize>], active: Option<usize>, visible: usize) -> usize {
     let Some(a) = active else { return 0 };
     let mut line = lines.iter().position(|l| l.contains(&a)).unwrap_or(0);
@@ -190,7 +172,6 @@ pub struct Prompter {
     lines: Option<Vec<Range<usize>>>,
     visible: usize,
     follower: Option<Follower>,
-    /// Lines scrolled by hand from where following put the text.
     manual: i32,
     wheel: f32,
     last_index: Option<usize>,
@@ -221,7 +202,6 @@ impl Prompter {
                 f32::from(window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], None).width)
             };
             let widths: Vec<f32> = self.words.iter().map(|w| measure(w)).collect();
-            // A few pixels of slack for rounding between measured and laid-out text.
             self.lines = Some(wrap(&widths, WORD_GAP, WIDTH - PAD_X * 2. - 4.));
         }
         self.lines.as_deref().unwrap_or_default()

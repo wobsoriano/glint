@@ -1,7 +1,3 @@
-//! Everything that moves over output time, precomputed once per project edit at a fixed
-//! 120 Hz step and interpolated per frame, so preview and export are deterministic and a
-//! seek never depends on what was rendered before it.
-
 use crate::overlays::{CaptionTrack, CaptionWord, ClickTrack, KeyTrack};
 use crate::project::{CropRect, Project};
 use crate::zoom::{self, Viewport};
@@ -11,7 +7,6 @@ pub(crate) const STEP_HZ: f64 = 120.0;
 pub(crate) const STEP_MS: f64 = 1000.0 / STEP_HZ;
 const DT: f64 = 1.0 / STEP_HZ;
 
-/// One damped spring integrated with semi-implicit Euler.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Spring {
     pub pos: f64,
@@ -46,12 +41,10 @@ pub(crate) trait Lerp: Copy {
     fn lerp(a: Self, b: Self, f: f64) -> Self;
 }
 
-/// Number of fixed steps covering `duration_ms`, both ends included.
 pub(crate) fn step_count(duration_ms: f64) -> usize {
     ((duration_ms / STEP_MS).ceil() as usize + 1).max(2)
 }
 
-/// Interpolates a track whose frame `k` sits at `k * STEP_MS`.
 pub(crate) fn sample<T: Lerp>(frames: &[T], t_ms: f64) -> Option<T> {
     let last = frames.len().checked_sub(1)?;
     let pos = (t_ms / STEP_MS).max(0.0);
@@ -62,7 +55,6 @@ pub(crate) fn sample<T: Lerp>(frames: &[T], t_ms: f64) -> Option<T> {
     Some(T::lerp(frames[i], frames[i + 1], pos - i as f64))
 }
 
-/// The reconstructed cursor at one instant.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PointerFrame {
     /// Screen-master pixels.
@@ -87,9 +79,7 @@ impl Lerp for PointerFrame {
 const GLIDE: SpringK = SpringK { tension: 470.0, friction: 70.0, inertia: 3.0 };
 const INTERCEPT: SpringK = SpringK { tension: 538.0, friction: 40.0, inertia: 1.0 };
 const SETTLE: SpringK = SpringK { tension: 300.0, friction: 30.0, inertia: 0.3 };
-/// Before a click the cursor heads straight for the click point...
 const ANTICIPATION_MS: f64 = 500.0;
-/// ...and in the last moment switches to a stiffer spring so it lands on time.
 const INTERCEPT_MS: f64 = 175.0;
 const PRESS_LEAD_MS: f64 = 130.0;
 
@@ -101,8 +91,6 @@ struct PointerEvent {
     cursor: u32,
 }
 
-/// Source pointer samples mapped onto output time, plus one seed at each clip start so the
-/// spring bridges a cut from where the pointer was at that point in the source.
 fn output_pointer_events(project: &Project, input: &InputTimeline) -> Vec<PointerEvent> {
     let src = &input.pointer;
     let mut events: Vec<PointerEvent> = src
@@ -124,7 +112,6 @@ fn output_pointer_events(project: &Project, input: &InputTimeline) -> Vec<Pointe
     events
 }
 
-/// The smoothed cursor over output time.
 pub struct PointerTrack {
     frames: Vec<PointerFrame>,
 }
@@ -201,7 +188,6 @@ impl PointerTrack {
     }
 }
 
-/// All precomputed motion for one project state.
 pub struct Motion {
     pub camera: Vec<Viewport>,
     /// Pointer-following reframe for Fill on a non-original aspect; it already folds in zooms.
@@ -227,14 +213,12 @@ impl Motion {
         }
     }
 
-    /// The camera that frames the screen card at `output_ms`.
     pub fn viewport(&self, output_ms: f64) -> Viewport {
         sample(self.reframe.as_deref().unwrap_or(&self.camera), output_ms)
             .unwrap_or(Viewport::IDENTITY)
     }
 }
 
-/// Converts screen-master pixels to coordinates normalized inside the crop.
 pub(crate) fn to_crop(crop: &CropRect, size: [u32; 2], x: f64, y: f64) -> (f64, f64) {
     let nx = (x / size[0].max(1) as f64 - crop.x as f64) / crop.w as f64;
     let ny = (y / size[1].max(1) as f64 - crop.y as f64) / crop.h as f64;

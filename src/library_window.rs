@@ -1,6 +1,3 @@
-//! The Library window: every screenshot and recording in one place, with filters, search,
-//! sorting, grid and list views, an inspector, multi-select and Quick Look.
-
 use crate::library::{CaptureKind, Item};
 use crate::settings::{LibraryView, Settings, SortKey};
 use crate::store::{self, Store};
@@ -47,8 +44,6 @@ enum Thumb {
     Missing,
 }
 
-/// Decoded thumbnails keyed by capture and modification time, loaded off the main thread
-/// and bounded so a large Library does not hold every image.
 #[derive(Default)]
 struct Thumbs {
     map: HashMap<(PathBuf, i64), Thumb>,
@@ -70,7 +65,6 @@ pub struct LibraryWindow {
     focus: FocusHandle,
     search_focus: FocusHandle,
     scroll: UniformListScrollHandle,
-    /// Grid columns at the last render, for arrow-key navigation.
     columns_hint: usize,
 }
 
@@ -129,7 +123,6 @@ fn prefs_update(cx: &mut App, f: impl FnOnce(&mut crate::settings::LibraryPrefs)
 }
 
 impl LibraryWindow {
-    /// Items after filter, search and sort, in display order.
     fn visible(&self, cx: &App) -> Vec<Item> {
         let sort = cx.global::<Settings>().library.sort;
         let q = self.search.trim().to_lowercase();
@@ -390,7 +383,6 @@ fn sidebar_entry(id: &'static str, icon: &'static str, label: &'static str, coun
         .child(div().text_xs().text_color(ui::theme().muted).child(count.to_string()))
 }
 
-/// A label over a long value that wraps, for paths.
 fn block(label: &str, value: String) -> impl IntoElement {
     div()
         .flex()
@@ -614,7 +606,6 @@ impl LibraryWindow {
     }
 }
 
-/// Grid columns that fit the content area, from the window width.
 fn columns_for(window: &Window, inspector: bool) -> usize {
     let w = f32::from(window.viewport_size().width) - SIDEBAR_W - if inspector { INSPECTOR_W } else { 0. } - 32.;
     ((w + TILE_GAP) / (TILE_W + TILE_GAP)).floor().max(1.) as usize
@@ -790,7 +781,6 @@ impl Render for LibraryWindow {
     }
 }
 
-/// A small round action shown over a Library thumbnail on hover.
 fn tile_action(id: String, icon: &'static str, tip: &'static str, item: Item, f: fn(&Item, &mut App)) -> impl IntoElement {
     div()
         .id(SharedString::from(id))

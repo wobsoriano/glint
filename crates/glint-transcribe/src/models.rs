@@ -21,7 +21,6 @@ impl std::fmt::Display for Cancelled {
 
 impl std::error::Error for Cancelled {}
 
-/// ggml whisper models published at huggingface.co/ggerganov/whisper.cpp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Model {
@@ -115,8 +114,6 @@ pub fn download_model(
     Ok(dest)
 }
 
-/// How long a download may go without connecting or receiving a byte before it fails. A read
-/// blocks until then, so this also bounds how long a cancel waits.
 const STALL: Duration = Duration::from_secs(30);
 
 fn agent(stall: Duration) -> ureq::Agent {
@@ -240,8 +237,6 @@ mod tests {
         let _ = fs::remove_dir_all(&data);
     }
 
-    /// Serves one connection: reads the request, writes `reply`, then holds the socket open
-    /// without sending anything more.
     fn stalling_server(reply: &'static [u8]) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/model.bin", listener.local_addr().unwrap());

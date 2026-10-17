@@ -1,5 +1,3 @@
-//! One Direct3D 11 device shared by capture and the hardware encoder.
-
 use anyhow::Context;
 use windows::core::Interface;
 use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
@@ -18,7 +16,6 @@ use windows::Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDev
 pub(crate) struct D3dDevice {
     pub device: ID3D11Device,
     pub context: ID3D11DeviceContext,
-    /// Hands the device to Media Foundation transforms (hardware encoder, video processor).
     pub manager: IMFDXGIDeviceManager,
 }
 
@@ -54,7 +51,6 @@ impl D3dDevice {
         Ok(Self { device, context, manager })
     }
 
-    /// The WinRT view of the device that Windows.Graphics.Capture wants.
     pub fn winrt_device(&self) -> anyhow::Result<IDirect3DDevice> {
         let dxgi: IDXGIDevice = self.device.cast().context("IDXGIDevice")?;
         let inspectable = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi).context("CreateDirect3D11DeviceFromDXGIDevice")? };
