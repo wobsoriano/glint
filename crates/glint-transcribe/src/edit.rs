@@ -53,7 +53,6 @@ pub fn merge(mut ranges: Vec<TimeRange>) -> Vec<TimeRange> {
 }
 
 #[cfg(test)]
-#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
 
@@ -65,18 +64,22 @@ mod tests {
         TimeRange { start_ms, end_ms }
     }
 
+    fn cut_one(words: &[Word], selection: Range<usize>, source_duration_ms: u64) -> Vec<TimeRange> {
+        word_cut_ranges(words, std::slice::from_ref(&selection), source_duration_ms)
+    }
+
     #[test]
     fn cut_bites_into_pauses_but_not_neighbors() {
         let words = [w(0, 400), w(500, 700), w(1_500, 1_800), w(1_820, 2_000)];
-        assert_eq!(word_cut_ranges(&words, &[1..2], 3_000), vec![r(450, 820)]);
-        assert_eq!(word_cut_ranges(&words, &[2..3], 3_000), vec![r(1_380, 1_810)]);
+        assert_eq!(cut_one(&words, 1..2, 3_000), vec![r(450, 820)]);
+        assert_eq!(cut_one(&words, 2..3, 3_000), vec![r(1_380, 1_810)]);
     }
 
     #[test]
     fn edges_pad_toward_media_bounds() {
         let words = [w(100, 400), w(500, 900)];
-        assert_eq!(word_cut_ranges(&words, &[0..1], 1_000), vec![r(50, 450)]);
-        assert_eq!(word_cut_ranges(&words, &[1..2], 1_000), vec![r(450, 950)]);
+        assert_eq!(cut_one(&words, 0..1, 1_000), vec![r(50, 450)]);
+        assert_eq!(cut_one(&words, 1..2, 1_000), vec![r(450, 950)]);
     }
 
     #[test]
