@@ -276,6 +276,16 @@ impl IDataObject_Impl for DragData_Impl {
     }
 }
 
+/// Unregisters the OLE drop target GPUI gives every window. GPUI's target answers every file
+/// drag with DROPEFFECT_COPY, so a card released back over the stack it came from would
+/// report a drop that copied nothing.
+pub fn refuse_drops(window: &gpui::Window) {
+    let Some(h) = crate::win::hwnd(window) else { return };
+    unsafe {
+        let _ = windows::Win32::System::Ole::RevokeDragDrop(h);
+    }
+}
+
 /// Opens Explorer with the given items selected. They must share a parent folder.
 /// Runs on its own COM thread: the shell call waits on Explorer and pumps messages, which
 /// would re-enter GPUI (and abort) if it ran inside a click handler on the UI thread.
