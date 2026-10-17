@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{implement, w, BOOL, HRESULT, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{
-    DATA_S_SAMEFORMATETC, DV_E_FORMATETC, DV_E_TYMED, E_NOTIMPL, E_OUTOFMEMORY, HANDLE, HGLOBAL, HWND, LPARAM,
+    DATA_S_SAMEFORMATETC, DV_E_FORMATETC, DV_E_TYMED, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, HANDLE, HGLOBAL, HWND, LPARAM,
     OLE_E_ADVISENOTSUPPORTED, POINT, RECT, S_OK,
 };
 use windows::Win32::Graphics::Gdi::{
@@ -185,8 +185,14 @@ impl DragData {
         }
     }
 
+    fn has(&self, fmt: &FORMATETC) -> bool {
+        fmt.tymed & TYMED_HGLOBAL.0 as u32 != 0
+            && fmt.dwAspect == DVASPECT_CONTENT.0
+            && self.0.borrow().iter().any(|(f, _)| *f == fmt.cfFormat)
+    }
+
     fn get(&self, fmt: &FORMATETC) -> Option<Vec<u8>> {
-        if fmt.tymed & TYMED_HGLOBAL.0 as u32 == 0 || fmt.dwAspect != DVASPECT_CONTENT.0 {
+        if !self.has(fmt) {
             return None;
         }
         self.0.borrow().iter().find(|(f, _)| *f == fmt.cfFormat).map(|(_, b)| b.clone())
@@ -205,15 +211,21 @@ impl IDataObject_Impl for DragData_Impl {
     }
 
     fn QueryGetData(&self, fmt: *const FORMATETC) -> HRESULT {
-        if self.get(unsafe { &*fmt }).is_some() {
+        if self.has(unsafe { &*fmt }) {
             S_OK
         } else {
             DV_E_FORMATETC
         }
     }
 
-    fn GetCanonicalFormatEtc(&self, _: *const FORMATETC, out: *mut FORMATETC) -> HRESULT {
-        unsafe { (*out).ptd = std::ptr::null_mut() };
+    fn GetCanonicalFormatEtc(&self, fmt: *const FORMATETC, out: *mut FORMATETC) -> HRESULT {
+        if fmt.is_null() || out.is_null() {
+            return E_INVALIDARG;
+        }
+        unsafe {
+            *out = *fmt;
+            (*out).ptd = std::ptr::null_mut();
+        }
         DATA_S_SAMEFORMATETC
     }
 
@@ -225,6 +237,9 @@ impl IDataObject_Impl for DragData_Impl {
         let bytes = unsafe {
             let h = medium.u.hGlobal;
             let p = GlobalLock(h) as *const u8;
+            if p.is_null() {
+                return Err(E_INVALIDARG.into());
+            }
             let bytes = std::slice::from_raw_parts(p, GlobalSize(h)).to_vec();
             let _ = GlobalUnlock(h);
             bytes
@@ -584,5 +599,30 @@ mod drag_data {
             let _ = GlobalUnlock(out.u.hGlobal);
             ReleaseStgMedium(&mut out);
         }
+    }
+
+    #[test]
+    fn set_data_refuses_a_medium_without_memory() {
+        let data: IDataObject = DragData::default().into();
+        let fmt = hglobal_format(CF_DIB.0);
+        let medium = STGMEDIUM {
+            tymed: TYMED_HGLOBAL.0 as u32,
+            u: STGMEDIUM_0 { hGlobal: HGLOBAL(std::ptr::null_mut()) },
+            pUnkForRelease: std::mem::ManuallyDrop::new(None),
+        };
+        unsafe {
+            assert_eq!(data.SetData(&fmt, &medium, false).unwrap_err().code(), E_INVALIDARG);
+            assert_eq!(data.QueryGetData(&fmt), DV_E_FORMATETC);
+        }
+    }
+
+    #[test]
+    fn the_canonical_format_is_the_one_asked_for() {
+        let data: IDataObject = DragData::default().into();
+        let asked = hglobal_format(CF_HDROP.0);
+        let mut out = FORMATETC::default();
+        assert_eq!(unsafe { data.GetCanonicalFormatEtc(&asked, &mut out) }, DATA_S_SAMEFORMATETC);
+        assert_eq!((out.cfFormat, out.dwAspect, out.lindex, out.tymed), (CF_HDROP.0, DVASPECT_CONTENT.0, -1, TYMED_HGLOBAL.0 as u32));
+        assert!(out.ptd.is_null());
     }
 }
