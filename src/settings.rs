@@ -342,12 +342,12 @@ impl Settings {
     }
 
     fn save_to(&self, p: &Path) {
-        if let Err(e) = self.write_replacing(p) {
+        if let Err(e) = self.write_atomic(p) {
             eprintln!("Settings were not saved: {e:#}");
         }
     }
 
-    fn write_replacing(&self, p: &Path) -> anyhow::Result<()> {
+    fn write_atomic(&self, p: &Path) -> anyhow::Result<()> {
         if let Some(dir) = p.parent() {
             std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
         }
