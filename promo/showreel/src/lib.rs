@@ -366,9 +366,10 @@ fn overlay<'a>(frame: &mut Frame, ctx: &FFramesContext<'a, '_>, g: f32) -> Svgr<
         })
         .collect();
 
-    let fade = 1.0 - seg(g, T_LOGO, 0.3);
+    // Clears before the Library rush so nothing of it shows under the logo burst.
+    let fade = 1.0 - seg(g, T_LOGO - 0.45, 0.3);
     let enter = out_expo(seg(g, 0.0, 0.5));
-    fframes::svgr!(<g>
+    fframes::svgr!(<g opacity={fade}>
         <defs>
             <radialGradient id="scrim" cx="0" cy="1" r="1">
                 <stop offset="0" stop-color="#000000" stop-opacity="0.66" />
@@ -378,10 +379,10 @@ fn overlay<'a>(frame: &mut Frame, ctx: &FFramesContext<'a, '_>, g: f32) -> Svgr<
             <clipPath id="label-mask"><rect x={LABEL_X - 20.0} y={LABEL_Y - 64.0} width="1500" height="84" /></clipPath>
             <clipPath id="tag-mask"><rect x={LABEL_X - 20.0} y={TAG_Y - 30.0} width="900" height="40" /></clipPath>
         </defs>
-        <rect y="580" width="1400" height="500" fill="url(#scrim)" opacity={fade} />
+        <rect y="580" width="1400" height="500" fill="url(#scrim)" />
         <g clip-path="url(#tag-mask)">{tag_out}{tag_in}</g>
         <g clip-path="url(#label-mask)">{outgoing}{incoming}</g>
-        <g opacity={fade} transform={format!("translate({:.1} 0)", -40.0 * (1.0 - enter))}>{rail}</g>
+        <g transform={format!("translate({:.1} 0)", -40.0 * (1.0 - enter))}>{rail}</g>
     </g>)
 }
 
