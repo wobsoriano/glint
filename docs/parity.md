@@ -31,7 +31,7 @@ calls the real code. The evidence column points at that proof.
 - [x] Grid and list views, search, sort by date/name/modified; layout, sort, inspector remembered — W4 16-18
 - [x] Inspector: dimensions, dates, duration, disk usage, editable state, location — W4 13-inspector
 - [x] Quick look on double-click or Space; Edit reopens editor or Studio with saved edits — W4 22-quicklook, W6 s5, W8b actions::edit
-- [x] Multi-select (Ctrl-click, Shift-click, Ctrl+A); copy, export, reveal in Explorer, move to Recycle Bin — W4 19-20 (copy/export/reveal not clicked)
+- [x] Multi-select (Ctrl-click, Shift-click, Ctrl+A); copy, export, reveal in Explorer, move to Recycle Bin — W4 19-20; W14 p2-02 (Copy with 2 selected: the clipboard FileDropList holds both image.png files), p2-05 (Export… into a chosen folder wrote both PNGs), p2-06 (Show in Explorer opened the Library folder with the 2 item folders selected)
 - [x] Rename with Enter (title stored in metadata) — W4 rename test + 32-grid-hover
 - [x] Opens from tray and Ctrl+Shift+L; normal launch opens Library, autostart stays in tray — W12 01-launch-library, 02-autostart-tray, 03-ctrl-shift-l, 06-tray-open-library, 13/14 (launched with the Run entry's own `--background` command line: no windows)
 - [x] Open images from Explorer (Open with Glint), imports a copy, opens editor per image — W4 27-open-with, W6 s1-openwith
@@ -61,7 +61,8 @@ calls the real code. The evidence column points at that proof.
 - [ ] Live camera preview before recording — not verifiable: no camera on the test machine
 - [x] Area guide: highlighted region, dimmed rest, click-through, excluded from recording — W7 a1, b2-frame
 - [x] Control bar: elapsed time, pause/resume, restart, stop, delete — W7 p1, f1
-- [x] Separate masters: screen without cursor, camera, mic, system audio, input timeline — W1 record.rs run, w1-input.png
+- [x] Separate masters: screen without cursor, mic, system audio, input timeline — W1 record.rs run, w1-input.png; W14 p1 (4.8 s display recording with the Arctis 7P+ mic and system audio on while a 440 Hz tone played: system.wav 4.773 s with signal, rms 0.023; mic.wav 4.773 s, present but digital silence because nobody spoke; screen.mp4 4.80 s; input.json holds the stop shortcut at 4766 ms)
+- [ ] Separate masters: camera — not verifiable: no camera on the test machine (the picker shows "No camera")
 
 ## Teleprompter
 
@@ -77,7 +78,7 @@ calls the real code. The evidence column points at that proof.
 - [x] Studio presets: save named, set default — W8b s33
 - [x] Auto zoom from clicks; add, remove, enable, resize, retime zooms; follow pointer or fixed focus — W3 frames, W8b s13-s15
 - [x] Reconstructed cursor with adjustable size; click highlights; keystroke captions in six positions — W3 frame_03150, cursor test
-- [x] Camera track: show/hide, drag, size, roundness — W8b s19 (synthetic camera)
+- [x] Camera track: show/hide, drag, size, roundness — W8b s19 (synthetic camera file; no hardware camera)
 - [x] On-device transcription; captions editor with seek, position, size, karaoke highlight — W9 s7-s12, s17, export frame1/2
 - [x] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences — W9 s20-s25, t6
 - [x] Export: quality, resolution, format, 30/60 fps, motion blur, audio; progress; cancel; cached renders — W8a proof.log, W8b s22/s23

@@ -142,7 +142,7 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
     let mut audio = match AudioReader::open(path) {
         Ok(a) => a.map(Soundtrack::new),
         Err(e) => {
-            *sh.error.lock().unwrap() = Some(format!("audio unavailable: {e:#}"));
+            audio_unavailable(sh, e);
             None
         }
     };
@@ -168,13 +168,7 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
             Next::Play { until, muted } => {
                 let start = sh.position_ms.load(Ordering::Relaxed);
                 let mut track = audio.as_mut().filter(|_| !muted);
-                let output = match &mut track {
-                    Some(t) => {
-                        t.seek(start)?;
-                        t.output().ok()
-                    }
-                    None => None,
-                };
+                let output = track.as_mut().and_then(|t| t.seek(start).and_then(|_| t.output()).map_err(|e| audio_unavailable(sh, e)).ok());
                 if output.is_none() {
                     track = None;
                 }
@@ -187,9 +181,7 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
                     if interrupted(sh) {
                         break false;
                     }
-                    if let Some(t) = &mut track {
-                        t.top_up()?;
-                    }
+                    top_up(&mut track, sh);
                     let Some(frame) = reader.next_frame()? else { break true };
                     if frame.t_ms >= until {
                         break true;
@@ -199,9 +191,7 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
                         continue;
                     }
                     while clock() < frame.t_ms && !interrupted(sh) {
-                        if let Some(t) = &mut track {
-                            t.top_up()?;
-                        }
+                        top_up(&mut track, sh);
                         std::thread::sleep(std::time::Duration::from_millis(2));
                     }
                     publish(&frame, &mut buffer);
@@ -217,6 +207,20 @@ fn run(sh: &Shared, path: &std::path::Path) -> anyhow::Result<()> {
                     }
                 }
             }
+        }
+    }
+}
+
+/// An audio failure costs the sound, not the picture: say so and keep the video playing.
+fn audio_unavailable(sh: &Shared, e: anyhow::Error) {
+    *sh.error.lock().unwrap() = Some(format!("audio unavailable: {e:#}"));
+}
+
+fn top_up(track: &mut Option<&mut Soundtrack>, sh: &Shared) {
+    if let Some(t) = track {
+        if let Err(e) = t.top_up() {
+            audio_unavailable(sh, e);
+            *track = None;
         }
     }
 }

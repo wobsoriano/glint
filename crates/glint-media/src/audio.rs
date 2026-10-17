@@ -260,10 +260,12 @@ impl Capture {
         unsafe { self.client.Stop()? };
         match sink {
             Some((mut writer, clock)) => {
-                let target = clock.now().as_secs_f64() * SAMPLE_RATE as f64;
-                let have = writer.frames_written() as f64;
+                let target = (clock.now().as_secs_f64() * SAMPLE_RATE as f64).round() as u64;
+                let have = writer.frames_written();
                 if target > have {
-                    writer.write_silence((target - have) as u64)?;
+                    writer.write_silence(target - have)?;
+                } else {
+                    writer.truncate(target)?;
                 }
                 let frames = writer.frames_written();
                 let bytes = writer.finish()?;

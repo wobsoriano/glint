@@ -35,6 +35,8 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 smallvec = "1"
 raw-window-handle = "0.6"
+# `#[implement]` expands to `::windows_core` paths.
+windows-core = "0.62"
 
 [dependencies.windows]
 version = "0.62"

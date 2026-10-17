@@ -374,7 +374,6 @@ fn push_entry(entry: Entry, thumb: Arc<RenderImage>, cx: &mut App) {
         },
         move |window, cx| {
             shell::place(window, rect, cx);
-            shell::refuse_drops(window);
             cx.new(|_| stack)
         },
     );

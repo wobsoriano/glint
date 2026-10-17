@@ -1,17 +1,24 @@
 use crate::settings::ExportFormat;
 use anyhow::Context as _;
+use std::cell::RefCell;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use windows::core::{w, HSTRING, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, POINT, RECT};
+use windows::core::{implement, w, BOOL, HRESULT, HSTRING, PCWSTR};
+use windows::Win32::Foundation::{
+    DATA_S_SAMEFORMATETC, DV_E_FORMATETC, DV_E_TYMED, E_NOTIMPL, E_OUTOFMEMORY, HANDLE, HGLOBAL, HWND, LPARAM,
+    OLE_E_ADVISENOTSUPPORTED, POINT, RECT, S_OK,
+};
 use windows::Win32::Graphics::Gdi::{
     ClientToScreen, GetMonitorInfoW, MonitorFromPoint, BITMAPINFOHEADER, BI_RGB, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
-use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL};
+use windows::Win32::System::Com::{
+    IAdviseSink, IDataObject, IDataObject_Impl, IEnumFORMATETC, IEnumSTATDATA, DATADIR_GET, DVASPECT_CONTENT, FORMATETC,
+    STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL,
+};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
-use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-use windows::Win32::System::Ole::{CF_DIB, CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE};
+use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
+use windows::Win32::System::Ole::{ReleaseStgMedium, CF_DIB, CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE};
 use windows::Win32::System::Registry::{RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
@@ -22,8 +29,7 @@ use windows::Win32::UI::Controls::{
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    BHID_DataObject, ILCreateFromPathW, ILFindLastID, ILFree, IShellItem, SHCreateItemFromParsingName,
-    SHDoDragDrop, SHOpenFolderAndSelectItems, DROPFILES,
+    ILCreateFromPathW, ILFindLastID, ILFree, SHCreateStdEnumFmtEtc, SHDoDragDrop, SHOpenFolderAndSelectItems, DROPFILES,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumThreadWindows, GetAncestor, GetClientRect, GetCursorPos, GetWindowRect, SetWindowDisplayAffinity, SetWindowPos, EVENT_OBJECT_SHOW,
@@ -144,40 +150,114 @@ pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow
 }
 
 /// Runs a modal OLE drag of one file, with its pixels attached for apps that take bitmaps.
-/// Call it while no GPUI borrow is held: the drag loop pumps window messages. The window the
-/// drag starts from must not be a drop target (see `refuse_drops`).
+/// Call it while no GPUI borrow is held: the drag loop pumps window messages.
 pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>) -> anyhow::Result<bool> {
+    let mut data = DragData::default();
+    data.set(CF_HDROP.0, drop_files(std::slice::from_ref(&path.to_path_buf())));
+    if let Some(img) = image {
+        data.set(CF_DIB.0, dib(img));
+    }
+    let data: IDataObject = data.into();
     unsafe {
-        let item: IShellItem = SHCreateItemFromParsingName(&HSTRING::from(path.as_os_str()), None)
-            .with_context(|| format!("locating {}", path.display()))?;
-        let data: IDataObject = item.BindToHandler(None, &BHID_DataObject)?;
-        if let Some(img) = image {
-            let fmt = FORMATETC {
-                cfFormat: CF_DIB.0,
-                ptd: std::ptr::null_mut(),
-                dwAspect: DVASPECT_CONTENT.0,
-                lindex: -1,
-                tymed: TYMED_HGLOBAL.0 as u32,
-            };
-            let medium = STGMEDIUM {
-                tymed: TYMED_HGLOBAL.0 as u32,
-                u: STGMEDIUM_0 { hGlobal: hglobal(&dib(img))? },
-                pUnkForRelease: std::mem::ManuallyDrop::new(None),
-            };
-            let _ = data.SetData(&fmt, &medium, true);
-        }
         let effect = SHDoDragDrop(None, &data, None, DROPEFFECT_COPY)?;
         Ok(effect != DROPEFFECT_NONE)
     }
 }
 
-/// Unregisters the OLE drop target GPUI gives every window. A drag that starts over a GPUI
-/// drop target runs GPUI's DragEnter against the shell data object, which crashes in
-/// windows.storage.dll, so windows that start drags must not accept drops.
-pub fn refuse_drops(window: &gpui::Window) {
-    let Some(h) = crate::win::hwnd(window) else { return };
-    unsafe {
-        let _ = windows::Win32::System::Ole::RevokeDragDrop(h);
+fn hglobal_format(cf: u16) -> FORMATETC {
+    FORMATETC { cfFormat: cf, ptd: std::ptr::null_mut(), dwAspect: DVASPECT_CONTENT.0, lindex: -1, tymed: TYMED_HGLOBAL.0 as u32 }
+}
+
+/// The data object behind a card drag: HGLOBAL formats only, each handed out as a fresh
+/// GMEM_MOVEABLE block, which is what Explorer's drags deliver and what GPUI 0.2.2's drop
+/// target can read. That target dereferences the CF_HDROP handle as a moveable handle's
+/// pointer slot; the GMEM_FIXED blocks the shell's own data objects return crash it.
+#[implement(IDataObject)]
+#[derive(Default)]
+struct DragData(RefCell<Vec<(u16, Vec<u8>)>>);
+
+impl DragData {
+    fn set(&mut self, cf: u16, bytes: Vec<u8>) {
+        let entries = self.0.get_mut();
+        match entries.iter_mut().find(|(f, _)| *f == cf) {
+            Some((_, b)) => *b = bytes,
+            None => entries.push((cf, bytes)),
+        }
+    }
+
+    fn get(&self, fmt: &FORMATETC) -> Option<Vec<u8>> {
+        if fmt.tymed & TYMED_HGLOBAL.0 as u32 == 0 || fmt.dwAspect != DVASPECT_CONTENT.0 {
+            return None;
+        }
+        self.0.borrow().iter().find(|(f, _)| *f == fmt.cfFormat).map(|(_, b)| b.clone())
+    }
+}
+
+impl IDataObject_Impl for DragData_Impl {
+    fn GetData(&self, fmt: *const FORMATETC) -> windows::core::Result<STGMEDIUM> {
+        let bytes = self.get(unsafe { &*fmt }).ok_or(DV_E_FORMATETC)?;
+        let block = hglobal(&bytes).map_err(|_| E_OUTOFMEMORY)?;
+        Ok(STGMEDIUM { tymed: TYMED_HGLOBAL.0 as u32, u: STGMEDIUM_0 { hGlobal: block }, pUnkForRelease: std::mem::ManuallyDrop::new(None) })
+    }
+
+    fn GetDataHere(&self, _: *const FORMATETC, _: *mut STGMEDIUM) -> windows::core::Result<()> {
+        Err(E_NOTIMPL.into())
+    }
+
+    fn QueryGetData(&self, fmt: *const FORMATETC) -> HRESULT {
+        if self.get(unsafe { &*fmt }).is_some() {
+            S_OK
+        } else {
+            DV_E_FORMATETC
+        }
+    }
+
+    fn GetCanonicalFormatEtc(&self, _: *const FORMATETC, out: *mut FORMATETC) -> HRESULT {
+        unsafe { (*out).ptd = std::ptr::null_mut() };
+        DATA_S_SAMEFORMATETC
+    }
+
+    fn SetData(&self, fmt: *const FORMATETC, medium: *const STGMEDIUM, release: BOOL) -> windows::core::Result<()> {
+        let (fmt, medium) = unsafe { (&*fmt, &*medium) };
+        if medium.tymed != TYMED_HGLOBAL.0 as u32 {
+            return Err(DV_E_TYMED.into());
+        }
+        let bytes = unsafe {
+            let h = medium.u.hGlobal;
+            let p = GlobalLock(h) as *const u8;
+            let bytes = std::slice::from_raw_parts(p, GlobalSize(h)).to_vec();
+            let _ = GlobalUnlock(h);
+            bytes
+        };
+        let mut entries = self.0.borrow_mut();
+        match entries.iter_mut().find(|(f, _)| *f == fmt.cfFormat) {
+            Some((_, b)) => *b = bytes,
+            None => entries.push((fmt.cfFormat, bytes)),
+        }
+        if release.as_bool() {
+            unsafe { ReleaseStgMedium(medium as *const _ as *mut _) };
+        }
+        Ok(())
+    }
+
+    fn EnumFormatEtc(&self, direction: u32) -> windows::core::Result<IEnumFORMATETC> {
+        if direction != DATADIR_GET.0 as u32 {
+            return Err(E_NOTIMPL.into());
+        }
+        let formats: Vec<FORMATETC> = self.0.borrow().iter().map(|(cf, _)| hglobal_format(*cf)).collect();
+        unsafe { SHCreateStdEnumFmtEtc(&formats) }
+    }
+
+    fn DAdvise(&self, _: *const FORMATETC, _: u32, _: windows::core::Ref<IAdviseSink>) -> windows::core::Result<u32> {
+        Err(OLE_E_ADVISENOTSUPPORTED.into())
+    }
+
+    fn DUnadvise(&self, _: u32) -> windows::core::Result<()> {
+        Err(OLE_E_ADVISENOTSUPPORTED.into())
+    }
+
+    fn EnumDAdvise(&self) -> windows::core::Result<IEnumSTATDATA> {
+        Err(OLE_E_ADVISENOTSUPPORTED.into())
     }
 }
 
@@ -363,13 +443,19 @@ fn command_exe(command: &str) -> Option<PathBuf> {
     Some(PathBuf::from(&quoted[..quoted.find('"')?]))
 }
 
+/// True when the registered open command already launches this exe, so a newer build at
+/// another path takes the registration over and the same build leaves it alone.
+fn registered_here(command: &str, exe: &Path) -> bool {
+    command_exe(command).is_some_and(|p| p.as_os_str().eq_ignore_ascii_case(exe.as_os_str()))
+}
+
 pub fn register_open_with() -> anyhow::Result<()> {
     let app = r"Software\Classes\Applications\glint.exe";
     let command_key = format!(r"{app}\shell\open\command");
-    if reg_get(&command_key).and_then(|c| command_exe(&c)).is_some_and(|exe| exe.is_file()) {
+    let exe = std::env::current_exe()?;
+    if reg_get(&command_key).is_some_and(|c| registered_here(&c, &exe)) {
         return Ok(());
     }
-    let exe = std::env::current_exe()?;
     let command = format!("\"{}\" \"%1\"", exe.display());
     reg_set(app, Some("FriendlyAppName"), "Glint")?;
     reg_set(&command_key, None, &command)?;
@@ -434,5 +520,69 @@ mod tests {
         assert_eq!(command_exe(command), Some(PathBuf::from(r"C:\Program Files\Glint\glint.exe")));
         assert_eq!(command_exe(r#"glint.exe "%1""#), None);
         assert_eq!(command_exe(r#""unterminated"#), None);
+    }
+
+    #[test]
+    fn only_a_command_for_this_exe_counts_as_registered() {
+        let exe = Path::new(r"C:\Users\me\Glint\glint.exe");
+        assert!(registered_here(r#""C:\Users\ME\glint\GLINT.EXE" "%1""#, exe));
+        assert!(!registered_here(r#""C:\Users\me\old-build\glint.exe" "%1""#, exe));
+        assert!(!registered_here("glint.exe %1", exe));
+    }
+}
+
+#[cfg(test)]
+mod drag_data {
+    use super::*;
+    use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
+
+    /// GPUI 0.2.2's DragEnter: GetData(CF_HDROP), dereference the HGLOBAL as a pointer to an
+    /// HDROP, DragQueryFileW on what came out.
+    unsafe fn read_like_gpui(data: &IDataObject) -> Vec<String> {
+        let fmt = hglobal_format(CF_HDROP.0);
+        assert_eq!(data.QueryGetData(&fmt), S_OK);
+        let mut medium = data.GetData(&fmt).unwrap();
+        let hdrop = *(medium.u.hGlobal.0 as *mut HDROP);
+        let n = DragQueryFileW(hdrop, 0xFFFF_FFFF, None);
+        let mut out = Vec::new();
+        for i in 0..n {
+            let len = DragQueryFileW(hdrop, i, None) as usize;
+            let mut buf = vec![0u16; len + 1];
+            DragQueryFileW(hdrop, i, Some(&mut buf));
+            out.push(String::from_utf16_lossy(&buf[..len]));
+        }
+        ReleaseStgMedium(&mut medium);
+        out
+    }
+
+    #[test]
+    fn the_drag_data_object_survives_gpuis_hdrop_read_twice() {
+        let path = PathBuf::from(r"C:\Glint\Drag\Capture.png");
+        let mut data = DragData::default();
+        data.set(CF_HDROP.0, drop_files(std::slice::from_ref(&path)));
+        let data: IDataObject = data.into();
+        let got = unsafe { read_like_gpui(&data) };
+        assert_eq!(got, vec![r"C:\Glint\Drag\Capture.png".to_string()]);
+        assert_eq!(unsafe { read_like_gpui(&data) }, got);
+        assert_ne!(unsafe { data.QueryGetData(&hglobal_format(CF_DIB.0)) }, S_OK);
+    }
+
+    #[test]
+    fn set_data_stores_a_copy_and_releases_the_medium() {
+        let data: IDataObject = DragData::default().into();
+        let fmt = hglobal_format(CF_DIB.0);
+        let medium = STGMEDIUM {
+            tymed: TYMED_HGLOBAL.0 as u32,
+            u: STGMEDIUM_0 { hGlobal: hglobal(&[1, 2, 3]).unwrap() },
+            pUnkForRelease: std::mem::ManuallyDrop::new(None),
+        };
+        unsafe {
+            data.SetData(&fmt, &medium, true).unwrap();
+            let mut out = data.GetData(&fmt).unwrap();
+            let p = GlobalLock(out.u.hGlobal) as *const u8;
+            assert_eq!(std::slice::from_raw_parts(p, GlobalSize(out.u.hGlobal)), &[1, 2, 3]);
+            let _ = GlobalUnlock(out.u.hGlobal);
+            ReleaseStgMedium(&mut out);
+        }
     }
 }
