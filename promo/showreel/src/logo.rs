@@ -11,7 +11,7 @@ const WORD: &str = "Glint";
 
 impl Scene for Logo {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(2.0)
+        Duration::Seconds(crate::LOGO_LEN)
     }
 
     fn render_frame<'a>(&'a self, mut frame: Frame, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {

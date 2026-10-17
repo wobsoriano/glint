@@ -1,17 +1,39 @@
 """Synthesizes the showreel's music bed and sound effects into media/ (stdlib only).
 
 Run: python tools/gen_audio.py
-The bed is 120 BPM (a beat every 0.5 s) so cuts and hits in src/lib.rs land on the grid.
+The bed is 120 BPM (a beat every 0.5 s) so the cuts in src/lib.rs land on the grid. Its
+length, the logo chord and the section changes come from src/lib.rs, so a retimed shot table
+only needs this script run again.
 """
 import math
 import random
+import re
 import struct
 import wave
 from pathlib import Path
 
 SR = 48000
-OUT = Path(__file__).resolve().parent.parent / "media"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "media"
 rng = random.Random(7)
+
+LIB = (ROOT / "src" / "lib.rs").read_text(encoding="utf-8")
+
+
+def rust_const(name):
+    return float(re.search(rf"const {name}: f32 = ([\d.]+);", LIB).group(1))
+
+
+def group_starts():
+    starts = {}
+    for at, group in re.findall(r"Shot \{ at: ([\d.]+),.*?group: (\w+),", LIB):
+        starts.setdefault(group, float(at))
+    return starts
+
+
+T_LOGO = rust_const("T_LOGO")
+TOTAL = T_LOGO + rust_const("LOGO_LEN")
+SECTIONS = group_starts()
 
 
 def write(name, left, right=None):
@@ -119,49 +141,69 @@ def note(midi):
     return 440.0 * 2 ** ((midi - 69) / 12)
 
 
+def pluck(freq, length=0.24):
+    n = int(length * SR)
+    return [(saw(freq, i / SR) * 0.4 + math.sin(2 * math.pi * freq * i / SR)) * math.exp(-i / SR * 14) * 0.5 for i in range(n)]
+
+
 def music():
-    total = 15.2
-    left, right = buf(total), buf(total)
+    left, right = buf(TOTAL), buf(TOTAL)
     k, h, ho, c = kick(), hat(), hat(open_=True), clap()
     beat = 0.5
-    drop_at = 12.75
+    drop_at = T_LOGO - 0.25
+    quick, editor, studio = SECTIONS["QuickAccess"], SECTIONS["Editor"], SECTIONS["Studio"]
+
+    # Drums build per group: kick only for Capture, offbeat hats from Quick access, claps
+    # from Editor, open hats and a pickup kick from Studio.
     for b in range(int(drop_at / beat)):
         t = b * beat
-        if t >= 0.5 or b == 0:
-            add(left, k, t, 0.9)
-            add(right, k, t, 0.9)
-        if t >= 2.5:
-            add(left, h, t + 0.25, 0.32)
-            add(right, h, t + 0.25, 0.42)
-        if t >= 4.5 and b % 2 == 1:
-            add(left, c, t, 0.38)
-            add(right, c, t, 0.38)
-        if t >= 8.0 and b % 4 == 3:
-            add(left, ho, t + 0.25, 0.25)
-            add(right, ho, t + 0.25, 0.2)
-    # A minor, F, C, G: one chord per bar
+        if b % 2 == 0 or t >= quick:
+            add(left, k, t, 0.85)
+            add(right, k, t, 0.85)
+        if t >= quick:
+            add(left, h, t + 0.25, 0.3)
+            add(right, h, t + 0.25, 0.38)
+        if t >= editor and b % 2 == 1:
+            add(left, c, t, 0.34)
+            add(right, c, t, 0.34)
+        if t >= studio and b % 4 == 3:
+            add(left, ho, t + 0.25, 0.22)
+            add(right, ho, t + 0.25, 0.18)
+            if t + 0.25 < drop_at:
+                add(left, k, t + 0.25, 0.5)
+                add(right, k, t + 0.25, 0.5)
+
+    # A minor, F, C, G: one chord per bar. The bass joins on the second bar and doubles to
+    # eighths from Quick access; a plucked arpeggio rides on top from Studio.
     prog = [(57, [57, 60, 64]), (53, [53, 57, 60]), (48, [55, 60, 64]), (55, [55, 59, 62])]
-    for bar in range(7):
+    bar = 0
+    while bar * 2.0 < drop_at:
         t0 = bar * 2.0
-        if t0 >= drop_at:
-            break
         root, chord = prog[bar % 4]
         pl, pr = pad_chord([note(m + 12) for m in chord], min(2.05, drop_at - t0 + 0.4))
-        add(left, pl, t0, 0.9)
-        add(right, pr, t0, 0.9)
-        if t0 >= 2.0:
-            for s in range(8):
-                ts = t0 + s * 0.25
-                if ts >= drop_at:
-                    break
-                pattern = [0, 0, 12, 0, 0, 7, 0, 12]
-                add(left, bass_note(note(root - 12 + pattern[s]), 0.22), ts, 0.55)
-                add(right, bass_note(note(root - 12 + pattern[s]), 0.22), ts, 0.55)
-    # logo chord after the impact
-    pl, pr = pad_chord([note(m) for m in (69, 72, 76, 81)], 2.2)
-    add(left, pl, 13.0, 1.3)
-    add(right, pr, 13.0, 1.3)
-    fade = int(0.6 * SR)
+        add(left, pl, t0, 0.85)
+        add(right, pr, t0, 0.85)
+        pattern = [0, 0, 12, 0, 0, 7, 0, 12]
+        for s in range(8):
+            ts = t0 + s * 0.25
+            if ts >= drop_at or t0 < 2.0:
+                break
+            if ts < quick and s % 2 == 1:
+                continue
+            note_ = bass_note(note(root - 12 + pattern[s]), 0.22)
+            add(left, note_, ts, 0.5)
+            add(right, note_, ts, 0.5)
+            if ts >= studio:
+                arp = pluck(note(chord[s % 3] + 24))
+                add(left, arp, ts, 0.16 if s % 2 else 0.08)
+                add(right, arp, ts, 0.08 if s % 2 else 0.16)
+        bar += 1
+
+    # The logo chord lands with the impact, then the bed fades out by the end.
+    pl, pr = pad_chord([note(m) for m in (69, 72, 76, 81)], TOTAL - T_LOGO)
+    add(left, pl, T_LOGO, 1.25)
+    add(right, pr, T_LOGO, 1.25)
+    fade = int(0.8 * SR)
     for i in range(fade):
         g = i / fade
         left[-1 - i] *= g

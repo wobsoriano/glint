@@ -50,7 +50,14 @@ pub fn star_path(r: f32) -> String {
 }
 
 pub fn cursor<'a>(x: f32, y: f32, opacity: f32) -> Svgr<'a> {
-    fframes::svgr!(<g transform={tf(x, y, 1.5)} opacity={opacity}>
+    cursor_at(x, y, opacity, 1.5)
+}
+
+pub fn cursor_at<'a>(x: f32, y: f32, opacity: f32, scale: f32) -> Svgr<'a> {
+    if opacity <= 0.0 {
+        return Svgr::empty();
+    }
+    fframes::svgr!(<g transform={tf(x, y, scale)} opacity={opacity}>
         <path d="M0 0 L0 23 L6.2 17.6 L10.4 27 L14.6 25.2 L10.6 16 L18 16 Z" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="1.4" stroke-linejoin="round" />
     </g>)
 }
@@ -65,13 +72,13 @@ pub fn ripple<'a>(x: f32, y: f32, t: f32, at: f32, color: &'a str) -> Svgr<'a> {
     fframes::svgr!(<circle cx={x} cy={y} r={r} fill="none" stroke={color} stroke-width={4.0 * (1.0 - p) + 0.5} opacity={1.0 - p} />)
 }
 
-/// The capture flash: white, gone after two frames.
+/// The capture flash: a soft white pulse that fades within 0.15 s.
 pub fn flash<'a>(t: f32, at: f32) -> Svgr<'a> {
-    let p = seg(t, at, 0.04);
+    let p = seg(t, at, 0.15);
     if t < at || p >= 1.0 {
         return Svgr::empty();
     }
-    fframes::svgr!(<rect width="1920" height="1080" fill="#FFFFFF" opacity={0.8 * (1.0 - p)} />)
+    fframes::svgr!(<rect width="1920" height="1080" fill="#FFFFFF" opacity={0.32 * (1.0 - p).powi(2)} />)
 }
 
 /// A Windows-style toast: dark pill, green check, one line of text, dropping in from above.
@@ -87,18 +94,6 @@ pub fn toast<'a>(cx: f32, y: f32, text: &'a str, width: f32, p: f32) -> Svgr<'a>
         <circle cx={x0 + 36.0} cy="0" r="15" fill="#22C55E" />
         <path d={format!("M{} 0 l5 5 l9 -10", x0 + 29.0)} stroke="#FFFFFF" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
         <text x={x0 + 64.0} y="10" font-family={UI} font-weight="600" font-size="28" fill={INK}>{text}</text>
-    </g>)
-}
-
-/// A keycap chip, scaled by `s` around its centre.
-pub fn keycap<'a>(label: &'a str, x: f32, y: f32, w: f32, s: f32) -> Svgr<'a> {
-    if s <= 0.0 {
-        return Svgr::empty();
-    }
-    fframes::svgr!(<g transform={format!("translate({x:.1} {y:.1}) scale({s:.3})")} opacity={c01(s)}>
-        <rect x={-w / 2.0} y="-34" width={w} height="68" rx="14" fill="#111318" fill-opacity="0.92" stroke="#FFFFFF" stroke-opacity="0.25" />
-        <rect x={-w / 2.0} y="28" width={w} height="6" rx="3" fill="#000000" opacity="0.4" />
-        <text y="12" text-anchor="middle" font-family={UI} font-weight="600" font-size="32" fill={INK}>{label}</text>
     </g>)
 }
 
@@ -334,7 +329,6 @@ pub const TOOLS: [&str; 8] = [
 pub const T_ARROW: usize = 2;
 pub const T_RECT: usize = 1;
 pub const T_MARKER: usize = 4;
-pub const T_PIXEL: usize = 5;
 /// Scale of the shot on the editor canvas, and the canvas centre.
 pub const CANVAS_K: f32 = 0.82;
 pub const CANVAS_C: (f32, f32) = (780.0, 566.0);
@@ -533,6 +527,8 @@ pub struct EditorView {
     /// Selection ring position among the background swatches.
     pub swatch: f32,
     pub redaction_on: f32,
+    /// The mockup's perspective tilt, 0 flat to 1 fully tilted.
+    pub tilt: f32,
 }
 
 impl EditorView {
@@ -592,7 +588,7 @@ impl EditorView {
             <text x="1402" y="1062" text-anchor="middle" font-family={UI} font-size="20" fill={INK}>"Save"</text>
             <rect x="1456" y="1036" width="88" height="36" rx="6" fill={ACCENT} />
             <text x="1500" y="1062" text-anchor="middle" font-family={UI} font-weight="600" font-size="20" fill="#FFFFFF">"Done"</text>
-            <g transform={format!("translate({:.1} {:.1})", CANVAS_C.0 - fw / 2.0, CANVAS_C.1 - fh / 2.0)}>{comp}</g>
+            <g transform={mockup_tilt(CANVAS_C, fw, fh, self.tilt)}>{comp}</g>
             <rect x="1560" y="44" width="360" height="1036" fill="#1C1C1C" />
             <rect x="1560" y="44" width="1" height="1036" fill="#FFFFFF" fill-opacity="0.08" />
             <text x="1590" y="150" font-family={UI} font-weight="600" font-size="28" fill={INK}>"Background"</text>
@@ -612,8 +608,26 @@ impl EditorView {
             <rect x="1576" y="610" width="328" height="128" rx="12" fill="#FFFFFF" fill-opacity={0.04 + 0.06 * self.redaction_on} stroke={ACCENT} stroke-opacity={0.8 * self.redaction_on} />
             <text x="1600" y="664" font-family={UI} font-weight="600" font-size="28" fill={INK}>"Smart redaction"</text>
             {toggle(1600.0, 690.0, self.redaction_on)}
+            <text x="1590" y="806" font-family={UI} font-size="28" fill={if self.tilt > 0.0 { INK } else { MUTED }}>"Perspective"</text>
+            {knob(842.0, 0.12 + 0.6 * self.tilt)}
         </g>)
     }
+}
+
+/// Places a `fw`x`fh` composition centred on `c`, turned into a perspective mockup by `p`.
+pub fn mockup_tilt(c: (f32, f32), fw: f32, fh: f32, p: f32) -> String {
+    format!(
+        "translate({:.1} {:.1}) scale({:.4}) rotate({:.2}) skewX({:.2}) scale({:.4} {:.4}) translate({:.1} {:.1})",
+        c.0,
+        c.1,
+        lerp(1.0, 0.92, p),
+        -9.0 * p,
+        14.0 * p,
+        lerp(1.0, 1.04, p),
+        lerp(1.0, 0.9, p),
+        -fw / 2.0,
+        -fh / 2.0
+    )
 }
 
 // ---------------------------------------------------------------- Studio
@@ -629,19 +643,19 @@ pub fn camera_transform(fx: f32, fy: f32, z: f32) -> String {
     )
 }
 
-pub fn camera_point(fx: f32, fy: f32, z: f32, p: (f32, f32)) -> (f32, f32) {
-    let k = (z - 1.0) / 0.75 * 0.65;
-    (
-        lerp(fx, 960.0, k) + (p.0 - fx) * z,
-        lerp(fy, 520.0, k) + (p.1 - fy) * z,
-    )
-}
-
 /// The Studio preview: the recorded screen scaled into a card inside a padded frame.
 pub const PREVIEW: (f32, f32, f32, f32) = (358.0, 117.0, 864.0, 486.0);
 
 /// Studio's window with the recording in the preview, `head` the playhead from 0 to 1.
-pub fn studio<'a>(id: &str, head: f32, recorded: Svgr<'a>, overlay: Svgr<'a>) -> Svgr<'a> {
+/// `zoom_block` grows the first zoom segment in from nothing; `panel` draws over the inspector.
+pub fn studio<'a>(
+    id: &str,
+    head: f32,
+    zoom_block: f32,
+    recorded: Svgr<'a>,
+    overlay: Svgr<'a>,
+    panel: Svgr<'a>,
+) -> Svgr<'a> {
     let (px0, py0, pw, ph) = PREVIEW;
     let (tl_x, tl_w) = (100.0, 1380.0);
     let hx = tl_x + tl_w * head;
@@ -698,18 +712,110 @@ pub fn studio<'a>(id: &str, head: f32, recorded: Svgr<'a>, overlay: Svgr<'a>) ->
         <text x="1590" y="310" font-family={UI} font-size="28" fill={MUTED}>"Cursor size"</text>
         <rect x="1590" y="338" width="300" height="4" rx="2" fill={ACCENT} />
         <circle cx="1770" cy="340" r="10" fill="#FFFFFF" stroke={ACCENT} stroke-width="3" />
+        {panel}
         <rect y="680" width="1560" height="400" fill="#181818" />
         <path d={ticks} stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="2" />
         <rect x={tl_x} y="760" width={tl_w} height="72" rx="8" fill="#2A1C55" />
         {tiles}
         <rect x={tl_x} y="760" width={tl_w} height="72" rx="8" fill="none" stroke={ACCENT} stroke-width="2" />
-        <rect x="460" y="852" width="300" height="52" rx="10" fill={VIOLET} fill-opacity="0.35" stroke={VIOLET} />
-        <text x="478" y="887" font-family={UI} font-weight="600" font-size="28" fill="#FFFFFF">"Zoom 1.75×"</text>
+        <g transform={format!("translate(460 0) scale({:.4} 1) translate(-460 0)", px(zoom_block).min(1.0))} opacity={c01(zoom_block * 4.0)}>
+            <rect x="460" y="852" width="300" height="52" rx="10" fill={VIOLET} fill-opacity="0.35" stroke={VIOLET} />
+        </g>
+        <text x="478" y="887" font-family={UI} font-weight="600" font-size="28" fill="#FFFFFF" opacity={seg(zoom_block, 0.6, 0.4)}>"Zoom 1.75×"</text>
         <rect x="900" y="852" width="260" height="52" rx="10" fill={VIOLET} fill-opacity="0.35" stroke={VIOLET} />
         <text x="918" y="887" font-family={UI} font-weight="600" font-size="28" fill="#FFFFFF">"Zoom 1.5×"</text>
         {bars}
         <rect x={hx - 1.5} y="716" width="3" height="270" fill={REC} />
         <path d={format!("M{} 706 h20 v12 l-10 10 l-10 -10 Z", hx - 10.0)} fill={REC} />
         <text x={hx} y="700" text-anchor="middle" font-family={MONO} font-size="28" fill={INK}>{time}</text>
+    </g>)
+}
+
+// ---------------------------------------------------------------- camera and windows
+
+/// A camera looking at `x, y` (canvas pixels) with zoom `z`; `CAM0` is the plain frame.
+#[derive(Clone, Copy, Debug)]
+pub struct Cam {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+pub const CAM0: Cam = Cam {
+    x: 960.0,
+    y: 540.0,
+    z: 1.0,
+};
+
+impl Cam {
+    pub const fn at(x: f32, y: f32, z: f32) -> Cam {
+        Cam { x, y, z }
+    }
+
+    /// Keeps the view inside the canvas so the edges never show past the wallpaper.
+    fn clamped(self) -> Cam {
+        let (hw, hh) = (960.0 / self.z, 540.0 / self.z);
+        Cam {
+            x: self.x.clamp(hw, 1920.0 - hw),
+            y: self.y.clamp(hh, 1080.0 - hh),
+            z: self.z,
+        }
+    }
+
+    pub fn transform(self) -> String {
+        let c = self.clamped();
+        format!(
+            "translate(960 540) scale({:.4}) translate({:.2} {:.2})",
+            c.z, -c.x, -c.y
+        )
+    }
+}
+
+/// The camera at `t`, eased between `(time, cam)` keys.
+pub fn cam_path(t: f32, keys: &[(f32, Cam)]) -> Cam {
+    let mut cam = keys[0].1;
+    for w in keys.windows(2) {
+        let ((a, from), (b, to)) = (w[0], w[1]);
+        if t > a {
+            let p = in_out(seg(t, a, b - a));
+            cam = Cam {
+                x: lerp(from.x, to.x, p),
+                y: lerp(from.y, to.y, p),
+                z: lerp(from.z, to.z, p),
+            };
+        }
+    }
+    cam
+}
+
+/// A full 1920x1080 app window shown whole on the desktop: scale and top-left corner.
+pub const WS: f32 = 0.72;
+pub const WX: f32 = (1920.0 - 1920.0 * WS) / 2.0;
+pub const WY: f32 = 44.0;
+
+/// Where a point of the window's own 1920x1080 coordinates lands on the canvas.
+pub fn win_pt(p: (f32, f32)) -> (f32, f32) {
+    (WX + p.0 * WS, WY + p.1 * WS)
+}
+
+/// The wallpaper with `content` (a whole app window drawn at 1920x1080) floating on it.
+pub fn on_desktop<'a>(id: &str, content: Svgr<'a>) -> Svgr<'a> {
+    let wall = wallpaper(&format!("{id}-wall"));
+    let bar = taskbar(&format!("{id}-bar"));
+    let clip = format!("{id}-winclip");
+    let clip_url = format!("url(#{clip})");
+    let (w, h) = (1920.0 * WS, 1080.0 * WS);
+    fframes::svgr!(<g id={format!("{id}-desk")}>
+        {wall}
+        {bar}
+        <defs>
+            <clipPath id={clip}><rect width="1920" height="1080" rx="16" /></clipPath>
+            <filter id="desk-shadow" x="-20%" y="-20%" width="140%" height="160%"><feGaussianBlur stdDeviation="30" /></filter>
+        </defs>
+        <rect x={WX + 14.0} y={WY + 34.0} width={w - 28.0} height={h - 10.0} rx="14" fill="#000000" opacity="0.6" filter="url(#desk-shadow)" />
+        <g transform={tf(WX, WY, WS)}>
+            <g clip-path={clip_url}>{content}</g>
+            <rect width="1920" height="1080" rx="16" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="2" />
+        </g>
     </g>)
 }
