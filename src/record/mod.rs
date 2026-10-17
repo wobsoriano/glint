@@ -366,7 +366,8 @@ fn begin(cx: &mut App) {
                         rec(cx).windows.bar = bar::open(&target, cx);
                     }
                     if !warnings.is_empty() {
-                        toast::show(warnings.join(" · "), cx);
+                        eprintln!("recording started with warnings: {}", warnings.join("; "));
+                        toast::show_at(warning_summary(&warnings), bar::TOP + 8., cx);
                     }
                     watch_live(epoch, cx);
                 }
@@ -516,5 +517,26 @@ fn automate(item: Item, cx: &mut App) {
     }
     if a.preview {
         stack::push_recording(item, cx);
+    }
+}
+
+/// One short line for start-up warnings: each warning up to its error detail, which can be
+/// a long device path. The full text goes to stderr.
+fn warning_summary(warnings: &[String]) -> String {
+    warnings.iter().map(|w| w.split(": ").next().unwrap_or(w)).collect::<Vec<_>>().join(" · ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn warning_summary_keeps_every_warning_and_drops_device_detail() {
+        let warnings = [
+            "microphone not recorded: microphone {0.0.1.00000000}.{deadbeef}: Element not found.".to_string(),
+            r"camera not recorded: no camera with id \\?\usb#gone".to_string(),
+            "could not disable the capture border".to_string(),
+        ];
+        assert_eq!(warning_summary(&warnings), "microphone not recorded · camera not recorded · could not disable the capture border");
     }
 }

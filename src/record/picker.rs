@@ -32,10 +32,35 @@ enum Panel {
     Script,
 }
 
+/// What the picker knows about the chosen camera or microphone.
+#[derive(Debug, PartialEq, Eq)]
+enum Choice<'a> {
+    Off,
+    /// Chosen, before the device list has loaded.
+    Loading,
+    Present(&'a str),
+    /// Chosen, but not connected now: recording warns and continues without it.
+    Missing,
+}
+
+fn choice<'a>(selected: Option<&str>, loaded: bool, mut devices: impl Iterator<Item = (&'a DeviceId, &'a str)>) -> Choice<'a> {
+    match selected {
+        None => Choice::Off,
+        Some(_) if !loaded => Choice::Loading,
+        Some(id) => devices.find(|(d, _)| d.0 == id).map_or(Choice::Missing, |(_, name)| Choice::Present(name)),
+    }
+}
+
+/// Windows' caution foreground, for a chosen device that is not connected.
+fn caution() -> gpui::Rgba {
+    if ui::theme().dark { rgb(0xFCE100) } else { rgb(0x9D5D00) }
+}
+
 pub struct Picker {
     panel: Option<Panel>,
     mics: Vec<AudioDevice>,
     cameras: Vec<CameraDevice>,
+    devices_loaded: bool,
     focus: FocusHandle,
     display: DisplayInfo,
 }
@@ -56,7 +81,7 @@ pub fn open(cx: &mut App) {
     let Some(handle) = chrome::open(placement, cx, move |window, cx| {
         let focus = cx.focus_handle();
         window.focus(&focus);
-        Picker { panel: None, mics: Vec::new(), cameras: Vec::new(), focus, display }
+        Picker { panel: None, mics: Vec::new(), cameras: Vec::new(), devices_loaded: false, focus, display }
     }) else {
         return;
     };
@@ -72,6 +97,7 @@ fn load_devices(handle: WindowHandle<Picker>, cx: &mut App) {
         let _ = handle.update(cx, |this, window, cx| {
             this.mics = mics.unwrap_or_default();
             this.cameras = cameras.unwrap_or_default();
+            this.devices_loaded = true;
             this.relayout(window, cx);
             cx.notify();
         });
@@ -356,10 +382,19 @@ impl Render for Picker {
                 .child(label)
                 .when(!counting, |d| d.on_click(later(move |cx| super::choose(k, cx))))
         };
-        let camera_name = p.camera.as_ref().map(|id| {
-            self.cameras.iter().find(|c| &c.id.0 == id).map(|c| c.name.clone()).unwrap_or_else(|| "Camera".into())
-        });
-        let mic_on = p.mic.is_some();
+        let text = ui::theme().text;
+        let (camera_icon, camera_color, camera_label, camera_tip) =
+            match choice(p.camera.as_deref(), self.devices_loaded, self.cameras.iter().map(|c| (&c.id, c.name.as_str()))) {
+                Choice::Off => ("camera-off", text, "No camera".to_string(), "Camera"),
+                Choice::Loading => ("camera", text, "Camera".to_string(), "Camera"),
+                Choice::Present(name) => ("camera", text, name.to_string(), "Camera"),
+                Choice::Missing => ("camera-off", caution(), "Camera unavailable".to_string(), "Camera unavailable: recording continues without it"),
+            };
+        let (mic_icon, mic_color, mic_tip) = match choice(p.mic.as_deref(), self.devices_loaded, self.mics.iter().map(|m| (&m.id, m.name.as_str()))) {
+            Choice::Off => ("mic-off", text, "No microphone"),
+            Choice::Loading | Choice::Present(_) => ("mic", text, "Microphone"),
+            Choice::Missing => ("mic-off", caution(), "Microphone unavailable: recording continues without it"),
+        };
 
         let bar = surface()
             .h(px(BAR_H))
@@ -375,21 +410,21 @@ impl Render for Picker {
             .child(separator())
             .child(
                 chip("camera", self.panel == Some(Panel::Camera), true)
-                    .max_w(px(150.))
-                    .child(ui::icon(if camera_name.is_some() { "camera" } else { "camera-off" }, 16., ui::theme().text))
-                    .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(camera_name.unwrap_or_else(|| "No camera".into())))
-                    .tooltip(ui::tooltip("Camera"))
+                    .max_w(px(176.))
+                    .child(ui::icon(camera_icon, 16., camera_color))
+                    .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(camera_color).child(camera_label))
+                    .tooltip(ui::tooltip(camera_tip))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(Panel::Camera, w, cx))),
             )
             .child(
                 chip("mic", self.panel == Some(Panel::Mic), true)
-                    .child(ui::icon(if mic_on { "mic" } else { "mic-off" }, 16., ui::theme().text))
+                    .child(ui::icon(mic_icon, 16., mic_color))
                     .child(
                         div().w(px(48.)).h(px(6.)).rounded_full().bg(ui::theme().control_hover).overflow_hidden().child(
                             div().h_full().rounded_full().bg(ui::accent()).w(px(48. * level.map(meter_fraction).unwrap_or(0.))),
                         ),
                     )
-                    .tooltip(ui::tooltip(if mic_on { "Microphone" } else { "No microphone" }))
+                    .tooltip(ui::tooltip(mic_tip))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(Panel::Mic, w, cx))),
             )
             .child(
@@ -520,5 +555,16 @@ mod tests {
         assert_eq!(meter_fraction(0.0), 0.0);
         assert_eq!(meter_fraction(1.0), 1.0);
         assert!((meter_fraction(0.01) - 1. / 3.).abs() < 1e-4, "-40 dB is a third of the way");
+    }
+
+    #[test]
+    fn a_chosen_device_that_is_not_connected_is_missing() {
+        let webcam = DeviceId("usb#webcam".into());
+        let devices = || [(&webcam, "Webcam")].into_iter();
+        assert_eq!(choice(None, true, devices()), Choice::Off);
+        assert_eq!(choice(Some("usb#gone"), false, devices()), Choice::Loading);
+        assert_eq!(choice(Some("usb#webcam"), true, devices()), Choice::Present("Webcam"));
+        assert_eq!(choice(Some("usb#gone"), true, devices()), Choice::Missing);
+        assert_eq!(choice(Some("usb#gone"), true, std::iter::empty()), Choice::Missing);
     }
 }

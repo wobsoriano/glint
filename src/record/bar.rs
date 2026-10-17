@@ -10,12 +10,15 @@ use std::time::Instant;
 
 const W: f32 = 300.;
 const H: f32 = 48.;
+const MARGIN: f32 = 28.;
+/// Height of the bar's top edge above the bottom of the work area, in DIP.
+pub const TOP: f32 = MARGIN + H;
 
 pub fn open(target: &Target, cx: &mut App) -> Option<AnyWindowHandle> {
     let d = target.display();
     let area = work_area(d);
     let (pw, ph) = ((W * d.scale).round() as i32, (H * d.scale).round() as i32);
-    let rect = [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (28. * d.scale) as i32, pw, ph];
+    let rect = [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (MARGIN * d.scale) as i32, pw, ph];
     let placement = Placement { rect, scale: d.scale, kind: Kind::DuringRecording };
     let handle = chrome::open(placement, cx, |_, _| Bar { confirm_delete: false, born: Instant::now() })?;
     chrome::tick(handle.into(), 200, cx);
