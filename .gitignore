@@ -2,3 +2,4 @@
 .audit/
 todo.md
 .claude/
+.cargo/config.toml

@@ -155,6 +155,74 @@ fn transcode_can_drop_audio() {
     assert_eq!(VideoReader::open(&dst).unwrap().size(), (W, H));
 }
 
+/// 440 Hz stereo tone at 44.1 kHz whose amplitude drops from 0.5 to 0.1 at exactly 1000 ms.
+fn stepped_tone_44k(seconds: f32) -> Vec<f32> {
+    (0..(44_100.0 * seconds) as usize)
+        .flat_map(|i| {
+            let amp = if i < 44_100 { 0.5 } else { 0.1 };
+            let v = (i as f32 / 44_100.0 * 440.0 * std::f32::consts::TAU).sin() * amp;
+            [v, v]
+        })
+        .collect()
+}
+
+/// Frame of the first 64-frame window whose RMS is above `above`, and after it the first
+/// whose RMS is below `below`.
+fn envelope(samples: &[f32], channels: usize, above: f32, below: f32) -> (Option<usize>, Option<usize>) {
+    let rms = |w: &[f32]| (w.iter().map(|s| s * s).sum::<f32>() / w.len() as f32).sqrt();
+    let windows: Vec<f32> = samples.chunks_exact(64 * channels).map(rms).collect();
+    let start = windows.iter().position(|&r| r > above);
+    let step = start.and_then(|s| windows[s..].iter().position(|&r| r < below).map(|i| s + i));
+    (start.map(|i| i * 64), step.map(|i| i * 64))
+}
+
+fn write_stepped_file(path: &PathBuf) {
+    let video = VideoParams { width: W, height: H, fps: FPS, bitrate: 2_000_000, codec: VideoCodec::H264 };
+    let mut w = VideoWriter::create(path, video, Some(AudioParams { sample_rate: 44_100, channels: 2 })).unwrap();
+    w.write_audio(&stepped_tone_44k(2.0)).unwrap();
+    for i in 0..FRAMES {
+        w.write_frame(&frame(i)).unwrap();
+    }
+    w.finish().unwrap();
+}
+
+/// The AAC round trip fades the first 512 frames in and pads the track to whole 1024-frame
+/// blocks, so the content's position is what a trim must preserve: the source's tone starts
+/// at frame 512 and steps at 44096, and a 1000..2000 ms trim at 44.1 kHz keeps exactly the
+/// quiet second, landing its content on the same frames.
+#[test]
+fn transcode_keeps_audio_aligned_at_44100_hz() {
+    let src = temp("align_src.mp4");
+    write_stepped_file(&src);
+    let whole = read_mp4_audio(&src).unwrap().unwrap();
+    assert_eq!((whole.sample_rate, whole.channels, whole.frames()), (44_100, 2, 89_088));
+    assert_eq!(envelope(&whole.samples, 2, 0.3, 0.2), (Some(512), Some(44_096)), "source tone start and step");
+
+    let dst = temp("align_dst.mp4");
+    let opts = TranscodeOptions { trim: Some((1000, 2000)), ..Default::default() };
+    transcode(&src, &dst, &opts, &AtomicBool::new(false), |_| {}).unwrap();
+    let out = read_mp4_audio(&dst).unwrap().unwrap();
+    assert_eq!(out.frames(), 45_056, "44100 frames padded to 1024-frame AAC blocks");
+    assert_eq!(envelope(&out.samples, 2, 0.2, 0.0).0, None, "no loud audio from before the trim start");
+    assert_eq!(envelope(&out.samples, 2, 0.05, 0.03), (Some(512), Some(44_096)), "quiet tone starts and ends on the source's frames");
+}
+
+#[test]
+fn audio_reader_seeks_to_the_exact_frame() {
+    let src = temp("seek_src.mp4");
+    write_stepped_file(&src);
+    let whole = read_mp4_audio(&src).unwrap().unwrap();
+    let mut r = glint_media::AudioReader::open(&src).unwrap().unwrap();
+    assert_eq!((r.sample_rate(), r.channels()), (44_100, 2));
+    r.seek(1000).unwrap();
+    let mut chunks = Vec::new();
+    assert!(r.next_chunk(&mut chunks).unwrap());
+    assert_eq!(chunks.len(), (1024 - 44_100 % 1024) * 2, "the rest of the 1024-frame block that holds frame 44100");
+    assert!(r.next_chunk(&mut chunks).unwrap());
+    assert_eq!(chunks.len(), (1024 - 44_100 % 1024 + 1024) * 2);
+    assert_eq!(chunks, whole.samples[88_200..88_200 + chunks.len()], "seeked chunks equal the continuous decode from frame 44100");
+}
+
 const BLOCKS: [[u8; 3]; 8] =
     [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255], [128, 128, 128], [255, 255, 0], [224, 172, 105], [30, 60, 90]];
 

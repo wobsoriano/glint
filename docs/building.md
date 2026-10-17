@@ -1,0 +1,57 @@
+# Building Glint
+
+Glint builds with `cargo build` on Windows 10/11 with the Rust MSVC toolchain. Two native build
+tools are needed because `glint-transcribe` depends on `whisper-rs`, which compiles whisper.cpp
+at build time.
+
+## Prerequisites
+
+| Tool | Why | Where to get it |
+| --- | --- | --- |
+| Rust (MSVC toolchain) | Everything | rustup |
+| Windows 10/11 SDK | `windows` crate | Visual Studio Installer, "Windows 11 SDK" |
+| cmake | `whisper-rs-sys` builds whisper.cpp with it | Visual Studio Build Tools 2022 ships one under `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin` (select "C++ CMake tools for Windows"), or install cmake from cmake.org |
+| libclang | `whisper-rs-sys` runs bindgen, which loads `libclang.dll` | See below |
+
+### libclang
+
+bindgen finds libclang through the `LIBCLANG_PATH` environment variable, which must name the
+folder that contains `libclang.dll`. Two routes:
+
+1. Visual Studio Installer: add the "C++ Clang tools for Windows" component. `libclang.dll` then
+   lives under `VC\Tools\Llvm\x64\bin` of the Build Tools or Visual Studio install.
+2. The PyPI `libclang` wheel, which is a plain zip holding the DLL and needs no install:
+
+   ```powershell
+   py -m pip download libclang==18.1.1 --only-binary :all: --no-deps -d $env:TEMP\libclang
+   Copy-Item $env:TEMP\libclang\libclang-18.1.1-py2.py3-none-win_amd64.whl $env:TEMP\libclang\wheel.zip
+   Expand-Archive $env:TEMP\libclang\wheel.zip $env:TEMP\libclang\whl
+   New-Item -ItemType Directory -Force $HOME\.glint-build\libclang-18.1.1
+   Copy-Item $env:TEMP\libclang\whl\libclang-18.1.1.data\platlib\clang\native\libclang.dll $HOME\.glint-build\libclang-18.1.1\
+   ```
+
+   Then `LIBCLANG_PATH` is `C:\Users\<you>\.glint-build\libclang-18.1.1`.
+
+## Telling cargo where the tools are
+
+`.cargo/config.toml` is git-ignored because it holds machine-specific paths. Copy the example and
+edit both paths:
+
+```powershell
+Copy-Item .cargo\config.toml.example .cargo\config.toml
+```
+
+The `[env]` table sets `CMAKE` (full path to `cmake.exe`) and `LIBCLANG_PATH` for every cargo
+invocation in this workspace. Setting the same two variables in your shell works too, if you
+prefer not to keep the file.
+
+## Build and test
+
+```powershell
+cargo build --workspace --all-targets   # expected: zero warnings
+cargo test --workspace
+cargo run --release
+```
+
+The first build compiles whisper.cpp and GPUI and takes several minutes. Later builds are
+incremental.
