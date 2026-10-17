@@ -1,5 +1,3 @@
-//! Dumps one decoded frame of an MP4 to a PNG: `frame <video.mp4> <t_ms> <out.png>`.
-
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let [video, t_ms, out] = args.as_slice() else { anyhow::bail!("usage: frame <video.mp4> <t_ms> <out.png>") };

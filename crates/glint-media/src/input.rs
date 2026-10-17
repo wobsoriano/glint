@@ -59,7 +59,6 @@ pub struct CursorSprite {
     /// Relative to the session directory, e.g. `cursors/0.png`.
     pub file: String,
     pub hotspot: [u32; 2],
-    /// Display scale the sprite was captured at.
     pub scale: f32,
 }
 

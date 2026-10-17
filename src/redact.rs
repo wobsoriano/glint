@@ -1,5 +1,3 @@
-//! Finds sensitive information (emails, keys, card numbers...) in OCR output.
-
 use crate::annotate::R;
 use crate::ocr::Line;
 use crate::settings::RedactRules;
@@ -51,7 +49,6 @@ pub struct Finding {
 struct Rule {
     kind: Kind,
     re: Regex,
-    /// Capture group to redact (0 = whole match).
     group: usize,
     validate: Option<fn(&str) -> bool>,
 }
@@ -68,7 +65,6 @@ fn rule(kind: Kind, re: &str) -> Rule {
 static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     vec![
         rule(Kind::Email, r"[A-Za-z0-9._%+-]+ ?@ ?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
-        // Cards before phones so digit groups are classified as cards first.
         Rule {
             validate: Some(luhn),
             ..rule(Kind::Card, r"\b(?:\d[ -]?){12,18}\d\b")
@@ -135,7 +131,6 @@ fn luhn(s: &str) -> bool {
     sum % 10 == 0
 }
 
-/// Looks like a random token: mixed case and digits, many distinct characters.
 fn high_entropy(s: &str) -> bool {
     let has_digit = s.chars().any(|c| c.is_ascii_digit());
     let has_lower = s.chars().any(|c| c.is_ascii_lowercase());
@@ -151,7 +146,6 @@ fn high_entropy(s: &str) -> bool {
 pub fn find(lines: &[Line], rules: &RedactRules, pad: f32) -> Vec<Finding> {
     let mut out: Vec<Finding> = Vec::new();
     for line in lines {
-        // Rebuild the line string and remember where each word lives in it.
         let mut text = String::new();
         let mut spans = Vec::new();
         for (i, w) in line.words.iter().enumerate() {
@@ -162,8 +156,6 @@ pub fn find(lines: &[Line], rules: &RedactRules, pad: f32) -> Vec<Finding> {
             text.push_str(&w.text);
             spans.push((start, text.len()));
         }
-        // OCR often drops random-looking tokens entirely, leaving just "Key:". Hide the area
-        // to the right of such a dangling label.
         if rules.secrets && DANGLING_LABEL.is_match(&text) {
             if let Some(last) = line.words.last() {
                 let h = line.rect.h;

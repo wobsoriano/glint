@@ -1,7 +1,3 @@
-//! The Captions tab: on-device transcription, the caption line editor, and Edit Video, where
-//! the transcript's words cut the footage. Cuts and caption edits go through `Studio::edit`,
-//! so they are undoable and the preview and export follow them.
-
 use super::geometry::format_time;
 use super::sidebar::{eid, hint};
 use super::{Studio, Tab};
@@ -20,11 +16,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// Models offered in Studio, fastest first. Small is left out: it is several times slower
-/// than Base on a CPU.
 const MODELS: [(Model, &str); 3] = [(Model::TinyEn, "Fast"), (Model::BaseEn, "Accurate"), (Model::Base, "Multilingual")];
 const SILENCE_CHOICES: [(u64, &str); 3] = [(500, "0.5 s"), (1_000, "1 s"), (2_000, "2 s")];
-/// Quiet kept on each side of a trimmed silence so the narration still breathes.
 const SILENCE_KEEP_MS: u64 = 150;
 const SILENCE_MIN_CUT_MS: u64 = 200;
 const POSITIONS: [(f32, &str); 3] = [(0.1, "Top"), (0.5, "Middle"), (0.92, "Bottom")];
@@ -58,11 +51,8 @@ pub(super) struct CaptionsUi {
     model: Model,
     source: Source,
     job: Option<Job>,
-    /// Shows the transcribe controls again for a session that already has a transcript.
     redo_setup: bool,
-    /// The caption cue being edited and its text so far.
     editing: Option<(usize, String)>,
-    /// Selected transcript words: the anchor of a Shift-click and the word clicked last.
     words: Option<(usize, usize)>,
     silence_min_ms: u64,
     trimming: bool,
@@ -113,8 +103,6 @@ impl Studio {
         }
     }
 
-    // --- transcription -------------------------------------------------------------------
-
     fn start_transcription(&mut self, cx: &mut Context<Self>) {
         if self.cap.job.is_some() {
             return;
@@ -153,7 +141,6 @@ impl Studio {
         cx.notify();
     }
 
-    /// Saves the transcript and makes captions from it, as one undoable step.
     fn transcribed(&mut self, transcript: Transcript, cx: &mut Context<Self>) {
         if transcript.words.is_empty() {
             return self.notify("No speech found in this recording", false, cx);
@@ -173,8 +160,6 @@ impl Studio {
         });
         self.notify(format!("Transcribed {words} words"), false, cx);
     }
-
-    // --- caption lines -------------------------------------------------------------------
 
     fn edit_cue(&mut self, i: usize, cx: &mut Context<Self>) {
         self.commit_cue(cx);
@@ -204,8 +189,6 @@ impl Studio {
         cx.notify();
     }
 
-    /// Output time where source range `src` first shows, or where the footage after it
-    /// resumes when all of it was cut.
     fn output_at(&self, src: Range<f64>) -> f64 {
         let p = self.project();
         p.output_ranges(src.clone())
@@ -213,8 +196,6 @@ impl Studio {
             .or(p.output_ranges(src.start..self.session.source_duration_ms).first())
             .map_or(self.duration(), |r| r.start)
     }
-
-    // --- edit video ----------------------------------------------------------------------
 
     fn click_word(&mut self, i: usize, shift: bool, cx: &mut Context<Self>) {
         self.cap.words = match (shift, self.cap.words) {
@@ -290,7 +271,6 @@ impl Studio {
         cx.notify();
     }
 
-    /// Removes source ranges from the clips as one undo step and reports the time saved.
     fn cut(&mut self, ranges: Vec<TimeRange>, message: impl FnOnce(f64) -> String, cx: &mut Context<Self>) {
         let ranges: Vec<Range<f64>> = ranges.iter().map(|r| r.start_ms as f64..r.end_ms as f64).collect();
         let before = self.duration();
@@ -303,8 +283,6 @@ impl Studio {
         }
         self.notify(message(saved), false, cx);
     }
-
-    // --- rendering -----------------------------------------------------------------------
 
     pub(super) fn captions_tab(&mut self, cx: &mut Context<Self>) -> gpui::Div {
         let t = &self.session.tracks;

@@ -1,7 +1,3 @@
-//! Recording Studio: the project model, timeline math, auto zoom, motion, the frame
-//! compositor, and the engines built on them: session loading, preview playback, timeline
-//! thumbnails and export. Decoding and encoding primitives live in `glint-media`.
-
 pub mod compose;
 pub mod export;
 mod feed;

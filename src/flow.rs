@@ -1,6 +1,3 @@
-//! Capture entry points and what happens after a capture: every screenshot is imported
-//! into the Library first, then the after-capture automation runs on the imported item.
-
 use crate::capture::{self, Capture};
 use crate::library::{self, Item};
 use crate::settings::Settings;
@@ -65,7 +62,6 @@ pub fn capture_previous(cx: &mut App) {
     }
 }
 
-/// Full screen after the configured self-timer.
 pub fn capture_after_timer(cx: &mut App) {
     let secs = cx.global::<Settings>().timer_seconds.max(1);
     toast::show(format!("Capturing in {secs} seconds…"), cx);
@@ -86,7 +82,6 @@ pub fn open_last(cx: &mut App) {
 pub fn finish(cap: Capture, cx: &mut App) {
     let s = cx.global::<Settings>().clone();
     if s.auto_redact {
-        // OCR takes a moment; run it off the main thread, then continue.
         let img = cap.image.clone();
         let rules = s.redact_rules.clone();
         let pad = 2.0 * cap.dpi;
@@ -101,7 +96,6 @@ pub fn finish(cap: Capture, cx: &mut App) {
     }
 }
 
-/// A capture that is in the Library, with its current deliverable pixels.
 #[derive(Clone)]
 pub struct Shot {
     pub item: Item,
@@ -109,8 +103,6 @@ pub struct Shot {
     pub dpi: f32,
 }
 
-/// Adds the capture to the Library. Automatic redactions become its first edit, so they
-/// stay editable in the editor.
 fn import(cap: Capture, findings: Vec<redact::Finding>, cx: &mut App) {
     let doc = (!findings.is_empty()).then(|| editor::redaction_doc(&findings, cx.global::<Settings>().redact_style, cap.dpi));
     let lib = store::library(cx);
@@ -181,9 +173,6 @@ pub fn finish_text(cap: Capture, cx: &mut App) {
     .detach();
 }
 
-/// Opens images from Explorer or the command line in the editor. A capture already in the
-/// Library (its folder or a file inside it) opens as it is; anything else is validated and
-/// imported as a copy first.
 pub fn open_images(paths: Vec<PathBuf>, cx: &mut App) {
     let lib = store::library(cx);
     for path in paths {

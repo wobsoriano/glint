@@ -1,6 +1,3 @@
-//! Wallpaper gallery built from local images only: the current desktop wallpaper, the images
-//! Windows ships in `%WINDIR%\Web\Wallpaper`, and images the user added.
-
 use crate::{settings, win};
 use anyhow::Context as _;
 use std::path::{Path, PathBuf};
@@ -13,7 +10,6 @@ pub struct Wallpaper {
 
 const THUMB: (u32, u32) = (144, 90);
 
-/// Thumbnails decoded so far; filled once per process on a background thread.
 static THUMBS: Mutex<Vec<(PathBuf, image::RgbaImage)>> = Mutex::new(Vec::new());
 static SCANNED: std::sync::Once = std::sync::Once::new();
 
@@ -63,7 +59,6 @@ fn thumbnail(path: &Path) -> Option<image::RgbaImage> {
     Some(image::imageops::crop_imm(&small, x, y, tw.min(small.width()), th.min(small.height())).to_image())
 }
 
-/// Starts decoding thumbnails in the background (once per process).
 pub fn scan() {
     SCANNED.call_once(|| {
         std::thread::spawn(|| {
@@ -87,7 +82,6 @@ pub fn all() -> Vec<Wallpaper> {
         .collect()
 }
 
-/// Copies an image into the user's wallpaper folder and adds it to the gallery.
 pub fn add(path: &Path) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(is_image(path), "Choose a PNG, JPEG or WebP image");
     let dir = user_dir();

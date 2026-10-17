@@ -1,7 +1,3 @@
-//! Timed overlays: click highlights, keystroke captions and spoken captions, all mapped
-//! from source time onto output time so cut footage takes its overlays with it and a
-//! sped-up clip does not shorten how long a caption stays readable.
-
 use crate::project::Project;
 use glint_media::input::InputTimeline;
 use serde::{Deserialize, Serialize};
@@ -14,8 +10,6 @@ fn ease_out_cubic(p: f64) -> f64 {
     1.0 - (1.0 - p.clamp(0.0, 1.0)).powi(3)
 }
 
-/// One click's highlight at an instant: a filled impact disc that fades quickly, then a
-/// thinner ring that expands and fades. Sizes are multiples of `base`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ClickFrame {
     /// Screen-master pixels of the recorded click (not the smoothed cursor).
@@ -97,8 +91,6 @@ impl KeyTrack {
         Self { events }
     }
 
-    /// The caption at `output_ms`. A key pressed while the previous caption is up replaces
-    /// it in place without popping in; only the last of a run fades out.
     pub fn at(&self, output_ms: f64) -> Option<KeyFrame> {
         let i = self.events.partition_point(|e| e.0 <= output_ms).checked_sub(1)?;
         let (t, label) = &self.events[i];
@@ -148,13 +140,10 @@ struct Line {
     words: Vec<(String, f64, f64)>,
 }
 
-/// What the caption bar shows at an instant.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CaptionFrame<'a> {
     pub words: Vec<&'a str>,
-    /// Word being spoken now, if any.
     pub active: Option<usize>,
-    /// Words that have started; they render fully lit.
     pub spoken: usize,
 }
 
@@ -163,9 +152,6 @@ pub struct CaptionTrack {
 }
 
 impl CaptionTrack {
-    /// One line per caption cue, showing the cue's text. Each shown word takes its timing
-    /// from the transcript words inside the cue (see [`spread`]); words whose footage was
-    /// cut drop out and the rest move to output time.
     pub fn build(project: &Project, words: &[CaptionWord]) -> Self {
         let cues = &project.caption_cues;
         let mut timed: Vec<Vec<(f64, f64)>> = vec![Vec::new(); cues.len()];
@@ -216,10 +202,6 @@ impl CaptionTrack {
     }
 }
 
-/// Timing of shown word `k` of `count` over the timed words `spans`. Shown words split the
-/// timed words evenly by index, and a fraction of a timed word takes that fraction of its
-/// time, so a corrected spelling keeps every word's timing and a reworded line still follows
-/// the speaker's pace and pauses.
 fn spread(spans: &[(f64, f64)], k: usize, count: usize) -> (f64, f64) {
     let n = spans.len();
     let at = |x: f64, end: bool| {

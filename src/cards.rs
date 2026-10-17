@@ -1,6 +1,3 @@
-//! Which actions a preview card shows and where: four corner slots, up to three center
-//! buttons, and a hidden tray. Every action lives in exactly one place.
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -147,8 +144,6 @@ impl CardLayout {
         self.hidden.retain(|&x| x != a);
     }
 
-    /// Moves `a` into `zone`. Dropping on an occupied corner swaps: the occupant goes
-    /// where `a` came from. A full center pushes its last button into the tray.
     pub fn place(&mut self, a: CardAction, zone: Zone, center_index: Option<usize>) {
         let origin = self.zone_of(a).unwrap_or(Zone::Tray);
         if origin == zone && zone != Zone::Center {
@@ -180,7 +175,6 @@ impl CardLayout {
         }
     }
 
-    /// Every action exactly once; unknown duplicates dropped, missing ones go to the tray.
     pub fn normalized(&self) -> CardLayout {
         let mut seen = Vec::new();
         let mut claim = |a: CardAction| {

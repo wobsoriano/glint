@@ -1,6 +1,3 @@
-//! WASAPI capture: system audio by loopback, microphones by capture, both to 48 kHz float WAV
-//! aligned to media time, and a level meter for the picker UI.
-
 use crate::clock::MediaClock;
 use crate::devices::DeviceId;
 use crate::mf::{self, pcwstr, wide};
@@ -21,19 +18,14 @@ use windows::Win32::Media::KernelStreaming::{KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORM
 use windows::Win32::Media::Multimedia::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, WAVE_FORMAT_IEEE_FLOAT};
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_ALL};
 
-/// Sample rate every audio track is written at.
 pub const SAMPLE_RATE: u32 = 48_000;
 
-/// Where an audio track's samples come from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum AudioSource {
-    /// Whatever the default output device is playing.
     Loopback,
-    /// A microphone by endpoint id, or the default one.
     Microphone(Option<DeviceId>),
 }
 
-/// RMS of the most recent capture buffer, readable from any thread.
 #[derive(Default)]
 pub struct LevelMeter {
     rms: AtomicU32,
@@ -54,14 +46,12 @@ impl LevelMeter {
     }
 }
 
-/// Size and format of a finished audio track.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AudioStats {
     pub frames: u64,
     pub bytes: u64,
 }
 
-/// One audio track being recorded on its own thread.
 pub(crate) struct AudioTrack {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<anyhow::Result<AudioStats>>>,
@@ -70,8 +60,6 @@ pub(crate) struct AudioTrack {
 }
 
 impl AudioTrack {
-    /// Opens the device (a missing device fails here, before any file exists) and starts
-    /// writing `path`. With a `tap`, every converted buffer is also offered to it.
     pub fn start(
         source: AudioSource,
         path: &Path,
@@ -108,7 +96,6 @@ impl Drop for AudioTrack {
     }
 }
 
-/// Opens a microphone only to meter it, for the picker UI before recording starts.
 pub struct MicMonitor {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<anyhow::Result<AudioStats>>>,
@@ -124,7 +111,6 @@ impl MicMonitor {
         Ok(Self { stop, thread: Some(thread), level })
     }
 
-    /// RMS of the last captured buffer.
     pub fn level(&self) -> f32 {
         self.level.rms()
     }
@@ -178,7 +164,6 @@ fn spawn_capture(
     }
 }
 
-/// Sample layout the device hands us.
 #[derive(Clone, Copy, Debug)]
 struct DeviceFormat {
     rate: u32,
@@ -192,7 +177,6 @@ struct Capture {
     capture: IAudioCaptureClient,
     format: DeviceFormat,
     out_channels: u16,
-    /// Fractional read position carried across packets when resampling.
     resample_pos: f64,
 }
 
@@ -239,8 +223,6 @@ impl Capture {
         Ok(Self { client, capture, format, out_channels, resample_pos: 0.0 })
     }
 
-    /// Pumps packets until `stop`. With a sink, writes them aligned to media time; always
-    /// updates `level`. A full `tap` drops the buffer instead of blocking capture.
     fn run(mut self, mut sink: Sink, stop: &AtomicBool, level: &LevelMeter, tap: Option<SyncSender<Vec<f32>>>) -> anyhow::Result<AudioStats> {
         let mut out = Vec::new();
         while !stop.load(Ordering::Relaxed) {
@@ -291,7 +273,6 @@ impl Capture {
         }
     }
 
-    /// Device samples → interleaved f32 at `SAMPLE_RATE` and `out_channels`.
     fn convert(&mut self, raw: &[u8], frames: usize, silent: bool, out: &mut Vec<f32>) {
         let f = self.format;
         let in_ch = f.channels as usize;
@@ -340,8 +321,6 @@ impl Capture {
     }
 }
 
-/// Writes `samples` so the file stays within 60 ms of media time: fills loopback silence when
-/// nothing played, drops the overlap after a pause.
 fn write_aligned(writer: &mut WavWriter, clock: &MediaClock, samples: &[f32], channels: u16) -> anyhow::Result<()> {
     let tolerance = SAMPLE_RATE as i64 * 60 / 1000;
     let target = (clock.now().as_secs_f64() * SAMPLE_RATE as f64) as i64;

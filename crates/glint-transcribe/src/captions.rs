@@ -27,7 +27,6 @@ pub struct CaptionLine {
     pub words: Range<usize>,
 }
 
-/// Groups words into subtitle lines, breaking on length, natural pauses and duration.
 pub fn caption_lines(words: &[Word], options: &CaptionOptions) -> Vec<CaptionLine> {
     let mut lines = Vec::new();
     let mut start = 0;

@@ -1,5 +1,3 @@
-//! Zoom: auto zoom from clicks, the zoom camera, and the Fill-mode reframe camera.
-
 use crate::motion::{sample, step_count, to_crop, Lerp, PointerTrack, Spring, SpringK, STEP_MS};
 use crate::project::{AspectMode, Project, Zoom, ZoomFocus};
 use glint_media::input::InputTimeline;
@@ -27,15 +25,10 @@ impl Lerp for Viewport {
     }
 }
 
-/// Zoom in this long before the click so the move has landed when it happens.
 const LEAD_IN_MS: f64 = 300.0;
-/// Stay zoomed this long after the click.
 const HOLD_MS: f64 = 2_500.0;
-/// Clicks whose zooms are closer than this merge into one zoom instead of zooming out and in.
 const JOIN_MS: f64 = 2_500.0;
-/// Clicks in the last second are usually the stop button; no zoom for them.
 const TAIL_EXCLUSION_MS: f64 = 1_000.0;
-/// Zoom back out before the recording ends.
 const TRAILING_GUARD_MS: f64 = 800.0;
 pub const AUTO_ZOOM_SCALE: f32 = 1.5;
 
@@ -85,18 +78,11 @@ impl Project {
 }
 
 const CAMERA: SpringK = SpringK { tension: 200.0, friction: 40.0, inertia: 2.25 };
-/// Longest comfortable pan in visible widths; a longer pan zooms out a little on the way
-/// (van Wijk and Nuij, "Smooth and efficient zooming and panning").
 const COMFORT_WIDTHS: f64 = 1.4;
-/// How much a pointer-following zoom keeps its subject at its unzoomed screen position
-/// instead of centering it, which reduces travel.
 const BOUNDS_BIAS: f64 = 0.25;
-/// For this long after a click the clicked point is kept inside the frame.
 const CLICK_GUARD_MS: f64 = 150.0;
 const CLICK_MARGIN: f64 = 0.9;
 
-/// The active zoom at a source time. Manual beats auto, fixed beats pointer-following,
-/// then the latest start wins.
 fn active_zoom(zooms: &[Zoom], source_ms: f64) -> Option<&Zoom> {
     let rank = |z: &Zoom| (!z.auto as u8, matches!(z.focus, ZoomFocus::Fixed { .. }) as u8);
     zooms
@@ -110,9 +96,6 @@ fn clamp_to_frame(v: f64, scale: f64) -> f64 {
     v.clamp(half, 1.0 - half)
 }
 
-/// The zoom camera over output time. Zoom regions are looked up in source time, but the
-/// springs step along output time, so a cut never jerks the camera and a sped-up clip
-/// never makes the camera move faster.
 pub(crate) fn camera_track(project: &Project, input: &InputTimeline) -> Vec<Viewport> {
     let n = step_count(project.duration_ms());
     if project.zooms.iter().all(|z| !z.enabled) {
@@ -148,7 +131,6 @@ pub(crate) fn camera_track(project: &Project, input: &InputTimeline) -> Vec<View
             Some(_) => {
                 let i = pointer.partition_point(|(t, _)| *t <= src);
                 let (px, py) = pointer.get(i.saturating_sub(1)).map_or((0.5, 0.5), |s| s.1);
-                // Blend toward the anchor that keeps the subject where it was on screen.
                 let keep = |p: f64| {
                     let h = 0.5 / scale;
                     p + (h + p * (1.0 - 2.0 * h) - p) * BOUNDS_BIAS
@@ -181,7 +163,6 @@ pub(crate) fn camera_track(project: &Project, input: &InputTimeline) -> Vec<View
     frames
 }
 
-/// Moves an anchor the least amount that keeps `p` inside the inner part of the view.
 fn keep_visible(p: f64, anchor: f64, scale: f64) -> f64 {
     let half = 0.5 / scale;
     let safe = half * CLICK_MARGIN;
@@ -193,21 +174,16 @@ fn keep_visible(p: f64, anchor: f64, scale: f64) -> f64 {
     }
 }
 
-/// Aspect of the screen card for a project, from the canvas aspect and uniform padding.
 pub(crate) fn card_aspect(project: &Project, canvas_aspect: f64) -> f64 {
     let p = project.design.padding.clamp(0.0, 0.475) as f64;
     let short = canvas_aspect.min(1.0);
     (canvas_aspect - 2.0 * p * short) / (1.0 - 2.0 * p * short)
 }
 
-/// Fraction of the visible crop the pointer may roam before the reframe camera follows.
 const DEAD_ZONE: f64 = 0.28;
 const REFRAME_TAU_S: f64 = 0.45;
-/// The reframe hands over to the zoom camera as magnification ramps from 1 to 1.2.
 const HANDOFF_SPAN: f64 = 0.2;
 
-/// Fill mode on a non-original aspect: a calm camera that crops into the recording and
-/// follows the smoothed pointer once it leaves a dead zone, deferring to zooms.
 pub(crate) fn reframe_track(
     project: &Project,
     input: &InputTimeline,
@@ -221,7 +197,6 @@ pub(crate) fn reframe_track(
     let [w, h] = input.size;
     let content = (w as f64 * project.crop.w as f64) / (h as f64 * project.crop.h as f64).max(1.0);
     let card = card_aspect(project, ratio);
-    // Content aspect-fills the card; fill sizes in units of card height.
     let fill_scale = (card / content).max(1.0);
     let (fill_w, fill_h) = (content * fill_scale, fill_scale);
     let focus = |t: f64| {

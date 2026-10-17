@@ -1,6 +1,3 @@
-//! The on-disk Library: one directory per capture under `<data_dir>\Library`.
-//! See docs/architecture.md for the layout. Nothing here touches GPUI.
-
 use anyhow::{bail, Context as _, Result};
 use chrono::{DateTime, Local};
 use glint_render::doc::EditDoc;
@@ -35,8 +32,6 @@ pub struct CaptureMeta {
     pub imported_from: Option<PathBuf>,
 }
 
-/// A recording being written into a hidden staging directory. [`Library::finish_recording`]
-/// renames it to `<id>.glintrec`; deleting `dir` discards it.
 #[derive(Clone, Debug)]
 pub struct PendingRecording {
     pub id: String,
@@ -44,7 +39,6 @@ pub struct PendingRecording {
     pub created: DateTime<Local>,
 }
 
-/// What a finished recording package records about itself in `meta.json`.
 #[derive(Clone, Debug)]
 pub struct RecordingInfo {
     pub width: u32,
@@ -53,12 +47,10 @@ pub struct RecordingInfo {
     pub source: String,
 }
 
-/// One capture in the Library, as found on disk.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
     pub dir: PathBuf,
     pub meta: CaptureMeta,
-    /// Total bytes of every file in the capture directory.
     pub bytes: u64,
 }
 
@@ -71,7 +63,6 @@ impl Item {
         self.meta.kind
     }
 
-    /// The current deliverable: image.png for screenshots, screen.mp4 for recordings.
     pub fn deliverable(&self) -> PathBuf {
         match self.meta.kind {
             CaptureKind::Screenshot => self.dir.join("image.png"),
@@ -83,7 +74,6 @@ impl Item {
         self.dir.join("thumb.png")
     }
 
-    /// True when the editor or Studio saved edits next to the originals.
     pub fn is_edited(&self) -> bool {
         let sidecar = match self.meta.kind {
             CaptureKind::Screenshot => "edit.json",
@@ -115,8 +105,6 @@ impl Library {
         crate::settings::data_dir().join("Library")
     }
 
-    /// Writes a new screenshot capture. `base` is the untouched original; `edit` is an
-    /// initial edit (automatic redactions) and the deliverable it renders to.
     pub fn import_screenshot(
         &self,
         base: &RgbaImage,
@@ -138,8 +126,6 @@ impl Library {
             source,
             imported_from,
         };
-        // Build the capture in a hidden staging directory and rename it into place, so a
-        // crash mid-import never leaves a half-written capture for `scan` to find.
         std::fs::create_dir_all(&self.root).with_context(|| format!("creating {}", self.root.display()))?;
         let (id, staging) = self.reserve(&created)?;
         let written = (|| -> Result<()> {
@@ -167,15 +153,12 @@ impl Library {
         load(&dir)
     }
 
-    /// Reserves an id and a hidden staging directory for a recording to be written into.
     pub fn begin_recording(&self, created: DateTime<Local>) -> Result<PendingRecording> {
         std::fs::create_dir_all(&self.root).with_context(|| format!("creating {}", self.root.display()))?;
         let (id, dir) = self.reserve(&created)?;
         Ok(PendingRecording { id, dir, created })
     }
 
-    /// Writes `meta.json` and a thumbnail of `first_frame` into the staging directory, then
-    /// renames it into place, so `scan` never sees a recording without its metadata.
     pub fn finish_recording(&self, pending: &PendingRecording, info: &RecordingInfo, first_frame: Option<&RgbaImage>) -> Result<Item> {
         let meta = CaptureMeta {
             version: 1,
@@ -198,7 +181,6 @@ impl Library {
         load(&dir)
     }
 
-    /// Validates an image file and imports a copy. The original is only read.
     pub fn import_file(&self, path: &Path) -> Result<Item> {
         let img = image::open(path)
             .with_context(|| format!("{} is not a readable image", path.display()))?
@@ -210,14 +192,12 @@ impl Library {
         self.import_screenshot(&img, None, Local::now(), None, Some(path.to_path_buf()), title)
     }
 
-    /// The capture directory `path` names or lies inside, when it is in this Library.
     pub fn item_dir(&self, path: &Path) -> Option<PathBuf> {
         let rel = path.strip_prefix(&self.root).ok()?;
         let first = rel.components().next()?;
         Some(self.root.join(first))
     }
 
-    /// Every capture under the root, newest first. Unreadable entries are skipped.
     pub fn scan(&self) -> Vec<Item> {
         let Ok(entries) = std::fs::read_dir(&self.root) else { return Vec::new() };
         let mut items: Vec<Item> = entries
@@ -247,7 +227,6 @@ impl Library {
     }
 }
 
-/// Reads one capture directory.
 pub fn load(dir: &Path) -> Result<Item> {
     let text = std::fs::read_to_string(dir.join("meta.json"))
         .with_context(|| format!("reading {}", dir.join("meta.json").display()))?;
@@ -259,7 +238,6 @@ pub fn load(dir: &Path) -> Result<Item> {
     Ok(Item { dir: dir.to_path_buf(), meta, bytes: dir_size(dir) })
 }
 
-/// The untouched original and the saved edit, if any, of a screenshot.
 pub fn load_edit(item: &Item) -> Result<(RgbaImage, Option<EditDoc>)> {
     let path = item.dir.join("base.png");
     let base = image::open(&path).with_context(|| format!("reading {}", path.display()))?.to_rgba8();
@@ -271,9 +249,6 @@ pub fn load_edit(item: &Item) -> Result<(RgbaImage, Option<EditDoc>)> {
     Ok((base, doc))
 }
 
-/// Stores an edit: the flattened deliverable, the document that reproduces it from base.png,
-/// a fresh thumbnail and the modification time. Every file is written to a temporary name
-/// first and renamed into place, so a failed save leaves the previous edit intact.
 pub fn save_edit(item: &Item, image: &RgbaImage, doc: &EditDoc) -> Result<Item> {
     let dir = &item.dir;
     let staged = [("image.png", dir.join("image.png.tmp")), ("edit.json", dir.join("edit.json.tmp")), ("thumb.png", dir.join("thumb.png.tmp"))];
@@ -297,7 +272,6 @@ pub fn save_edit(item: &Item, image: &RgbaImage, doc: &EditDoc) -> Result<Item> 
     load(dir)
 }
 
-/// Sets the user-visible title. The directory name never changes.
 pub fn rename(item: &Item, title: &str) -> Result<Item> {
     let title = title.trim();
     if title.is_empty() {
@@ -353,7 +327,6 @@ fn random_u16() -> u16 {
     h.finish() as u16
 }
 
-/// Moves files or directories to the Recycle Bin with Explorer's undo support.
 pub fn recycle(paths: &[PathBuf]) -> Result<()> {
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,

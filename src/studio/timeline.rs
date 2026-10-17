@@ -1,7 +1,3 @@
-//! The timeline: transport, a thumbnail strip cut into clips, the zoom lane and the playhead.
-//! Clip and zoom drags re-apply their edit to the project as it was when the drag began, so
-//! a drag never accumulates rounding and stays one undo step.
-
 use super::geometry::{format_time, zoom_around, TimeScale};
 use super::{Drag, Selection, Studio, ZoomPart};
 use crate::ui;
@@ -51,7 +47,6 @@ impl Studio {
         f32::from(self.timeline_bounds.get().size.width)
     }
 
-    /// The live scale, or the one a clip or zoom drag froze so blocks stay under the pointer.
     fn scale(&self) -> TimeScale {
         match &self.drag {
             Some(Drag::Trim { scale, .. } | Drag::Zoom { scale, .. }) => *scale,

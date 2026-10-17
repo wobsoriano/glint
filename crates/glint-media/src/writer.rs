@@ -1,5 +1,3 @@
-//! Studio export: write an MP4 from RGBA frames and PCM audio, or re-encode an existing one.
-
 use crate::encoder::Mp4Sink;
 pub use crate::encoder::{available_codecs, decodable_codecs, AudioParams, VideoCodec, VideoParams};
 use crate::frames::FrameReader;
@@ -9,17 +7,14 @@ use image::RgbaImage;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// What a finished write produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WriteSummary {
     pub frames: u64,
     pub duration_ms: u64,
     pub bytes: u64,
-    /// The encoder ran on the GPU.
     pub hardware: bool,
 }
 
-/// Writes an H.264 or HEVC MP4 at a fixed size and frame rate, with an optional AAC track.
 pub struct VideoWriter {
     sink: Mp4Sink,
     path: std::path::PathBuf,
@@ -68,7 +63,6 @@ pub struct TranscodeOptions {
     pub codec: Option<VideoCodec>,
     /// Keep only `start_ms..end_ms` of the source.
     pub trim: Option<(u64, u64)>,
-    /// Leave the source's audio track out.
     pub drop_audio: bool,
 }
 
@@ -135,11 +129,8 @@ pub fn transcode(
     writer.finish().with_context(|| format!("finish {}", dst.display()))
 }
 
-/// Copies the audio inside the trim window into the writer about a second at a time, kept
-/// just ahead of the video so the muxer never holds a whole track in memory.
 struct AudioCopy {
     reader: AudioReader,
-    /// Frames in the window, and how many of them are written.
     frames: u64,
     written: u64,
     chunk: Vec<f32>,
@@ -153,12 +144,10 @@ impl AudioCopy {
         Ok(Self { reader, frames, written: 0, chunk: Vec::new() })
     }
 
-    /// Writes audio up to `ms` of output time.
     fn copy_until(&mut self, writer: &mut VideoWriter, ms: u64) -> anyhow::Result<()> {
         self.copy_frames(writer, frame_at(ms, self.reader.sample_rate()).min(self.frames))
     }
 
-    /// Writes whatever remains of the window.
     fn finish(&mut self, writer: &mut VideoWriter) -> anyhow::Result<()> {
         self.copy_frames(writer, self.frames)
     }
@@ -225,7 +214,6 @@ mod tests {
 
     #[test]
     fn shrink_averages_each_output_area() {
-        // 4x2 source: a black/white checker on the left half, solid red on the right.
         let src = RgbaImage::from_fn(4, 2, |x, y| match (x, y) {
             (0, 0) | (1, 1) => image::Rgba([0, 0, 0, 255]),
             (0, 1) | (1, 0) => image::Rgba([255, 255, 255, 255]),

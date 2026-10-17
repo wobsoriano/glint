@@ -1,12 +1,3 @@
-//! The edited soundtrack: mic and system audio mixed with the project's gains and laid out
-//! along output time through the clip list.
-//!
-//! A sped-up or slowed clip keeps its audio, time-stretched with WSOLA so voices keep their
-//! pitch: windowed grains are read from the source at `speed` times the output rate, each one
-//! nudged to the offset that best continues the previous grain, and overlap-added. A clip at
-//! speed 1 copies samples unchanged. The mixer is sequential, so preview playback and export
-//! produce the same samples from the same start time.
-
 use crate::project::{AudioSettings, Clip, Project};
 use crate::session::Tracks;
 use glint_media::{read_wav, WavData};
@@ -14,7 +5,6 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub const SAMPLE_RATE: u32 = 48_000;
-/// The mix is always stereo.
 pub const CHANNELS: u16 = 2;
 
 const WIN: usize = 1920;
@@ -35,13 +25,11 @@ impl AudioSources {
         Ok(Self { mic, system })
     }
 
-    /// Whether `settings` leave anything audible.
     pub fn audible(&self, settings: &AudioSettings) -> bool {
         (self.mic.is_some() && settings.mic.enabled && settings.mic.volume > 0.0)
             || (self.system.is_some() && settings.system.enabled && settings.system.volume > 0.0)
     }
 
-    /// One mixed stereo frame of source audio; silence outside the recording.
     fn frame(&self, i: i64, gains: (f32, f32)) -> [f32; 2] {
         let mut out = [0.0; 2];
         if i < 0 {
@@ -62,7 +50,6 @@ impl AudioSources {
     }
 }
 
-/// Any channel count to mono (1) or stereo (2), any rate to 48 kHz.
 fn to_layout(w: WavData, channels: usize) -> Vec<f32> {
     let ch = w.channels.max(1) as usize;
     let frames = w.samples.len() / ch;
@@ -93,18 +80,15 @@ fn to_layout(w: WavData, channels: usize) -> Vec<f32> {
     out
 }
 
-/// Output-timeline audio for one project state, rendered sequentially from a start time.
 pub struct AudioMixer {
     sources: Arc<AudioSources>,
     clips: Vec<ClipFrames>,
     gains: (f32, f32),
-    /// Next output frame to render.
     pos: u64,
     clip: usize,
     stretch: Option<(usize, Stretch)>,
 }
 
-/// A clip in sample frames: output start and end, source start, speed.
 struct ClipFrames {
     out_start: u64,
     out_end: u64,
@@ -174,15 +158,12 @@ impl AudioMixer {
     }
 }
 
-/// WSOLA time stretch over one clip, producing one output frame at a time.
 struct Stretch {
     speed: f64,
-    /// Source frame the next grain nominally starts at.
     nominal: f64,
     prev: Option<i64>,
     tail: Vec<[f32; 2]>,
     ready: VecDeque<[f32; 2]>,
-    /// Output frame the next `next` call returns.
     out_pos: u64,
 }
 
@@ -204,7 +185,6 @@ impl Stretch {
         let pos = match self.prev {
             None => nominal,
             Some(prev) => {
-                // The grain should continue where the previous grain's second half leads.
                 let target: Vec<f32> = (0..HOP as i64).map(|k| mono(src.frame(prev + HOP as i64 + k, gains))).collect();
                 let lo = nominal - TOLERANCE as i64;
                 let span: Vec<f32> = (0..(2 * TOLERANCE + HOP) as i64).map(|k| mono(src.frame(lo + k, gains))).collect();
@@ -229,13 +209,11 @@ fn mono(f: [f32; 2]) -> f32 {
     f[0] + f[1]
 }
 
-/// Periodic Hann window: two copies offset by half a window sum to exactly one.
 fn hann(k: usize) -> f32 {
     let x = std::f32::consts::PI * k as f32 / WIN as f32;
     x.sin() * x.sin()
 }
 
-/// Offset into `span` where a `target`-long window correlates best with `target`.
 fn best_offset(target: &[f32], span: &[f32]) -> usize {
     let mut best = (f32::MIN, TOLERANCE);
     for off in (0..=span.len() - target.len()).step_by(2) {
@@ -247,7 +225,6 @@ fn best_offset(target: &[f32], span: &[f32]) -> usize {
     best.1
 }
 
-/// Output frames covered by `clips`, for sizing a full render.
 pub fn output_frames(clips: &[Clip]) -> u64 {
     ms_to_frames(clips.iter().map(Clip::output_len).sum()).round() as u64
 }

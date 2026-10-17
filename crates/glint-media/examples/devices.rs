@@ -1,5 +1,3 @@
-//! Prints every display, microphone and camera the engine can see, and the codec support.
-
 fn main() -> anyhow::Result<()> {
     for d in glint_media::displays()? {
         println!("display {} {:?} rect={:?} scale={} hmonitor={:#x} primary={}", d.index, d.name, d.rect, d.scale, d.hmonitor, d.primary);

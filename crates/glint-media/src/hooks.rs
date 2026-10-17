@@ -1,6 +1,3 @@
-//! The input track: low-level mouse and keyboard hooks on their own message-loop thread,
-//! building an [`InputTimeline`] in screen-master pixel space on media time.
-
 use crate::clock::MediaClock;
 use crate::cursor::{self, CursorImage};
 use crate::devices::PhysicalPixels;
@@ -18,12 +15,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-/// How screen coordinates map into the screen master's pixel space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PointerMap {
-    /// Display and area sources: subtract a fixed virtual-desktop origin.
     Fixed { x: i32, y: i32 },
-    /// Window sources: subtract the window's current capture rectangle.
     Window { hwnd: isize, bounds: WindowBounds },
 }
 
@@ -41,14 +35,12 @@ impl PointerMap {
     }
 }
 
-/// The input track while recording. Stop it to get the timeline.
 pub(crate) struct InputTrack {
     thread_id: u32,
     thread: Option<JoinHandle<anyhow::Result<InputTimeline>>>,
 }
 
 impl InputTrack {
-    /// Installs the hooks. `scale` is the source display's DPI scale, stored on each sprite.
     pub fn start(map: PointerMap, size: [u32; 2], scale: f32, session_dir: &Path, clock: Arc<MediaClock>) -> anyhow::Result<Self> {
         let cursors_dir = session_dir.join("cursors");
         std::fs::create_dir_all(&cursors_dir).with_context(|| format!("create {}", cursors_dir.display()))?;
@@ -102,7 +94,6 @@ impl InputTrack {
         }
     }
 
-    /// Removes the hooks and returns the timeline. Cursor PNGs are already on disk.
     pub fn stop(mut self) -> anyhow::Result<InputTimeline> {
         unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0))? };
         let thread = self.thread.take().unwrap();
@@ -120,7 +111,6 @@ impl Drop for InputTrack {
 }
 
 const CURSOR_POLL_MS: u32 = 32;
-/// Minimum spacing between pointer samples, per the session contract.
 const POINTER_INTERVAL_MS: u64 = 8;
 
 thread_local! {
@@ -134,13 +124,11 @@ struct HookState {
     scale: f32,
     cursors_dir: PathBuf,
     timeline: InputTimeline,
-    /// `(content hash, sprite id)` of every sprite saved so far.
     known_cursors: Vec<(u64, u32)>,
     current_handle: isize,
     current_cursor: u32,
     last_pos: (f32, f32),
     last_pointer_ms: Option<u64>,
-    /// Index into `timeline.clicks` of the press still waiting for its release, per button.
     pending: [Option<usize>; 3],
     mods: Mods,
     down: HashSet<u32>,
@@ -351,15 +339,12 @@ mod tests {
     const SC_LCONTROL: u32 = 0x1D;
     const SC_RETURN: u32 = 0x1C;
     const SC_ALT: u32 = 0x38;
-    /// Scan code of the Left Ctrl that Windows synthesizes for AltGr, as a WH_KEYBOARD_LL hook sees it.
     const SC_ALTGR_LCONTROL: u32 = 0x21D;
 
     fn labels(s: &HookState) -> Vec<&str> {
         s.timeline.keys.iter().map(|k| k.label.as_str()).collect()
     }
 
-    /// Feeds the exact event sequence a WH_KEYBOARD_LL hook sees for one AltGr chord on a
-    /// German layout: synthetic Left Ctrl (scan 0x21D) then Right Alt, the key, then the mirror.
     fn altgr_chord(s: &mut HookState, vk: u32, scan: u32) {
         use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LCONTROL, VK_RMENU};
         s.on_key(WM_SYSKEYDOWN, VK_LCONTROL.0 as u32, SC_ALTGR_LCONTROL);

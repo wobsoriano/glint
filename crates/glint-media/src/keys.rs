@@ -1,15 +1,11 @@
-//! Which key presses count as shortcuts, and how they are labelled in `input.json`.
-
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
-/// Modifier keys held at the moment of a key press.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Mods {
     pub ctrl: bool,
     pub shift: bool,
     pub alt: bool,
     pub win: bool,
-    /// AltGr picks a third character on the key, so it is typing, not a shortcut modifier.
     pub altgr: bool,
 }
 
@@ -19,8 +15,6 @@ pub(crate) struct Mods {
 const SC_SYNTHETIC: u32 = 0x200;
 
 impl Mods {
-    /// Applies a modifier key going down or up. Returns false for non-modifier keys.
-    /// `scan` is the hook's scan code, which tells AltGr apart from a real Left Ctrl.
     pub fn apply(&mut self, vk: u32, scan: u32, down: bool) -> bool {
         let slot = match VIRTUAL_KEY(vk as u16) {
             VK_LCONTROL if scan & SC_SYNTHETIC != 0 => &mut self.altgr,
@@ -36,11 +30,6 @@ impl Mods {
     }
 }
 
-/// The label for a key press, or `None` when it is plain typing that is not recorded.
-///
-/// Recorded: anything with Ctrl, Alt or Win held, and navigation/function keys on their own
-/// or with Shift or AltGr. Not recorded: letters, digits, punctuation and Space without
-/// Ctrl/Alt/Win, which includes AltGr characters.
 pub(crate) fn shortcut_label(vk: u32, mods: Mods) -> Option<String> {
     let key = key_name(vk)?;
     let special = is_special(vk);
@@ -123,7 +112,6 @@ mod tests {
 
     const SC_LCONTROL: u32 = 0x1D;
     const SC_ALT: u32 = 0x38;
-    /// Scan code of the Left Ctrl that Windows synthesizes for AltGr, as a WH_KEYBOARD_LL hook sees it.
     const SC_ALTGR_LCONTROL: u32 = 0x21D;
 
     #[test]

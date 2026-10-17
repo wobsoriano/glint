@@ -1,14 +1,3 @@
-//! The Studio project (`project.json`): every edit made to a recording session.
-//!
-//! All `*_ms` times on clips and zooms are source media milliseconds. Output time is derived
-//! by walking clips in order (see `timeline.rs`).
-//!
-//! Zooms are anchored to source time, not output time. A zoom frames something that happened
-//! in the recording, typically a click, so it must stay attached to that moment when clips
-//! before it are trimmed, deleted, sped up or cut by the transcript. Anchoring to output time
-//! would make every such edit silently slide zooms onto unrelated footage. The camera motion
-//! itself is still integrated along output time, so speed changes never make zooms snappier.
-
 use anyhow::Context;
 use glint_render::style::{Background, GRADIENTS};
 use serde::{Deserialize, Serialize};
@@ -102,7 +91,6 @@ pub enum ZoomFocus {
     Fixed { x: f32, y: f32 },
 }
 
-/// The part of a project a preset carries: background, layout, cursor and camera.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Design {
@@ -205,13 +193,10 @@ impl AspectPreset {
     }
 }
 
-/// How the recording occupies a canvas whose aspect differs from it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AspectMode {
-    /// Crop into the recording with a camera that follows the pointer.
     Fill,
-    /// Show the whole recording framed on the background.
     Fit,
 }
 
@@ -262,8 +247,6 @@ impl Default for KeystrokeSettings {
     }
 }
 
-/// One caption line on the source timeline. `text` is what shows; the transcript words that
-/// start inside the cue supply its karaoke timing, so editing the text keeps it in sync.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CaptionCue {
     pub start_ms: f64,
@@ -279,7 +262,6 @@ pub struct CaptionSettings {
     pub position: f32,
     /// Multiplier on the default caption size (0.6..=1.8).
     pub size: f32,
-    /// Highlight the word being spoken.
     pub karaoke: bool,
 }
 
@@ -399,7 +381,6 @@ impl Default for ExportOptions {
 impl Project {
     pub const FILE: &'static str = "project.json";
 
-    /// A fresh project covering the whole recording.
     pub fn new(source_duration_ms: f64) -> Self {
         Self {
             clips: vec![Clip { start_ms: 0.0, end_ms: source_duration_ms, speed: 1.0 }],

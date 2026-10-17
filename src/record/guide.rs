@@ -1,6 +1,3 @@
-//! The area guide: dims the display outside the recorded area and outlines it, or outlines
-//! the recorded window. Click-through, and never part of the recording.
-
 use super::chrome::{self, Kind, Placement};
 use super::target::display_rect;
 use super::Target;
@@ -8,7 +5,6 @@ use crate::ui;
 use gpui::prelude::*;
 use gpui::{div, px, rgba, AnyWindowHandle, App, Context, Window};
 
-/// `None` for a whole display, which needs no guide.
 pub fn open(target: Target, cx: &mut App) -> Option<AnyWindowHandle> {
     if matches!(target, Target::Display(_)) {
         return None;

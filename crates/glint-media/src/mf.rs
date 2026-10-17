@@ -1,5 +1,3 @@
-//! Process and thread initialisation shared by every Media Foundation and WinRT caller.
-
 use std::sync::OnceLock;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
@@ -24,8 +22,6 @@ pub(crate) fn init() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("MFStartup: {e}"))
 }
 
-/// Null-terminated UTF-16 copy of `s` for `PCWSTR` arguments. Keep the `Vec` alive while the
-/// pointer is in use.
 pub(crate) fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }

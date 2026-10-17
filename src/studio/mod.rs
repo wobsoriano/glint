@@ -1,7 +1,3 @@
-//! The Recording Studio window: a large preview, the timeline across the bottom and a
-//! settings sidebar on the right. Every edit goes through [`Studio::edit`], which records
-//! undo history, hands the project to the player and schedules a save.
-
 mod captions;
 mod export;
 mod geometry;
@@ -27,10 +23,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// Slider and drag edits of the same control this close together are one undo step.
 const COALESCE: Duration = Duration::from_millis(1000);
 const SAVE_DELAY: Duration = Duration::from_millis(700);
-/// After a command the player is polled this long for the frame it renders.
 const SETTLE: Duration = Duration::from_millis(1500);
 const FRAME_MS: f64 = 1000.0 / 60.0;
 
@@ -39,7 +33,6 @@ struct OpenStudios(Vec<(PathBuf, AnyWindowHandle)>);
 
 impl Global for OpenStudios {}
 
-/// Opens a recording session in Studio, or brings its window forward if it is open.
 pub fn open(cx: &mut App, session_dir: PathBuf) {
     let open = cx.default_global::<OpenStudios>().0.clone();
     for (dir, handle) in open {
@@ -80,7 +73,6 @@ pub fn open(cx: &mut App, session_dir: PathBuf) {
     }
 }
 
-/// Everything loaded before the window opens, so a broken session never opens a window.
 struct Prepared {
     session: Session,
     player: Player,
@@ -113,8 +105,6 @@ enum Selection {
     Zoom(usize),
 }
 
-/// What the preview is being used for. Crop and Focus show the unzoomed recording so the
-/// handles drawn over it line up with the footage.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Mode {
     Normal,
@@ -135,7 +125,6 @@ enum Tab {
     Presets,
 }
 
-/// Sidebar tabs in display order: icon and title.
 const TABS: [(Tab, &str, &str); 9] = [
     (Tab::Background, "image", "Background"),
     (Tab::Layout, "area", "Layout"),
@@ -186,10 +175,8 @@ pub struct Studio {
     title: String,
 
     frame: Option<(Arc<RgbaImage>, Arc<RenderImage>)>,
-    /// Playhead while paused; the player's clock is read while playing.
     playhead: f64,
     preview_area: Rc<Cell<Bounds<Pixels>>>,
-    /// The displayed frame in window coordinates.
     frame_bounds: Rc<Cell<Bounds<Pixels>>>,
     poll_until: Instant,
     polling: bool,
@@ -274,7 +261,6 @@ impl Studio {
         self.project().duration_ms()
     }
 
-    /// A copy of the session for background work: export, thumbnails.
     fn snapshot(&self) -> Session {
         let s = &self.session;
         Session {
@@ -289,10 +275,6 @@ impl Studio {
         }
     }
 
-    // --- edits ---------------------------------------------------------------------------
-
-    /// Applies one edit. Edits in the same `group` (a slider, a drag) within `COALESCE`, or
-    /// during one drag, share an undo step.
     fn edit<R>(&mut self, group: Option<&'static str>, cx: &mut Context<Self>, f: impl FnOnce(&mut Project) -> R) -> R {
         let mut next = self.session.project.clone();
         let r = f(&mut next);
@@ -345,7 +327,6 @@ impl Studio {
         cx.notify();
     }
 
-    /// The project the preview shows for the current mode.
     fn preview_project(&self) -> Project {
         let mut p = self.session.project.clone();
         match self.mode {
@@ -371,8 +352,6 @@ impl Studio {
         cx.notify();
     }
 
-    // --- persistence ---------------------------------------------------------------------
-
     fn schedule_save(&mut self, cx: &mut Context<Self>) {
         self.dirty = true;
         self.save_gen += 1;
@@ -397,7 +376,6 @@ impl Studio {
         ok
     }
 
-    /// The window closes only once the project is on disk.
     fn close_requested(&mut self, cx: &mut Context<Self>) -> bool {
         if let export::ExportUi::Running { cancel, .. } = &self.export {
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -411,9 +389,6 @@ impl Studio {
         window.remove_window();
     }
 
-    // --- playback ------------------------------------------------------------------------
-
-    /// Polls the player at display rate while it plays or a requested frame is due.
     fn kick(&mut self, cx: &mut Context<Self>) {
         self.poll_until = Instant::now() + SETTLE;
         if self.polling {
@@ -493,8 +468,6 @@ impl Studio {
         self.seek(base + delta_ms, cx);
     }
 
-    // --- timeline commands ---------------------------------------------------------------
-
     fn split(&mut self, cx: &mut Context<Self>) {
         let t = self.position();
         if let Some(i) = self.edit(None, cx, |p| p.split_at(t)) {
@@ -555,8 +528,6 @@ impl Studio {
         cx.notify();
     }
 
-    // --- presets -------------------------------------------------------------------------
-
     fn reload_presets(&mut self) {
         self.preset_list = self.presets.list();
         self.default_preset = self.presets.default_preset().map(|p| p.name);
@@ -580,8 +551,6 @@ impl Studio {
         cx.notify();
     }
 
-    // --- notices -------------------------------------------------------------------------
-
     fn notify(&mut self, text: impl Into<SharedString>, error: bool, cx: &mut Context<Self>) {
         self.show_notice(Notice { text: text.into(), file: None, error }, cx);
     }
@@ -603,8 +572,6 @@ impl Studio {
         .detach();
         cx.notify();
     }
-
-    // --- input ---------------------------------------------------------------------------
 
     fn on_key(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(name) = self.preset_name.as_mut() {

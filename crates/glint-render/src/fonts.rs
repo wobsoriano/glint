@@ -1,5 +1,3 @@
-//! A curated set of fonts that ship with Windows, loaded on demand from `%WINDIR%\Fonts`.
-
 use crate::style::Color;
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use serde::{Deserialize, Serialize};
@@ -40,7 +38,6 @@ pub enum Align {
     Right,
 }
 
-/// Typeface of a text annotation or watermark.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextFont {
@@ -55,7 +52,6 @@ impl Default for TextFont {
     }
 }
 
-/// Family name and the file for each weight (Light, Regular, Semibold, Bold, Black).
 const CATALOG: &[(&str, [&str; 5])] = &[
     ("Segoe UI", ["segoeuil.ttf", "segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguibl.ttf"]),
     ("Arial", ["", "arial.ttf", "", "arialbd.ttf", "ariblk.ttf"]),

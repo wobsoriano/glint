@@ -1,5 +1,3 @@
-//! Writer → reader round trip with synthetic frames and an audio tone.
-
 use glint_media::{
     available_codecs, decodable_codecs, read_mp4_audio, transcode, AudioParams, FrameReader, TranscodeOptions, VideoCodec,
     VideoParams, VideoReader, VideoWriter,
@@ -155,7 +153,6 @@ fn transcode_can_drop_audio() {
     assert_eq!(VideoReader::open(&dst).unwrap().size(), (W, H));
 }
 
-/// 440 Hz stereo tone at 44.1 kHz whose amplitude drops from 0.5 to 0.1 at exactly 1000 ms.
 fn stepped_tone_44k(seconds: f32) -> Vec<f32> {
     (0..(44_100.0 * seconds) as usize)
         .flat_map(|i| {
@@ -166,8 +163,6 @@ fn stepped_tone_44k(seconds: f32) -> Vec<f32> {
         .collect()
 }
 
-/// Frame of the first 64-frame window whose RMS is above `above`, and after it the first
-/// whose RMS is below `below`.
 fn envelope(samples: &[f32], channels: usize, above: f32, below: f32) -> (Option<usize>, Option<usize>) {
     let rms = |w: &[f32]| (w.iter().map(|s| s * s).sum::<f32>() / w.len() as f32).sqrt();
     let windows: Vec<f32> = samples.chunks_exact(64 * channels).map(rms).collect();
@@ -226,7 +221,6 @@ fn audio_reader_seeks_to_the_exact_frame() {
 const BLOCKS: [[u8; 3]; 8] =
     [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255], [128, 128, 128], [255, 255, 0], [224, 172, 105], [30, 60, 90]];
 
-/// Eight flat colour blocks in a 4x2 grid.
 fn colour_blocks(w: u32, h: u32) -> RgbaImage {
     RgbaImage::from_fn(w, h, |x, y| {
         let c = BLOCKS[(x * 4 / w) as usize + if y < h / 2 { 0 } else { 4 }];
@@ -273,8 +267,6 @@ fn colours_survive_the_round_trip_at_sd_and_hd() {
     }
 }
 
-/// Two screens of text-like dashes over white. Scrolled, they compress well but want more
-/// than 4 Mbps at 720p, so a working rate control lands on the requested average.
 fn text_page(w: u32, h: u32) -> RgbaImage {
     let mut seed = 0x9e37_79b9_7f4a_7c15u64;
     let mut next = move || {

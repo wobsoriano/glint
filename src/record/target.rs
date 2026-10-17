@@ -1,5 +1,3 @@
-//! What a recording captures, resolved against the attached displays.
-
 use glint_media::{CaptureSource, DisplayInfo, Rect};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST};
@@ -8,12 +6,10 @@ use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, HMONITOR
 pub enum Target {
     Display(DisplayInfo),
     Window { hwnd: isize, title: String, display: DisplayInfo },
-    /// `rect` is in physical virtual-desktop pixels and lies inside `display`.
     Area { rect: [i32; 4], display: DisplayInfo },
 }
 
 impl Target {
-    /// The display under the pointer.
     pub fn display_at_cursor() -> anyhow::Result<Self> {
         let list = glint_media::displays()?;
         let (x, y) = crate::capture::cursor_pos();
@@ -37,7 +33,6 @@ impl Target {
         Ok(clip_area(rect, &d.rect).map(|rect| Target::Area { rect, display: d.clone() }))
     }
 
-    /// The whole display when `rect` covers it, otherwise an area.
     pub fn from_selection(rect: [i32; 4]) -> anyhow::Result<Option<Self>> {
         let list = glint_media::displays()?;
         if let Some(d) = list.iter().find(|d| [d.rect.x, d.rect.y, d.rect.width as i32, d.rect.height as i32] == rect) {
@@ -63,7 +58,6 @@ impl Target {
         }
     }
 
-    /// What `meta.json` records as the source.
     pub fn label(&self) -> String {
         match self {
             Target::Display(d) => d.name.clone(),
@@ -72,7 +66,6 @@ impl Target {
         }
     }
 
-    /// Where the target is on screen now, physical pixels. Windows move, so this asks again.
     pub fn frame(&self) -> [i32; 4] {
         match self {
             Target::Display(d) => display_rect(d),
@@ -88,7 +81,6 @@ pub fn display_rect(d: &DisplayInfo) -> [i32; 4] {
     [d.rect.x, d.rect.y, d.rect.width as i32, d.rect.height as i32]
 }
 
-/// The display's area without the taskbar, physical pixels.
 pub fn work_area(d: &DisplayInfo) -> [i32; 4] {
     let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
     if unsafe { GetMonitorInfoW(HMONITOR(d.hmonitor as *mut _), &mut info) }.as_bool() {

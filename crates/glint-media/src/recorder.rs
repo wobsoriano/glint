@@ -1,6 +1,3 @@
-//! A recording session: one screen master plus optional audio, camera and input tracks, all
-//! on one media clock, written into a session directory.
-
 use crate::audio::{AudioSource, AudioTrack};
 use crate::camera::CameraTrack;
 use crate::clock::MediaClock;
@@ -16,7 +13,6 @@ use std::time::Duration;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
 
-/// What to record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaptureSource {
     /// A display by index into [`displays()`].
@@ -27,7 +23,6 @@ pub enum CaptureSource {
     Area { display: usize, rect: Rect },
 }
 
-/// Frame rates the screen master can be written at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fps {
     F30,
@@ -43,7 +38,6 @@ impl Fps {
     }
 }
 
-/// Everything [`Recorder::start`] needs.
 #[derive(Clone, Debug)]
 pub struct RecordOptions {
     pub source: CaptureSource,
@@ -63,19 +57,16 @@ pub struct RecordOptions {
     pub mic_tap: Option<SyncSender<Vec<f32>>>,
 }
 
-/// What a finished recording produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecordSummary {
     /// Files inside the session directory, screen master first.
     pub files: Vec<PathBuf>,
     /// Media duration, paused spans excluded.
     pub duration_ms: u64,
-    /// Total size of `files` on disk.
     pub bytes: u64,
     /// Pixel size of the screen master.
     pub width: u32,
     pub height: u32,
-    /// The screen encoder ran on the GPU.
     pub hardware_encoder: bool,
     /// Optional tracks that were skipped or cut short, and anything else worth telling the user.
     pub warnings: Vec<String>,
@@ -261,12 +252,9 @@ impl Recorder {
     }
 }
 
-/// A capture source turned into handles, plus what the input track needs to map positions.
 struct Resolved {
     screen: ScreenSource,
-    /// Virtual-desktop origin of the captured pixels (unused for windows, which move).
     origin: (i32, i32),
-    /// DPI scale of the display the source is on.
     scale: f32,
 }
 

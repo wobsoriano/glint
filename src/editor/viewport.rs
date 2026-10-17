@@ -1,26 +1,18 @@
-//! Canvas zoom and pan. Only the editing view changes; the exported image never does.
-//! Sizes are physical pixels: `zoom` is screen pixels per full-resolution canvas pixel.
-
 use crate::annotate::{pt, Pt};
 
 pub const MAX_ZOOM: f32 = 10.0;
 const MIN_ZOOM: f32 = 0.05;
-/// Room left around the composition when fitting, in logical pixels.
 const FIT_MARGIN: f32 = 28.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Viewport {
-    /// `None` fits the composition in the view.
     pub zoom: Option<f32>,
-    /// Canvas point shown at the middle of the view.
     pub center: Pt,
 }
 
-/// A viewport resolved against a canvas and a view size.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct View {
     pub zoom: f32,
-    /// Canvas point at the view's top-left corner.
     pub origin: Pt,
 }
 
@@ -41,7 +33,6 @@ impl Default for Viewport {
 
 const STEPS: [f32; 16] = [0.05, 0.1, 0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0];
 
-/// The next standard zoom level above or below `zoom`.
 pub fn step(zoom: f32, up: bool) -> f32 {
     if up {
         STEPS.into_iter().find(|s| *s > zoom * 1.01).unwrap_or(MAX_ZOOM)
@@ -74,7 +65,6 @@ impl Viewport {
         View { zoom, origin: pt(center.x - view.0 / zoom / 2.0, center.y - view.1 / zoom / 2.0) }
     }
 
-    /// Sets the zoom keeping the canvas point under `anchor` (screen pixels) fixed.
     pub fn zoom_to(&mut self, zoom: f32, anchor: Pt, canvas: (f32, f32), view: (f32, f32), scale_factor: f32) {
         let current = self.resolve(canvas, view, scale_factor);
         let zoom = zoom.clamp(MIN_ZOOM.min(current.zoom), MAX_ZOOM);
@@ -85,7 +75,6 @@ impl Viewport {
         self.settle(canvas, view, scale_factor);
     }
 
-    /// Moves the view by screen pixels; stops at the composition edges.
     pub fn pan(&mut self, dx: f32, dy: f32, canvas: (f32, f32), view: (f32, f32), scale_factor: f32) {
         let v = self.resolve(canvas, view, scale_factor);
         self.zoom = Some(v.zoom);
@@ -93,7 +82,6 @@ impl Viewport {
         self.settle(canvas, view, scale_factor);
     }
 
-    /// Stores the clamped center so later pans start from what is on screen.
     fn settle(&mut self, canvas: (f32, f32), view: (f32, f32), scale_factor: f32) {
         let v = self.resolve(canvas, view, scale_factor);
         self.center = pt(v.origin.x + view.0 / v.zoom / 2.0, v.origin.y + view.1 / v.zoom / 2.0);
@@ -148,7 +136,6 @@ mod tests {
         vp.pan(10_000.0, 300.0, CANVAS, VIEW, 1.0);
         let v = vp.resolve(CANVAS, VIEW, 1.0);
         assert_eq!(v.origin.x, 1000.0, "right edge stops the pan");
-        // At 0.5x the canvas is 500 px tall in an 800 px view: vertical stays centered.
         let mut vp = Viewport { zoom: Some(0.5), center: pt(1000.0, 0.0) };
         vp.pan(0.0, 400.0, CANVAS, VIEW, 1.0);
         let v = vp.resolve(CANVAS, VIEW, 1.0);

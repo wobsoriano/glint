@@ -1,7 +1,3 @@
-//! On-device speech recognition for Glint: model downloads, whisper transcription with word
-//! timestamps, live recognition for the teleprompter, and pure helpers for captions, filler
-//! words, silences and transcript-driven cuts.
-
 mod audio;
 mod captions;
 mod edit;

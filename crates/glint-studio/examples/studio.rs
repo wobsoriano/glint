@@ -1,14 +1,3 @@
-//! Drives the Studio engines on a recorded session.
-//!
-//! ```text
-//! cargo run --release -p glint-studio --example studio -- <session.glintrec> export [--fps 30|60] [--no-blur] [--gif] [--edit]
-//! cargo run --release -p glint-studio --example studio -- <session.glintrec> player <out_dir>
-//! cargo run --release -p glint-studio --example studio -- <session.glintrec> thumbs <count> <height> <out_dir>
-//! ```
-//!
-//! `--edit` splits the timeline at 2, 4 and 6 s, plays the second clip at 2x and deletes
-//! the third.
-
 use glint_studio::{export, timeline_thumbnails, Format, Fps, Player, Session};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -122,8 +111,6 @@ fn main() -> anyhow::Result<()> {
             }
         }
         "fake-camera" => {
-            // A 640x480 camera track whose white bar sits at x = source seconds * 60 px and
-            // whose label prints the source time, to check camera alignment after edits.
             let path = dir.join("camera.mp4");
             let params = glint_media::VideoParams { width: 640, height: 480, fps: 30, bitrate: 2_000_000, codec: glint_media::VideoCodec::H264 };
             let mut writer = glint_media::VideoWriter::create(&path, params, None)?;

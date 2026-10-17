@@ -1,5 +1,3 @@
-//! Embedded SVG icons (24×24, stroke style). GPUI tints them with the element's text color.
-
 use gpui::{AssetSource, SharedString};
 use std::borrow::Cow;
 

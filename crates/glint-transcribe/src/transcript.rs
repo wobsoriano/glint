@@ -53,7 +53,6 @@ impl Transcript {
         Self::parse(&bytes).with_context(|| format!("parsing {}", path.display()))
     }
 
-    /// Parses the contents of `transcript.json`.
     pub fn parse(json: &[u8]) -> Result<Self> {
         let transcript: Transcript = serde_json::from_slice(json)?;
         if transcript.version > TRANSCRIPT_VERSION {

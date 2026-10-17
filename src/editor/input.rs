@@ -1,11 +1,7 @@
-//! Pointer and keyboard handling.
-
 use super::{next_id, AfterSave, Drag, Editor, Typing};
 use crate::annotate::{pt, Annotation, Pt, Shape, Tool, R};
 use gpui::{Context, KeyDownEvent, Modifiers, MouseDownEvent, Pixels, Point, Window};
 
-/// Crop handles: corners (top-left, top-right, bottom-right, bottom-left), then edge midpoints
-/// (top, right, bottom, left) when the ratio is free.
 pub(super) fn crop_handles(r: R, edges: bool) -> Vec<Pt> {
     let mut v = vec![pt(r.x, r.y), pt(r.right(), r.y), pt(r.right(), r.bottom()), pt(r.x, r.bottom())];
     if edges {
@@ -15,7 +11,6 @@ pub(super) fn crop_handles(r: R, edges: bool) -> Vec<Pt> {
     v
 }
 
-/// The rect from fixed corner `anchor` towards `p` with width/height `ratio`, inside `bounds`.
 fn ratio_rect(anchor: Pt, p: Pt, ratio: f32, bounds: R) -> R {
     let (sx, sy) = ((p.x - anchor.x).signum(), (p.y - anchor.y).signum());
     let max_w = if sx >= 0.0 { bounds.right() - anchor.x } else { anchor.x - bounds.x };

@@ -1,11 +1,3 @@
-//! Rendering the edited recording to a file: MP4 (H.264, or HEVC where the machine has an
-//! encoder) with the mixed soundtrack, or a palette GIF.
-//!
-//! Frames flow through three stages on their own threads: one decoder walks the clip list
-//! in output order, several compositors draw frames in parallel, and the calling thread
-//! puts them back in order and encodes. Finished files are cached in `render/` under a hash
-//! of everything that affects the pixels and samples, so an unchanged export returns at once.
-
 use crate::compose::{compose_frame_motion_blur, recycle_frame, FrameInputs};
 use crate::feed::{FrameFeed, SourceFrame};
 use crate::mix::{AudioMixer, AudioSources, CHANNELS, SAMPLE_RATE};
@@ -20,12 +12,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex};
 
-/// Bump when rendering changes so stale cached exports are not reused.
 const RENDER_VERSION: u32 = 3;
 const GIF_FPS: u32 = 15;
 const GIF_MAX_SHORT_SIDE: u32 = 480;
-/// Frames composed in parallel. Each compositor already splits the screen blit and the NV12
-/// conversion across all cores; on a 12-thread machine a third compositor only contends.
 const COMPOSITORS: usize = 2;
 
 /// Renders the session's current project with `opts` and returns the file in `render/`,
@@ -61,7 +50,6 @@ pub fn export(session: &Session, opts: &ExportOptions, mut progress: impl FnMut(
         return Err(e);
     }
     if std::fs::rename(&partial, &out).is_err() {
-        // Another render of the same state finished first and its file is in use.
         let _ = std::fs::remove_file(&partial);
         if !out.is_file() {
             bail!("could not move the render into {}", out.display());
@@ -72,14 +60,10 @@ pub fn export(session: &Session, opts: &ExportOptions, mut progress: impl FnMut(
     Ok(out)
 }
 
-/// The current edited recording as a file, rendering it with the project's own export
-/// options when the cache does not have it. Used by copy and save outside Studio.
 pub fn deliverable(session: &Session) -> anyhow::Result<PathBuf> {
     export(session, &session.project.export, |_| {}, &AtomicBool::new(false))
 }
 
-/// Average bitrate for a quality: bits per pixel per frame, so screen content stays crisp
-/// at any size and frame rate.
 pub fn bitrate(width: u32, height: u32, fps: u32, quality: Quality) -> u32 {
     let bpp = match quality {
         Quality::High => 0.1,
@@ -89,7 +73,6 @@ pub fn bitrate(width: u32, height: u32, fps: u32, quality: Quality) -> u32 {
     (width as f64 * height as f64 * fps as f64 * bpp).clamp(1_500_000.0, 80_000_000.0) as u32
 }
 
-/// Options for the trim-and-compress editor.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CompressOptions {
     /// Shrinks the short side to this; never upscales.
@@ -100,7 +83,6 @@ pub struct CompressOptions {
     pub trim: Option<(u64, u64)>,
 }
 
-/// Re-encodes any MP4 smaller: resized, at the quality's bitrate, optionally trimmed.
 pub fn compress_video(
     src: &Path,
     dst: &Path,
@@ -183,7 +165,6 @@ struct Job {
     camera: Option<Arc<SourceFrame>>,
 }
 
-/// Composes output frames `0..frames` at `fps` and hands them to `sink` in order.
 fn render_frames(
     session: &Session,
     project: &Project,
@@ -281,7 +262,6 @@ fn write_gif(
     let mut encoder = gif::Encoder::new(file, size.0 as u16, size.1 as u16, &palette.rgb)?;
     encoder.set_repeat(gif::Repeat::Infinite)?;
     render_frames(session, project, size, GIF_FPS, frames, cancel, |i, frame| {
-        // Centiseconds, alternating so the total stays exact at frame rates like 15.
         let delay = (((i + 1) * 100).div_ceil(GIF_FPS as u64) - (i * 100).div_ceil(GIF_FPS as u64)) as u16;
         let indices = palette.map(&frame);
         recycle_frame(frame);
@@ -294,7 +274,6 @@ fn write_gif(
     Ok(())
 }
 
-/// A GIF is the export canvas shrunk so its short side is at most 480 pixels.
 fn gif_size(out: (u32, u32)) -> (u32, u32) {
     let short = out.0.min(out.1);
     if short <= GIF_MAX_SHORT_SIDE {
@@ -305,7 +284,6 @@ fn gif_size(out: (u32, u32)) -> (u32, u32) {
     (even(out.0), even(out.1))
 }
 
-/// `n` composed frames spread across the output, for training the GIF palette.
 fn sample_frames(session: &Session, project: &Project, size: (u32, u32), n: u32) -> anyhow::Result<Vec<RgbaImage>> {
     let mut screen = FrameFeed::open(&session.tracks.screen)?;
     let mut camera = session.tracks.camera.as_deref().map(FrameFeed::open).transpose()?;
@@ -325,11 +303,8 @@ fn sample_frames(session: &Session, project: &Project, size: (u32, u32), n: u32)
     Ok(out)
 }
 
-/// One 256-colour palette for the whole GIF, so colours do not shimmer between frames,
-/// with ordered dithering to hide banding in gradients.
 struct Palette {
     rgb: Vec<u8>,
-    /// Palette index for every 5-bit-per-channel colour.
     lut: Vec<u8>,
 }
 
@@ -363,8 +338,6 @@ impl Palette {
     }
 }
 
-/// FNV-1a over everything a render depends on: the project with its export options and the
-/// identity of every session file the frames and samples come from.
 fn cache_key(session: &Session, project: &Project) -> String {
     let stamp = |p: &Path| {
         std::fs::metadata(p).ok().map(|m| {
@@ -389,7 +362,6 @@ fn cache_key(session: &Session, project: &Project) -> String {
     format!("{h:016x}")
 }
 
-/// Keeps one finished render per format.
 fn remove_stale_exports(dir: &Path, keep: &Path, ext: &str) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for e in entries.flatten() {

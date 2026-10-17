@@ -1,12 +1,8 @@
-//! Source frames by source time for playback and export, decoding forward and seeking only
-//! when the requested time jumps backwards or far ahead.
-
 use glint_media::frames::{FrameReader, Nv12Frame};
 use image::RgbaImage;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// A decoded frame, converted to RGBA by the first thread that needs its pixels.
 pub(crate) struct SourceFrame {
     raw: Nv12Frame,
     rgba: OnceLock<RgbaImage>,
@@ -21,8 +17,6 @@ impl SourceFrame {
     }
 }
 
-/// RGBA buffers of dropped frames, reused because touching fresh pages costs more than the
-/// conversion itself at 4K.
 static BUFFERS: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
 const MAX_POOLED: usize = 8;
 
@@ -37,8 +31,6 @@ impl Drop for SourceFrame {
     }
 }
 
-/// Reading forward is cheaper than a seek, which restarts decoding at a keyframe, until the
-/// jump is about this long.
 const SEEK_AHEAD_MS: f64 = 1_500.0;
 
 pub(crate) struct FrameFeed {
@@ -47,7 +39,6 @@ pub(crate) struct FrameFeed {
     current: Option<(f64, Arc<SourceFrame>)>,
     next: Option<Nv12Frame>,
     ended: bool,
-    /// Where the reader was last positioned when no frame has been taken since.
     origin_ms: f64,
 }
 
@@ -58,8 +49,6 @@ impl FrameFeed {
         Ok(Self { reader, half_frame_ms, current: None, next: None, ended: false, origin_ms: 0.0 })
     }
 
-    /// The frame showing at `source_ms`: the latest one at or before it, or the first frame
-    /// when none is. `None` only for a stream with no frames.
     pub fn frame_at(&mut self, source_ms: f64) -> anyhow::Result<Option<Arc<SourceFrame>>> {
         let head = self.current.as_ref().map_or(self.origin_ms, |c| c.0);
         let behind = self.current.as_ref().is_some_and(|c| source_ms + self.half_frame_ms < c.0);

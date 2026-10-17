@@ -1,6 +1,3 @@
-//! `EditDoc`: everything the screenshot editor changes, stored next to the untouched base image
-//! as `edit.json`. Rendering `(base, EditDoc)` reproduces the deliverable exactly.
-
 use crate::annotate::{Annotation, R};
 use crate::fonts::TextFont;
 use crate::style::{Color, Style};
@@ -14,7 +11,6 @@ pub struct EditDoc {
     pub version: u32,
     /// Scale factor of the monitor the capture came from; point sizes are multiplied by it.
     pub dpi: f32,
-    /// Captured window title, shown by window chrome.
     pub window_title: Option<String>,
     pub style: Style,
     pub effects: Effects,
@@ -81,7 +77,6 @@ pub struct Effects {
     pub blur: ProgressiveBlur,
 }
 
-/// Solid border around the screenshot card.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Border {
@@ -109,7 +104,6 @@ impl Border {
 pub enum Placement {
     /// 0..=8, row-major 3x3 grid over the screenshot.
     Grid(u8),
-    /// Repeated across the screenshot, rotated by `Watermark::rotation`.
     Tiled,
 }
 
@@ -149,7 +143,6 @@ impl Watermark {
     }
 }
 
-/// Camera-style mockup: the card is a plane rotated in 3D and seen through a pinhole camera.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Perspective {
@@ -197,7 +190,6 @@ pub enum BlurEdge {
     Bleed,
 }
 
-/// Sharp focus in the middle that falls off into blur, radially or across a band.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgressiveBlur {

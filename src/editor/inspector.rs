@@ -1,5 +1,3 @@
-//! Window chrome: the tool bar, the contextual style bar, the right sidebar and the bottom bar.
-
 use super::{gallery, AfterSave, Editor, Typing};
 use crate::annotate::{RedactStyle, Shape, TextStyle, Tool};
 use crate::settings::Settings;
@@ -46,7 +44,6 @@ fn on_value(weak: &WeakEntity<Editor>, f: impl Fn(&mut Editor, f32) + 'static) -
     })
 }
 
-/// A slider bound to one document field; a drag is one undo step.
 fn doc_slider(
     weak: &WeakEntity<Editor>,
     key: &'static str,
@@ -115,7 +112,6 @@ enum BgMode {
     None,
 }
 
-/// What the style bar offers for the current tool or selection.
 #[derive(Default)]
 struct Context_ {
     color: bool,
@@ -261,7 +257,6 @@ impl Editor {
             )
     }
 
-    /// Options for the current tool or selection, under the tool bar.
     pub(super) fn style_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
         let t = theme();
         let bar = div()
@@ -881,7 +876,6 @@ impl Editor {
         div().flex().flex_col().child(border).child(watermark).child(perspective).child(blur)
     }
 
-    /// Zoom on the left, deliverable actions on the right.
     pub(super) fn bottom_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
         let t = theme();
         let (ew, eh) = self.export_size();
@@ -937,7 +931,6 @@ impl Editor {
     }
 }
 
-/// Wallpaper tile width: two per row inside the sidebar card.
 const WALL_W: f32 = 126.;
 
 impl Render for Editor {
@@ -954,8 +947,6 @@ impl Render for Editor {
             .font_family(ui::FONT)
             .text_color(t.text)
             .child(self.toolbar(&weak))
-            // Focus lives below the title bar: a focusable ancestor would swallow the mouse-down
-            // on the native min/max/close buttons.
             .child(
                 div()
                     .id("editor-body")

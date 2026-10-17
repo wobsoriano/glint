@@ -1,8 +1,3 @@
-//! Builds a synthetic recording session, composes frames at several times, writes them as
-//! PNGs and times the compositor at 1920x1080.
-//!
-//! cargo run -p glint-studio --release --example compose -- <out_dir>
-
 use glint_media::input::{Click, CursorSprite, InputTimeline, KeyPress, MouseButton, PointerSample};
 use glint_render::render::{draw_text, rgba_from_pixmap};
 use glint_render::style::Color;
@@ -73,7 +68,6 @@ fn camera() -> RgbaImage {
     })
 }
 
-/// Pointer path through keyframes, sampled every 16 ms with ease-in-out between them.
 fn pointer() -> Vec<PointerSample> {
     let keys = [
         (0.0, 400.0, 300.0),
@@ -168,7 +162,6 @@ fn main() -> anyhow::Result<()> {
     );
     blurred.save(out_dir.join("blur_04000.png"))?;
 
-    // Timing over a sweep of the whole timeline at 60 fps.
     let times: Vec<f64> = (0..480).map(|i| i as f64 * 1000.0 / 60.0).collect();
     for (label, blur) in [("plain", false), ("motion blur", true)] {
         let mut ms: Vec<f64> = times

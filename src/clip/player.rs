@@ -1,9 +1,3 @@
-//! Preview playback of one video file. A background thread decodes frames and publishes
-//! them as ready-to-paint images; the window sends commands and polls each tick.
-//!
-//! While playing, the clock is the audio device's played position when the file has audio,
-//! otherwise the wall clock. Late frames are dropped so video keeps up with the clock.
-
 use glint_media::{AudioOutput, AudioReader, FrameReader};
 use gpui::RenderImage;
 use std::collections::VecDeque;
@@ -13,10 +7,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-/// Longest side of preview frames; the window never shows them larger.
 const PREVIEW_MAX: (u32, u32) = (1280, 720);
 
-/// Samples (half a second of 48 kHz stereo) the player keeps decoded ahead of the device.
 const QUEUE_AHEAD: usize = AudioOutput::SAMPLE_RATE as usize * AudioOutput::CHANNELS as usize / 2;
 
 pub struct Player {
@@ -32,7 +24,6 @@ struct Shared {
     frame_serial: AtomicU64,
     position_ms: AtomicU64,
     playing: AtomicBool,
-    /// Whether the file has an audio track. Unset until the player thread has opened it.
     has_audio: OnceLock<bool>,
     error: Mutex<Option<String>>,
 }
@@ -40,14 +31,12 @@ struct Shared {
 #[derive(Default)]
 struct Control {
     seek: Option<u64>,
-    /// Playing until this time.
     play_until: Option<u64>,
     muted: bool,
     quit: bool,
 }
 
 impl Player {
-    /// Starts decoding `path`, showing the frame at 0.
     pub fn new(path: PathBuf) -> Self {
         let shared = Arc::new(Shared::default());
         shared.ctl.lock().unwrap().seek = Some(0);
@@ -69,7 +58,6 @@ impl Player {
         self.command(|c| c.seek = Some(ms));
     }
 
-    /// Plays from the current position to `until_ms`, then pauses there.
     pub fn play(&self, until_ms: u64, muted: bool) {
         self.shared.playing.store(true, Ordering::Relaxed);
         self.command(|c| {
@@ -91,7 +79,6 @@ impl Player {
         self.shared.position_ms.load(Ordering::Relaxed)
     }
 
-    /// `Some(true)` once the audio track is open, `Some(false)` when there is none.
     pub fn has_audio(&self) -> Option<bool> {
         self.shared.has_audio.get().copied()
     }
@@ -100,7 +87,6 @@ impl Player {
         self.shared.error.lock().unwrap().clone()
     }
 
-    /// The newest frame when it changed since `seen`, with its serial.
     pub fn frame_since(&self, seen: u64) -> Option<(u64, Arc<RenderImage>)> {
         let serial = self.shared.frame_serial.load(Ordering::Acquire);
         if serial == seen {
@@ -146,7 +132,6 @@ fn next_command(sh: &Shared) -> Next {
     }
 }
 
-/// True when a newer command than the running playback has arrived.
 fn interrupted(sh: &Shared) -> bool {
     let c = sh.ctl.lock().unwrap();
     c.quit || c.seek.is_some() || c.play_until.is_none()
@@ -251,9 +236,6 @@ fn preview_image(rgba: &image::RgbaImage) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(smallvec::smallvec![image::Frame::new(img)]))
 }
 
-/// The file's audio for playback: the player thread decodes chunks into a queue of 48 kHz
-/// stereo samples that the output device drains, so only [`QUEUE_AHEAD`] samples are ever
-/// held in memory.
 struct Soundtrack {
     reader: AudioReader,
     resampler: Resampler,
@@ -269,7 +251,6 @@ impl Soundtrack {
         Self { reader, resampler, queue: Arc::default(), chunk: Vec::new(), scratch: vec![0.0; 4096], ended: false }
     }
 
-    /// Restarts decoding at `ms` with the queue primed.
     fn seek(&mut self, ms: u64) -> anyhow::Result<()> {
         self.reader.seek(ms)?;
         self.resampler.reset();
@@ -278,7 +259,6 @@ impl Soundtrack {
         self.top_up()
     }
 
-    /// Decodes until the queue holds [`QUEUE_AHEAD`] samples or the track ends.
     fn top_up(&mut self) -> anyhow::Result<()> {
         while self.queue.lock().unwrap().len() < QUEUE_AHEAD {
             let n = self.resampler.pull(&mut self.scratch, self.ended);
@@ -295,7 +275,6 @@ impl Soundtrack {
         Ok(())
     }
 
-    /// Starts the device on the queue. It plays silence once the queue runs dry.
     fn output(&self) -> anyhow::Result<AudioOutput> {
         let queue = self.queue.clone();
         AudioOutput::start(move |out: &mut [f32]| {
@@ -309,13 +288,9 @@ impl Soundtrack {
     }
 }
 
-/// Converts decoded frames to [`AudioOutput`]'s 48 kHz stereo as they are pulled: mono
-/// doubles up, extra channels drop, and other rates interpolate linearly.
 struct Resampler {
     channels: usize,
-    /// Source frames per output frame.
     step: f64,
-    /// Source frames not yet consumed; `pos` is the fractional index of the next output frame.
     pending: Vec<f32>,
     pos: f64,
 }
@@ -335,8 +310,6 @@ impl Resampler {
         self.pending.extend_from_slice(chunk);
     }
 
-    /// Fills `out` with the stereo frames the pending input covers and returns the sample
-    /// count. The last input frame is only used up once `ended` says nothing follows it.
     fn pull(&mut self, out: &mut [f32], ended: bool) -> usize {
         let ch = self.channels;
         let frames = self.pending.len() / ch;

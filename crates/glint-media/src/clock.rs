@@ -1,10 +1,6 @@
-//! Media time: a pausable clock every track stamps its samples with, so one pause stops all of
-//! them together and paused spans never appear in the outputs.
-
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// A clock that starts paused at zero, runs while recording, and holds its value while paused.
 pub struct MediaClock {
     state: Mutex<State>,
 }
@@ -15,7 +11,6 @@ enum State {
 }
 
 impl MediaClock {
-    /// A clock paused at media time zero.
     pub fn paused() -> Self {
         Self { state: Mutex::new(State::Paused { elapsed: Duration::ZERO }) }
     }
@@ -28,7 +23,6 @@ impl MediaClock {
         }
     }
 
-    /// `now()` in whole milliseconds.
     pub fn now_ms(&self) -> u64 {
         self.now().as_millis() as u64
     }

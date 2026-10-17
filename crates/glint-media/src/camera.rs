@@ -1,6 +1,3 @@
-//! Camera capture through a Media Foundation source reader: an H.264 track while recording,
-//! or RGBA frames to a callback for the pre-record preview.
-
 use crate::clock::MediaClock;
 use crate::devices::{camera_activate, DeviceId};
 use crate::encoder::{Mp4Sink, VideoCodec, VideoParams};
@@ -14,10 +11,8 @@ use std::thread::JoinHandle;
 use windows::core::Interface;
 use windows::Win32::Media::MediaFoundation::*;
 
-/// Largest camera mode the engine picks; bigger native modes are skipped.
 const MAX_PIXELS: u32 = 1920 * 1080;
 
-/// Size and frame count of a finished camera track.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CameraStats {
     pub frames: u64,
@@ -26,7 +21,6 @@ pub(crate) struct CameraStats {
     pub height: u32,
 }
 
-/// `camera.mp4` being recorded on its own thread, frames stamped with media time.
 pub(crate) struct CameraTrack {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<anyhow::Result<CameraStats>>>,
@@ -71,14 +65,12 @@ pub struct CameraPreview {
 }
 
 impl CameraPreview {
-    /// Opens the camera and calls `on_frame` from a background thread for every frame.
     pub fn start(id: &DeviceId, on_frame: impl FnMut(RgbaImage) + Send + 'static) -> anyhow::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let (thread, (width, height)) = spawn_reader(id.clone(), stop.clone(), move |_, _, _| Ok(FrameSink::Preview(Box::new(on_frame))))?;
         Ok(Self { stop, thread: Some(thread), width, height })
     }
 
-    /// Frame size the camera delivers.
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
@@ -98,8 +90,6 @@ enum FrameSink {
     Preview(Box<dyn FnMut(RgbaImage) + Send>),
 }
 
-/// Opens the camera on a new thread and waits for the open to succeed or fail. `make_sink`
-/// runs on that thread once the frame size and rate are known.
 fn spawn_reader(
     id: DeviceId,
     stop: Arc<AtomicBool>,
@@ -137,7 +127,6 @@ fn spawn_reader(
     }
 }
 
-/// Picks the largest native mode up to 1080p at 24 fps or more, and asks for RGB32 output.
 fn open_reader(id: &DeviceId) -> anyhow::Result<(IMFSourceReader, u32, u32, u32)> {
     mf::init()?;
     let activate = camera_activate(id)?;
@@ -215,7 +204,6 @@ fn pump(reader: IMFSourceReader, width: u32, height: u32, mut sink: FrameSink, s
     Ok(CameraStats { frames, bytes, width, height })
 }
 
-/// Copies the sample's rows into a packed top-down BGRA buffer, whatever its stride.
 fn copy_rows(sample: &IMFSample, width: u32, height: u32, out: &mut [u8]) -> anyhow::Result<()> {
     let row_bytes = width as usize * 4;
     unsafe {

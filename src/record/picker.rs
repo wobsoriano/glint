@@ -1,6 +1,3 @@
-//! The recording picker: one floating bar to choose the source, camera, microphone, system
-//! audio, start timer and teleprompter script, then start. Choices are remembered.
-
 use super::chrome::{self, Kind, Placement};
 use super::target::work_area;
 use super::{prefs, rec, update_prefs, Rec, Stage, Target};
@@ -32,14 +29,11 @@ enum Panel {
     Script,
 }
 
-/// What the picker knows about the chosen camera or microphone.
 #[derive(Debug, PartialEq, Eq)]
 enum Choice<'a> {
     Off,
-    /// Chosen, before the device list has loaded.
     Loading,
     Present(&'a str),
-    /// Chosen, but not connected now: recording warns and continues without it.
     Missing,
 }
 
@@ -51,7 +45,6 @@ fn choice<'a>(selected: Option<&str>, loaded: bool, mut devices: impl Iterator<I
     }
 }
 
-/// Windows' caution foreground, for a chosen device that is not connected.
 fn caution() -> gpui::Rgba {
     if ui::theme().dark { rgb(0xFCE100) } else { rgb(0x9D5D00) }
 }
@@ -105,8 +98,6 @@ fn load_devices(handle: WindowHandle<Picker>, cx: &mut App) {
     .detach();
 }
 
-/// Physical rectangle of the picker: centered at the bottom of the display, growing upward
-/// to make room for an open panel.
 fn rect_for(display: &DisplayInfo, panel: Option<Panel>, mics: usize, cameras: usize) -> [i32; 4] {
     let panel_h = match panel {
         None => 0.,
@@ -121,7 +112,6 @@ fn rect_for(display: &DisplayInfo, panel: Option<Panel>, mics: usize, cameras: u
     [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (MARGIN * s) as i32, pw, ph]
 }
 
-/// Runs a lifecycle step after this event; it may close this very window.
 fn later(f: impl Fn(&mut App) + 'static) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     let f = std::rc::Rc::new(f);
     move |_, _, cx| {
@@ -169,7 +159,6 @@ impl Picker {
     }
 }
 
-/// Applies one key press to the script. The caret stays at the end.
 fn edit_script(text: &mut String, e: &KeyDownEvent) -> bool {
     let k = &e.keystroke;
     let ctrl = k.modifiers.control;
@@ -218,7 +207,6 @@ fn separator() -> impl IntoElement {
     div().w(px(1.)).h(px(26.)).mx_1().bg(ui::theme().border)
 }
 
-/// Meter fill for an RMS level, on a -60..0 dB scale.
 fn meter_fraction(rms: f32) -> f32 {
     ((20. * rms.max(1e-6).log10() + 60.) / 60.).clamp(0., 1.)
 }
@@ -358,7 +346,6 @@ impl Picker {
 
 impl Render for Picker {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Clicking a control must not leave Esc and typing without a target.
         if !self.focus.is_focused(window) {
             window.focus(&self.focus);
         }
@@ -498,8 +485,6 @@ impl Render for Picker {
     }
 }
 
-/// A round live preview of the chosen camera at the bottom right of the display, so exposure
-/// and framing settle before recording starts.
 pub fn open_camera(id: DeviceId, display: &DisplayInfo, cx: &mut App) -> Option<AnyWindowHandle> {
     let latest: Arc<Mutex<Option<RgbaImage>>> = Arc::default();
     let sink = latest.clone();

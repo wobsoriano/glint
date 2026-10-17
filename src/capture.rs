@@ -1,5 +1,3 @@
-//! Screen capture and Win32 window enumeration.
-
 use anyhow::{Context as _, Result};
 use image::RgbaImage;
 use std::sync::Arc;
@@ -14,13 +12,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::BOOL;
 
-/// A finished capture, ready for the editor.
 #[derive(Clone)]
 pub struct Capture {
     pub image: Arc<RgbaImage>,
-    /// DPI scale of the monitor it came from (1.0 = 96 DPI).
     pub dpi: f32,
-    /// Title of the captured window, used by the window-chrome title bar.
     pub title: Option<String>,
     pub created: chrono::DateTime<chrono::Local>,
 }
@@ -36,7 +31,6 @@ impl Capture {
     }
 }
 
-/// A frozen snapshot of one monitor, in physical pixels.
 pub struct MonitorShot {
     pub x: i32,
     pub y: i32,
@@ -50,7 +44,6 @@ pub struct MonitorShot {
 pub struct WinInfo {
     pub hwnd: isize,
     pub title: String,
-    /// Physical screen coordinates: x, y, w, h.
     pub rect: [i32; 4],
 }
 
@@ -86,7 +79,6 @@ pub fn monitor_at(shots: &[MonitorShot], x: i32, y: i32) -> usize {
         .unwrap_or(0)
 }
 
-/// Crops a physical-screen rectangle out of the monitor snapshots.
 pub fn crop_screen(shots: &[MonitorShot], rect: [i32; 4], title: Option<String>) -> Option<Capture> {
     let [x, y, w, h] = rect;
     let m = &shots[monitor_at(shots, x + w / 2, y + h / 2)];
@@ -135,7 +127,6 @@ fn window_title(hwnd: HWND) -> String {
     }
 }
 
-/// Visible top-level windows, front to back.
 pub fn list_windows() -> Vec<WinInfo> {
     unsafe extern "system" fn cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let out = unsafe { &mut *(lparam.0 as *mut Vec<WinInfo>) };
@@ -197,8 +188,6 @@ pub fn foreground_window() -> Option<WinInfo> {
     }
 }
 
-/// Rounds a window capture's corners like Windows 11 and sets it on a soft drop shadow
-/// over a transparent margin.
 pub fn with_shadow(img: &RgbaImage, dpi: f32) -> RgbaImage {
     let (w, h) = (img.width(), img.height());
     let radius = 8.0 * dpi;
@@ -206,7 +195,6 @@ pub fn with_shadow(img: &RgbaImage, dpi: f32) -> RgbaImage {
     let drop = (6.0 * dpi).round() as u32;
     let (ow, oh) = (w + pad * 2, h + pad * 2 + drop);
 
-    // Blur at quarter resolution: the shadow is soft, so detail there is wasted work.
     let k = 4u32;
     let (sw, sh) = (ow.div_ceil(k), oh.div_ceil(k));
     let mut mask = image::GrayImage::new(sw, sh);
@@ -237,7 +225,6 @@ pub fn with_shadow(img: &RgbaImage, dpi: f32) -> RgbaImage {
     out
 }
 
-/// Fraction of a pixel centered at (x, y) inside a w×h rectangle with rounded corners.
 fn corner_coverage(x: f32, y: f32, w: f32, h: f32, r: f32) -> f32 {
     let cx = if x < r { r } else if x > w - r { w - r } else { return 1.0 };
     let cy = if y < r { r } else if y > h - r { h - r } else { return 1.0 };

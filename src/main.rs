@@ -98,7 +98,6 @@ fn handle_requests(requests: Vec<Request>, cx: &mut App) {
     }
 }
 
-/// The tray icon and the commands behind its menu items.
 struct Tray {
     icon: Option<TrayIcon>,
     ids: Vec<(MenuId, Command)>,
@@ -139,7 +138,6 @@ fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
     (menu, ids)
 }
 
-/// Rebuilds the tray menu so its shortcut labels follow the settings.
 pub fn refresh_tray(cx: &mut App) {
     let (menu, ids) = tray_menu(cx.global::<Settings>());
     let tray = cx.global_mut::<Tray>();
@@ -217,8 +215,6 @@ fn main() {
             },
             |window, cx| {
                 cx.new(|cx| {
-                    // Every top-level window hears the system theme change; this one lives as
-                    // long as the app, so it re-reads the theme for all of them.
                     cx.observe_window_appearance(window, |_, _, cx| {
                         if ui::refresh_theme() {
                             for w in cx.windows() {
@@ -238,7 +234,6 @@ fn main() {
         }
         handle_requests(launch.requests, cx);
 
-        // Poll global hotkeys, tray events and forwarded launches from the main thread.
         cx.spawn(async move |cx| loop {
             gpui::Timer::after(Duration::from_millis(30)).await;
             let mut keys = Vec::new();
@@ -318,7 +313,6 @@ fn tray_icon_image() -> tray_icon::Icon {
         ..Default::default()
     };
     let mut pb = tiny_skia::PathBuilder::new();
-    // Four corner brackets, like a selection frame.
     for [a, b, c] in [
         [(8.0, 13.0), (8.0, 8.0), (13.0, 8.0)],
         [(19.0, 8.0), (24.0, 8.0), (24.0, 13.0)],
@@ -342,8 +336,6 @@ mod pipeline_tests {
     use crate::annotate::{pt, Annotation, Shape, TextStyle, R};
     use crate::style::{Chrome, Color};
 
-    /// Captures the primary monitor, runs OCR + redaction and renders a framed export.
-    /// Run with: cargo test pipeline -- --ignored --nocapture
     #[test]
     #[ignore]
     fn pipeline() {

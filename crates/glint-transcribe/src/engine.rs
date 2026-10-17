@@ -13,7 +13,6 @@ use crate::transcript::{Transcript, Word};
 /// disfluent style we want transcribed.
 const DISFLUENT_PROMPT: &str = "Um, so, uh, I was like, you know, thinking. Hmm, okay.";
 
-/// A loaded ggml model. Loading takes a moment, so long-lived users keep one around.
 pub(crate) struct Engine {
     ctx: WhisperContext,
 }
@@ -34,7 +33,6 @@ impl Engine {
         Ok(Self { ctx })
     }
 
-    /// Transcribes 16 kHz mono samples. Word times are shifted by `offset_ms`.
     pub(crate) fn run(
         &self,
         samples: &[f32],

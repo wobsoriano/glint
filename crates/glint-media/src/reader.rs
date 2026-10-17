@@ -1,5 +1,3 @@
-//! Studio decode: frames out of an MP4 as RGBA images, plus its audio as float PCM.
-
 use crate::mf::{self, pcwstr, unpack2, wide};
 use crate::wav::WavData;
 use anyhow::{bail, Context};
@@ -10,7 +8,6 @@ use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::StructuredStorage::{PROPVARIANT, PROPVARIANT_0, PROPVARIANT_0_0, PROPVARIANT_0_0_0};
 use windows::Win32::System::Variant::VT_I8;
 
-/// One decoded frame.
 #[derive(Clone, Debug)]
 pub struct VideoFrame {
     /// Presentation time in media milliseconds.
@@ -18,14 +15,12 @@ pub struct VideoFrame {
     pub image: RgbaImage,
 }
 
-/// Sequential and seekable access to the video track of an MP4.
 pub struct VideoReader {
     reader: IMFSourceReader,
     width: u32,
     height: u32,
     fps: f64,
     duration_ms: u64,
-    /// After a seek, frames before this time are decoded and dropped.
     skip_until_ms: Option<u64>,
 }
 
@@ -182,7 +177,6 @@ fn media_position(ms: u64) -> PROPVARIANT {
     }
 }
 
-/// The sample frame that starts at media time `ms`, rounded to the nearest frame.
 pub(crate) fn frame_at(ms: u64, sample_rate: u32) -> u64 {
     (ms * sample_rate as u64 + 500) / 1000
 }
@@ -195,7 +189,6 @@ pub struct AudioReader {
     reader: IMFSourceReader,
     sample_rate: u32,
     channels: u16,
-    /// After a seek, frames before this one are decoded and dropped.
     skip_until: Option<u64>,
 }
 

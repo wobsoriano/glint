@@ -1,5 +1,3 @@
-//! The Settings window: General, Screenshots, Recordings, Overlay, Shortcuts and Privacy.
-
 use crate::cards::{CardAction, CardLayout, Corner, Zone};
 use crate::hotkeys::{self, Hotkeys};
 use crate::library::Library;
@@ -61,7 +59,6 @@ pub struct Prefs {
     focus: FocusHandle,
 }
 
-/// The dragged payload in the card editor.
 #[derive(Clone, Copy)]
 struct DragAction(CardAction);
 
@@ -104,7 +101,6 @@ fn open(pane: Option<Pane>, cx: &mut App) {
         move |window, cx| {
             shell::mica(window);
             let view = cx.new(|cx| {
-                // Closing the window mid-capture must give back the shortcuts Change suspended.
                 cx.on_release(|this: &mut Prefs, cx| {
                     if this.recording.is_some() {
                         resume_hotkeys(cx);

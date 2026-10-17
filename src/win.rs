@@ -1,5 +1,3 @@
-//! Assorted Win32 helpers.
-
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::path::PathBuf;
 use windows::core::{w, HSTRING, PCWSTR};
@@ -20,7 +18,6 @@ pub fn hwnd(window: &gpui::Window) -> Option<HWND> {
     }
 }
 
-/// Makes a window always-on-top, optionally moving it to an exact physical-pixel rectangle.
 pub fn make_topmost(window: &gpui::Window, rect: Option<[i32; 4]>, activate: bool) {
     let Some(h) = hwnd(window) else { return };
     unsafe {
@@ -87,12 +84,10 @@ pub fn set_launch_at_login(enabled: bool) {
     }
 }
 
-/// Returns false if another instance is already running.
 pub fn single_instance() -> bool {
     unsafe {
         let name = HSTRING::from("Local\\Glint.SingleInstance");
         let handle = CreateMutexW(None, true, &name);
-        // Leak the handle so the mutex lives as long as the process.
         std::mem::forget(handle);
         GetLastError() != ERROR_ALREADY_EXISTS
     }

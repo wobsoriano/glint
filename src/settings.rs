@@ -1,5 +1,3 @@
-//! Persistent user preferences, stored as JSON in `<data_dir>\settings.json`.
-
 pub use crate::annotate::RedactStyle;
 use crate::cards::CardLayout;
 use crate::style::Style;
@@ -8,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-/// What happens after every screenshot. Each toggle is independent.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AfterShot {
@@ -25,7 +22,6 @@ impl Default for AfterShot {
     }
 }
 
-/// What happens after every recording.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AfterRecording {
@@ -41,7 +37,6 @@ impl Default for AfterRecording {
     }
 }
 
-/// The kind of source the recording picker starts on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RecordTarget {
     Display,
@@ -49,18 +44,14 @@ pub enum RecordTarget {
     Area,
 }
 
-/// The recording picker's last choices.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RecordPrefs {
     pub target: RecordTarget,
-    /// Last recorded area, physical virtual-desktop pixels: x, y, w, h.
     pub area: Option<[i32; 4]>,
-    /// Device ids; `None` records without that input.
     pub camera: Option<String>,
     pub mic: Option<String>,
     pub system_audio: bool,
-    /// Start timer in seconds; 0 starts at once.
     pub countdown: u32,
     pub teleprompter: bool,
     pub script: String,
@@ -93,7 +84,6 @@ pub enum Side {
 #[serde(default)]
 pub struct OverlayPrefs {
     pub side: Side,
-    /// Seconds before an untouched card closes; 0 keeps cards until dismissed.
     pub auto_close_seconds: u32,
     pub dismiss_after_drag: bool,
     pub layout: CardLayout,
@@ -147,7 +137,6 @@ impl Default for LibraryPrefs {
     }
 }
 
-/// Categories of sensitive data the auto-redactor looks for.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RedactRules {
@@ -174,7 +163,6 @@ impl Default for RedactRules {
     }
 }
 
-/// Every action that can have a global shortcut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HotkeyAction {
     Fullscreen,
@@ -271,7 +259,6 @@ pub struct Settings {
     pub timer_seconds: u32,
     pub format: ExportFormat,
     pub jpeg_quality: u8,
-    /// The export folder.
     pub save_dir: PathBuf,
     pub save_without_dialog: bool,
     pub window_shadow: bool,
@@ -319,7 +306,6 @@ impl Default for Settings {
     }
 }
 
-/// Root for settings, Library and models. `GLINT_DATA_DIR` overrides `%APPDATA%\Glint`.
 pub fn data_dir() -> PathBuf {
     std::env::var_os("GLINT_DATA_DIR")
         .map(PathBuf::from)
@@ -342,7 +328,6 @@ impl Settings {
     fn load_from(p: &Path) -> Self {
         let mut s: Settings = match std::fs::read_to_string(p) {
             Ok(text) => serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap_or_else(|e| {
-                // Keep the unreadable file so the next save cannot destroy what the user had.
                 let broken = p.with_extension("json.broken");
                 match std::fs::rename(p, &broken) {
                     Ok(()) => eprintln!("{} is not valid ({e}); moved it to {} and using default settings", p.display(), broken.display()),
@@ -362,7 +347,6 @@ impl Settings {
         }
     }
 
-    /// Writes a sibling temp file and renames it over `p`, so a crash mid-write leaves the old file intact.
     fn write_replacing(&self, p: &Path) -> anyhow::Result<()> {
         if let Some(dir) = p.parent() {
             std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;

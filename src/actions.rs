@@ -1,6 +1,3 @@
-//! What you can do with a Library capture, shared by preview cards, the Library window
-//! and Quick Look. Heavy work (decode, encode, OCR, file moves) runs off the main thread.
-
 use crate::library::{self, CaptureKind, Item};
 use crate::settings::{ExportFormat, Settings};
 use crate::shell::{self, SaveChoice};
@@ -20,7 +17,6 @@ pub fn load_pixels(item: &Item) -> anyhow::Result<RgbaImage> {
     Ok(image::open(&path).with_context(|| format!("reading {}", path.display()))?.to_rgba8())
 }
 
-/// Decodes the deliverable in the background, then continues on the main thread.
 pub fn with_pixels(item: &Item, cx: &mut App, f: impl FnOnce(Arc<RgbaImage>, &mut App) + 'static) {
     if item.kind() != CaptureKind::Screenshot {
         toast::show("This works on screenshots; a recording has no single image to use", cx);
@@ -42,15 +38,11 @@ fn display_scale() -> f32 {
     shell::work_area_at_cursor().1
 }
 
-/// A recording's current edit as a video file, rendered with its Studio project (defaults
-/// when it was never opened in Studio) and cached in its `render/` folder, plus the session's
-/// notices about files it had to set aside. Blocking.
 fn recording_file(item: &Item) -> anyhow::Result<(PathBuf, Vec<String>)> {
     let session = glint_studio::Session::open(&item.dir).with_context(|| format!("opening {}", item.dir.display()))?;
     Ok((glint_studio::deliverable(&session)?, session.notices))
 }
 
-/// Renders a recording's deliverable in the background, then continues on the main thread.
 pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Result<PathBuf>, &mut App) + 'static) {
     let item = item.clone();
     let task = cx.background_spawn(async move { recording_file(&item) });
@@ -69,8 +61,6 @@ pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Res
     .detach();
 }
 
-/// Puts a recording's rendered `video` on the clipboard as a file named after its title.
-/// The render itself is not used: the cache deletes it when the edit changes.
 pub fn copy_video(item: &Item, video: &Path) -> anyhow::Result<()> {
     let file = named_copy(video, item.id(), &item.meta.title)?;
     shell::copy_files(&[file], None)
@@ -90,7 +80,6 @@ pub fn copy(item: &Item, cx: &mut App) {
     });
 }
 
-/// Copies several captures as files (paste into Explorer, chat apps or mail).
 pub fn copy_files(items: &[Item], cx: &mut App) {
     let paths: Vec<PathBuf> = items.iter().map(|i| i.deliverable()).collect();
     match shell::copy_files(&paths, None) {
@@ -99,9 +88,6 @@ pub fn copy_files(items: &[Item], cx: &mut App) {
     }
 }
 
-/// Opens a screenshot in the editor on its untouched base.png, restoring edit.json when
-/// present. Done and Save write the edit back into the capture and refresh every view of it.
-/// A recording opens in Studio.
 pub fn edit(item: &Item, cx: &mut App) {
     if item.kind() == CaptureKind::Recording {
         return crate::studio::open(cx, item.dir.clone());
@@ -163,7 +149,6 @@ pub fn copy_text(item: &Item, cx: &mut App) {
     });
 }
 
-/// Writes a smaller JPEG to a temp folder and copies it as a file.
 pub fn compress(item: &Item, cx: &mut App) {
     let quality = cx.global::<Settings>().jpeg_quality.min(80);
     let title = item.meta.title.clone();
@@ -194,15 +179,12 @@ pub fn human_bytes(n: u64) -> String {
     }
 }
 
-/// Where Save writes. `Folder` bypasses the dialog; `Ask` shows a save dialog.
 #[derive(Clone)]
 pub enum SaveTarget {
     Folder(PathBuf),
     Ask,
 }
 
-/// Saves to the export folder or through a dialog, per `ask` and settings. A failed write
-/// shows a dialog offering Retry or another folder; `done` sees the final outcome.
 pub fn save(item: &Item, ask: bool, cx: &mut App, done: Done) {
     if item.kind() == CaptureKind::Recording {
         return save_video(item, ask, cx, done);
@@ -211,7 +193,6 @@ pub fn save(item: &Item, ask: bool, cx: &mut App, done: Done) {
     with_pixels(item, cx, move |img, cx| save_image(title, img, ask, cx, done));
 }
 
-/// Renders a recording and copies the video out as `<title>.<ext>`.
 fn save_video(item: &Item, ask: bool, cx: &mut App, done: Done) {
     let s = cx.global::<Settings>().clone();
     let stem = shell::sanitize(&item.meta.title);
@@ -253,7 +234,6 @@ fn save_video(item: &Item, ask: bool, cx: &mut App, done: Done) {
     });
 }
 
-/// Saves pixels named after `title`, with the same rules as [`save`].
 pub fn save_image(title: String, img: Arc<RgbaImage>, ask: bool, cx: &mut App, done: Done) {
     let s = cx.global::<Settings>();
     let target = if ask || !s.save_without_dialog { SaveTarget::Ask } else { SaveTarget::Folder(s.save_dir.clone()) };
@@ -350,7 +330,6 @@ pub fn report_save(result: &anyhow::Result<PathBuf>, cx: &mut App) {
     }
 }
 
-/// Exports several captures into one folder in the configured format.
 pub fn export_to_folder(items: Vec<Item>, cx: &mut App) {
     let s = cx.global::<Settings>().clone();
     let rx = cx.prompt_for_paths(PathPromptOptions {
@@ -380,14 +359,10 @@ pub fn export_to_folder(items: Vec<Item>, cx: &mut App) {
     .detach();
 }
 
-/// A copy of the deliverable named after the title, for dragging into other apps.
 pub fn drag_file(item: &Item) -> anyhow::Result<PathBuf> {
     named_copy(&item.deliverable(), item.id(), &item.meta.title)
 }
 
-/// `file` as `Drag/<id>/<title>.<ext>`, for putting on the clipboard or dragging into other
-/// apps. Hard-linked when possible so it costs no space, and so it outlives `file` when that
-/// is a render the cache later deletes.
 pub fn named_copy(file: &Path, id: &str, title: &str) -> anyhow::Result<PathBuf> {
     let dir = crate::settings::data_dir().join("Drag").join(id);
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;

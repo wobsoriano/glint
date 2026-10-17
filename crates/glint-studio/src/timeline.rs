@@ -1,12 +1,7 @@
-//! Timeline math: output time (the edited, exported timeline) against source time (the
-//! recording), and the edits that change the mapping.
-
 use crate::project::{Clip, Project, Zoom, ZoomFocus};
 use std::ops::Range;
 
-/// Shortest clip an edit may leave behind.
 pub const MIN_CLIP_MS: f64 = 120.0;
-/// Shortest zoom an edit may create.
 pub const MIN_ZOOM_MS: f64 = 500.0;
 pub const MIN_SPEED: f64 = 0.25;
 pub const MAX_SPEED: f64 = 8.0;
@@ -205,7 +200,6 @@ impl Project {
     fn source_span(&self, output: Range<f64>) -> (f64, f64) {
         let out_end = output.start + (output.end - output.start).max(MIN_ZOOM_MS);
         let start = self.source_time(output.start);
-        // An end exactly on a cut belongs to the clip the zoom started in, not the next one.
         let end = match self.clip_at(output.start) {
             Some((i, clip_start)) if out_end <= clip_start + self.clips[i].output_len() => {
                 self.clips[i].start_ms + (out_end - clip_start) * self.clips[i].speed
