@@ -1,6 +1,6 @@
 use gpui::prelude::*;
 use gpui::{
-    point, px, size, AnyWindowHandle, App, Bounds, Context, Timer, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
+    point, px, size, AnyWindowHandle, App, Bounds, ClickEvent, Context, Timer, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
     WindowOptions,
 };
 use std::time::Duration;
@@ -87,6 +87,10 @@ pub fn close(handle: Option<AnyWindowHandle>, cx: &mut App) {
     if let Some(h) = handle {
         let _ = h.update(cx, |_, window, _| window.remove_window());
     }
+}
+
+pub fn defer_past_teardown(f: impl Fn(&mut App) + Clone + 'static) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    move |_, _, cx| cx.defer(f.clone())
 }
 
 fn capturable() -> bool {

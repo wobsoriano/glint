@@ -7,7 +7,7 @@ use crate::{toast, win};
 use glint_media::{AudioDevice, CameraDevice, CameraPreview, DeviceId, DisplayInfo};
 use gpui::prelude::*;
 use gpui::{
-    div, img, px, rgb, rgba, AnyWindowHandle, App, ClickEvent, Context, FocusHandle, FontWeight, ImageSource, KeyDownEvent,
+    div, img, px, rgb, rgba, AnyWindowHandle, App, Context, FocusHandle, FontWeight, ImageSource, KeyDownEvent,
     ObjectFit, RenderImage, SharedString, Window, WindowHandle,
 };
 use image::RgbaImage;
@@ -110,14 +110,6 @@ fn rect_for(display: &DisplayInfo, panel: Option<Panel>, mics: usize, cameras: u
     let area = work_area(display);
     let (pw, ph) = ((BAR_W * s).round() as i32, ((BAR_H + panel_h) * s).round() as i32);
     [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (MARGIN * s) as i32, pw, ph]
-}
-
-fn later(f: impl Fn(&mut App) + 'static) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
-    let f = std::rc::Rc::new(f);
-    move |_, _, cx| {
-        let f = f.clone();
-        cx.defer(move |cx| f(cx))
-    }
 }
 
 impl Picker {
@@ -367,7 +359,7 @@ impl Render for Picker {
             chip(id, kind == k, !counting)
                 .child(ui::icon(icon, 16., ui::theme().text))
                 .child(label)
-                .when(!counting, |d| d.on_click(later(move |cx| super::choose(k, cx))))
+                .when(!counting, |d| d.on_click(chrome::defer_past_teardown(move |cx| super::choose(k, cx))))
         };
         let text = ui::theme().text;
         let (camera_icon, camera_color, camera_label, camera_tip) =
@@ -435,7 +427,7 @@ impl Render for Picker {
             )
             .child(div().flex_1())
             .child(if counting {
-                ui::button("cancel", "Cancel", None, false, later(super::cancel_countdown)).h(px(34.)).into_any_element()
+                ui::button("cancel", "Cancel", None, false, chrome::defer_past_teardown(super::cancel_countdown)).h(px(34.)).into_any_element()
             } else {
                 div()
                     .id("record")
@@ -453,7 +445,7 @@ impl Render for Picker {
                     .text_color(rgb(0xFFFFFF))
                     .child(ui::icon("record", 15., rgb(0xFFFFFF)))
                     .child(if has_target { "Record" } else { "Choose…" })
-                    .on_click(later(super::record))
+                    .on_click(chrome::defer_past_teardown(super::record))
                     .into_any_element()
             })
             .child(
@@ -468,7 +460,7 @@ impl Render for Picker {
                     .hover(|s| s.bg(ui::theme().control_hover))
                     .child(ui::icon("close", 15., ui::theme().text))
                     .tooltip(ui::tooltip("Close (Esc)"))
-                    .on_click(later(super::close_picker)),
+                    .on_click(chrome::defer_past_teardown(super::close_picker)),
             );
 
         div()
