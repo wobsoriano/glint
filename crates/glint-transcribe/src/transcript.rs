@@ -50,10 +50,14 @@ impl Transcript {
 
     pub fn load(path: &Path) -> Result<Self> {
         let bytes = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-        let transcript: Transcript =
-            serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
+        Self::parse(&bytes).with_context(|| format!("parsing {}", path.display()))
+    }
+
+    /// Parses the contents of `transcript.json`.
+    pub fn parse(json: &[u8]) -> Result<Self> {
+        let transcript: Transcript = serde_json::from_slice(json)?;
         if transcript.version > TRANSCRIPT_VERSION {
-            bail!("{} has transcript version {}, newer than supported {}", path.display(), transcript.version, TRANSCRIPT_VERSION);
+            bail!("transcript version {} is newer than supported {TRANSCRIPT_VERSION}", transcript.version);
         }
         Ok(transcript)
     }

@@ -6,7 +6,7 @@ use crate::flow::Shot;
 use crate::settings::{Settings, Side};
 use crate::ui::{self, FONT};
 use crate::library::Item;
-use crate::{actions, pin, quicklook, shell, toast, win};
+use crate::{actions, pin, quicklook, shell, win};
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, Global, ImageSource, MouseButton, MouseDownEvent,
@@ -189,8 +189,9 @@ impl Stack {
             CardAction::Copy => {
                 let this = cx.entity().downgrade();
                 self.flash(id, "Preparing video…", cx);
+                let target = item.clone();
                 actions::with_recording_file(&item, cx, move |file, cx| {
-                    let msg = match file.and_then(|f| shell::copy_files(&[f], None)) {
+                    let msg = match file.and_then(|f| actions::copy_video(&target, &f)) {
                         Ok(()) => "Copied".to_string(),
                         Err(e) => format!("Copy failed: {e:#}"),
                     };
@@ -211,7 +212,7 @@ impl Stack {
                     }),
                 );
             }
-            CardAction::Edit => toast::show("Studio is not part of this build yet; the recording is in the Library", cx),
+            CardAction::Edit => actions::edit(&item, cx),
             CardAction::Delete => {
                 let handle = window.window_handle();
                 let this = cx.entity().downgrade();
