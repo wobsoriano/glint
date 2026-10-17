@@ -87,8 +87,7 @@ pub fn set_launch_at_login(enabled: bool) {
 pub fn single_instance() -> bool {
     unsafe {
         let name = HSTRING::from("Local\\Glint.SingleInstance");
-        let handle = CreateMutexW(None, true, &name);
-        std::mem::forget(handle);
+        let _ = CreateMutexW(None, true, &name);
         GetLastError() != ERROR_ALREADY_EXISTS
     }
 }
