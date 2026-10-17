@@ -70,6 +70,12 @@ pub(crate) struct ScreenStats {
     pub source_closed: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CaptureEnd {
+    Stopped,
+    SourceClosed,
+}
+
 pub(crate) struct ScreenTrack {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<anyhow::Result<ScreenStats>>>,
@@ -296,18 +302,18 @@ impl Capture {
         let frames = self.sink.frames();
         let hardware = self.sink.hardware();
         let finished = self.sink.finish();
-        let source_closed = captured?;
+        let source_closed = captured? == CaptureEnd::SourceClosed;
         finished?;
         let bytes = std::fs::metadata(&self.path)?.len();
         Ok(ScreenStats { frames, bytes, hardware, source_closed })
     }
 
-    fn capture(&mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<bool> {
+    fn capture(&mut self, clock: &MediaClock, stop: &AtomicBool) -> anyhow::Result<CaptureEnd> {
         let frame_dur = self.sink.params().frame_duration();
         let mut next_index: i64 = 0;
         while !stop.load(Ordering::Relaxed) {
             if self.closed.load(Ordering::Relaxed) {
-                return Ok(true);
+                return Ok(CaptureEnd::SourceClosed);
             }
             self.drain()?;
             if clock.is_paused() {
@@ -321,6 +327,6 @@ impl Capture {
         }
         self.drain()?;
         self.catch_up(clock, frame_dur, &mut next_index)?;
-        Ok(false)
+        Ok(CaptureEnd::Stopped)
     }
 }
