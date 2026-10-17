@@ -150,7 +150,7 @@ pub(crate) fn camera_track(project: &Project, input: &InputTimeline) -> Vec<View
 
         let guarded = !matches!(active.map(|z| z.focus), None | Some(ZoomFocus::Fixed { .. }));
         let ci = clicks.partition_point(|(t, _)| *t <= src);
-        if let Some((ct, (cx, cy))) = clicks.get(ci.wrapping_sub(1)).filter(|_| guarded && ci > 0) {
+        if let Some((ct, (cx, cy))) = ci.checked_sub(1).and_then(|i| clicks.get(i)).filter(|_| guarded) {
             if src - ct <= CLICK_GUARD_MS {
                 x = keep_visible(*cx, x, s);
                 y = keep_visible(*cy, y, s);

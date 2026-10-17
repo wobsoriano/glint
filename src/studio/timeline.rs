@@ -8,7 +8,6 @@ use gpui::{
     canvas, div, img, px, rgb, rgba, Context, CursorStyle, ElementId, ImageSource, MouseButton, MouseDownEvent,
     ObjectFit, Pixels, Point, ScrollWheelEvent, SharedString, Window,
 };
-use std::sync::Arc;
 
 const SPEEDS: [f64; 8] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
 const THUMBS: u32 = 48;
@@ -369,7 +368,7 @@ impl Studio {
                 let t = start + (tx + tile_w / 2.0) as f64 * scale.ms_per_px;
                 let src = c.start_ms + (t - start) * c.speed;
                 let idx = ((src / src_dur * THUMBS as f64) as usize).min(self.thumbs.len().checked_sub(1)?);
-                let image: Arc<gpui::RenderImage> = self.thumbs[idx].clone();
+                let image = self.thumbs[idx].clone();
                 Some(
                     div()
                         .absolute()

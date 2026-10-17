@@ -114,7 +114,7 @@ fn rect_for(display: &DisplayInfo, panel: Option<Panel>, mics: usize, cameras: u
 
 impl Picker {
     fn relayout(&self, window: &Window, cx: &App) {
-        chrome::place(window, rect_for(&self.display, self.panel, self.mics.len(), self.cameras.len()), cx);
+        crate::shell::place(window, rect_for(&self.display, self.panel, self.mics.len(), self.cameras.len()), cx);
     }
 
     fn toggle_panel(&mut self, panel: Panel, window: &mut Window, cx: &mut Context<Self>) {

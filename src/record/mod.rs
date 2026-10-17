@@ -292,7 +292,8 @@ fn begin(cx: &mut App) {
             return end(cx);
         }
     };
-    let follower_audio = (p.teleprompter && !p.script.trim().is_empty()).then(|| std::sync::mpsc::sync_channel::<Vec<f32>>(prompter::AUDIO_QUEUE));
+    let prompting = p.teleprompter && !p.script.trim().is_empty();
+    let follower_audio = prompting.then(|| std::sync::mpsc::sync_channel::<Vec<f32>>(prompter::AUDIO_QUEUE));
     let test_wav = std::env::var_os("GLINT_TELEPROMPTER_WAV").map(PathBuf::from);
     let (mic_tap, follower) = match follower_audio {
         Some((tx, rx)) => {
@@ -308,7 +309,7 @@ fn begin(cx: &mut App) {
         }
         None => (None, None),
     };
-    if p.teleprompter && !p.script.trim().is_empty() {
+    if prompting {
         let lines = p.prompter_lines.clamp(1, 6) as usize;
         rec(cx).windows.prompter = prompter::open(&target, &p.script, lines, follower, cx);
     }

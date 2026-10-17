@@ -40,7 +40,7 @@ pub fn caption_lines(words: &[Word], options: &CaptionOptions) -> Vec<CaptionLin
                 || gap > options.max_gap_ms
                 || next.end_ms.saturating_sub(line[0].start_ms) > options.max_duration_ms
         };
-        if breaks && start < i {
+        if breaks {
             let line = &words[start..i];
             let start_ms = line[0].start_ms;
             let end_ms = line.iter().map(|w| w.end_ms).max().unwrap_or(start_ms);

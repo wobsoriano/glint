@@ -143,7 +143,7 @@ mod tests {
         store.save(&dark).unwrap();
         store.save(&Preset::new("Bright", Design::default())).unwrap();
 
-        assert_eq!(dir.join("dark-demo.json").exists(), true);
+        assert!(dir.join("dark-demo.json").exists());
         let names: Vec<String> = store.list().into_iter().map(|p| p.name).collect();
         assert_eq!(names, vec!["Bright".to_string(), "Dark Demo!".to_string()]);
         assert_eq!(store.load("Dark Demo!").unwrap().design, design);

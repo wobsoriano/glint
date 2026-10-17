@@ -199,8 +199,8 @@ pub fn with_shadow(img: &RgbaImage, dpi: f32) -> RgbaImage {
     let (sw, sh) = (ow.div_ceil(k), oh.div_ceil(k));
     let mut mask = image::GrayImage::new(sw, sh);
     let (x0, y0) = (pad / k, (pad + drop) / k);
-    for y in y0..(y0 + h / k).min(sh) {
-        for x in x0..(x0 + w / k).min(sw) {
+    for y in y0..y0 + h / k {
+        for x in x0..x0 + w / k {
             mask.put_pixel(x, y, image::Luma([255]));
         }
     }

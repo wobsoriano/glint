@@ -259,7 +259,7 @@ impl Editor {
 
     pub(super) fn style_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {
         let t = theme();
-        let bar = div()
+        let mut bar = div()
             .h(px(44.))
             .flex_none()
             .flex()
@@ -294,7 +294,6 @@ impl Editor {
         });
         let (font, text_style) = sel_text.unwrap_or((self.ink.font.clone(), self.ink.text_style));
         let strength = sel_redact.map_or(self.ink.redact_strength, |r| r.0);
-        let mut bar = bar;
         let empty = !(ctx.color || ctx.redact);
         if empty {
             bar = bar.child(label(match self.tool {
@@ -612,7 +611,7 @@ impl Editor {
         );
         match &st.background {
             Background::Gradient(g) => {
-                let current = g.clone();
+                let current = g;
                 let auto_g = Gradient { stops: auto.clone(), angle: current.angle };
                 let mut grid = div().flex().flex_wrap().gap_1().child(
                     div()

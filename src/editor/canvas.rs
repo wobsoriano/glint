@@ -266,14 +266,13 @@ impl Editor {
     }
 
     pub(super) fn canvas_area(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let weak = cx.entity().downgrade();
+        let drag_weak = cx.entity().downgrade();
         let area_cell = self.area.clone();
         let cursor = match self.tool {
             Tool::Select => CursorStyle::Arrow,
             Tool::Text => CursorStyle::IBeam,
             _ => CursorStyle::Crosshair,
         };
-        let drag_weak = weak.clone();
         let image = self.preview.as_ref().map(|p| {
             div()
                 .absolute()

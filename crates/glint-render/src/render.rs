@@ -671,7 +671,7 @@ fn pixelate(data: &mut [u8], w: usize, h: usize, block: usize, ox: usize, oy: us
                     }
                 }
             }
-            let n = ((ex - bx) * (ey - by)).max(1) as u32;
+            let n = ((ex - bx) * (ey - by)) as u32;
             let avg = sum.map(|s| (s / n) as u8);
             for y in by..ey {
                 for x in bx..ex {

@@ -195,16 +195,15 @@ impl Prompter {
     }
 
     fn layout(&mut self, window: &Window) -> &[Range<usize>] {
-        if self.lines.is_none() {
+        self.lines.get_or_insert_with(|| {
             let f = gpui::Font { weight: FontWeight::MEDIUM, ..font(FONT) };
             let measure = |text: &str| {
                 let run = TextRun { len: text.len(), font: f.clone(), color: gpui::black(), background_color: None, underline: None, strikethrough: None };
                 f32::from(window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], None).width)
             };
             let widths: Vec<f32> = self.words.iter().map(|w| measure(w)).collect();
-            self.lines = Some(wrap(&widths, WORD_GAP, WIDTH - PAD_X * 2. - 4.));
-        }
-        self.lines.as_deref().unwrap_or_default()
+            wrap(&widths, WORD_GAP, WIDTH - PAD_X * 2. - 4.)
+        })
     }
 
     fn on_wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {

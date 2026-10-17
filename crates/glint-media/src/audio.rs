@@ -276,7 +276,7 @@ impl Capture {
     fn convert(&mut self, raw: &[u8], frames: usize, silent: bool, out: &mut Vec<f32>) {
         let f = self.format;
         let in_ch = f.channels as usize;
-        let mut mono_or_mapped: Vec<f32> = Vec::with_capacity(frames * self.out_channels as usize);
+        let mut mono_or_mapped = Vec::with_capacity(frames * self.out_channels as usize);
         for i in 0..frames {
             let sample = |c: usize| -> f32 {
                 if silent {

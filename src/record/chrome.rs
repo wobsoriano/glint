@@ -79,10 +79,6 @@ pub fn tick(handle: AnyWindowHandle, ms: u64, cx: &mut App) {
     .detach();
 }
 
-pub fn place(window: &Window, rect: [i32; 4], cx: &App) {
-    crate::shell::place(window, rect, cx);
-}
-
 pub fn close(handle: Option<AnyWindowHandle>, cx: &mut App) {
     if let Some(h) = handle {
         let _ = h.update(cx, |_, window, _| window.remove_window());

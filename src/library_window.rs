@@ -221,9 +221,8 @@ impl LibraryWindow {
         let dir = visible[next].dir.clone();
         self.selection = vec![dir.clone()];
         self.anchor = Some(dir);
-        let columns = self.columns_hint.max(1);
         let row = match cx.global::<Settings>().library.view {
-            LibraryView::Grid => next / columns,
+            LibraryView::Grid => next / self.columns_hint,
             LibraryView::List => next,
         };
         self.scroll.scroll_to_item(row, gpui::ScrollStrategy::Top);
@@ -313,7 +312,7 @@ impl LibraryWindow {
         let k = &e.keystroke;
         let ctrl = k.modifiers.control;
         let columns = match cx.global::<Settings>().library.view {
-            LibraryView::Grid => self.columns_hint.max(1) as isize,
+            LibraryView::Grid => self.columns_hint as isize,
             LibraryView::List => 1,
         };
         match k.key.as_str() {
@@ -540,7 +539,7 @@ impl LibraryWindow {
                     (true, true) => "Studio project saved",
                     (false, true) => "No Studio edits",
                 };
-                let mut d = div()
+                div()
                     .flex()
                     .flex_col()
                     .gap_2()
@@ -554,9 +553,9 @@ impl LibraryWindow {
                     .child(row("Disk usage", actions::human_bytes(item.bytes)))
                     .child(row("Editing", edited.to_string()))
                     .when_some(item.meta.source.clone(), |d, s| d.child(row("Source", s)))
-                    .when_some(item.meta.imported_from.clone(), |d, p| d.child(block("Imported from", p.display().to_string())));
-                d = d.child(block("Location", item.dir.display().to_string()));
-                d.into_any_element()
+                    .when_some(item.meta.imported_from.clone(), |d, p| d.child(block("Imported from", p.display().to_string())))
+                    .child(block("Location", item.dir.display().to_string()))
+                    .into_any_element()
             }
             many => div()
                 .flex()
@@ -568,7 +567,7 @@ impl LibraryWindow {
         };
         let has = !items.is_empty();
         let single = items.len() == 1;
-        let (edit_items, copy_items, export_items, reveal_items, ql_items) = (items.clone(), items.clone(), items.clone(), items.clone(), items.clone());
+        let (edit_items, copy_items, export_items, reveal_items, ql_items) = (items.clone(), items.clone(), items.clone(), items.clone(), items);
         div()
             .w(px(INSPECTOR_W))
             .flex_none()
@@ -762,7 +761,6 @@ impl Render for LibraryWindow {
             .track_focus(&self.focus)
             .size_full()
             .flex()
-            
             .font_family(FONT)
             .text_color(ui::theme().text)
             .on_key_down(cx.listener(Self::on_key))

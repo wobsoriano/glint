@@ -50,10 +50,7 @@ const Y_SCALE: i32 = 76_309;
 impl FrameReader {
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         mf::init()?;
-        match D3dDevice::new().and_then(|d3d| Self::open_with(path, Some(d3d))) {
-            Ok(r) => Ok(r),
-            Err(_) => Self::open_with(path, None),
-        }
+        D3dDevice::new().and_then(|d3d| Self::open_with(path, Some(d3d))).or_else(|_| Self::open_with(path, None))
     }
 
     fn open_with(path: &Path, d3d: Option<D3dDevice>) -> anyhow::Result<Self> {
@@ -270,9 +267,8 @@ impl Nv12Frame {
     pub fn to_rgba(&self, mut buffer: Vec<u8>) -> RgbaImage {
         let (w, h) = (self.width as usize, self.height as usize);
         buffer.resize(w * h * 4, 0);
-        let mut rgba = buffer;
-        nv12_to_rgba(&self.data, w, h, self.matrix, &mut rgba);
-        RgbaImage::from_raw(self.width, self.height, rgba).expect("buffer matches size")
+        nv12_to_rgba(&self.data, w, h, self.matrix, &mut buffer);
+        RgbaImage::from_raw(self.width, self.height, buffer).expect("buffer matches size")
     }
 }
 

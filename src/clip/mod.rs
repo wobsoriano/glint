@@ -10,7 +10,7 @@ use gpui::prelude::*;
 use gpui::{
     canvas, div, img, px, relative, rgba, size, App, Bounds, Context, DispatchPhase, FocusHandle, ImageSource,
     KeyDownEvent, MouseButton, MouseMoveEvent, MouseUpEvent, ObjectFit, PathPromptOptions, Pixels, Point, RenderImage,
-    Timer, TitlebarOptions, WeakEntity, Window, WindowBounds, WindowOptions,
+    Timer, TitlebarOptions, Window, WindowBounds, WindowOptions,
 };
 use model::{Options, Quality, Resolution, Source, Trim};
 use player::Player;
@@ -47,11 +47,10 @@ pub fn pick(cx: &mut App) {
 }
 
 pub fn open(path: PathBuf, cx: &mut App) {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     if !is_video(&path) {
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         return toast::show(format!("{name} is not a video Glint can trim (MP4, MOV, M4V, WMV, AVI)"), cx);
     }
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let bounds = Bounds::centered(None, size(px(980.), px(760.)), cx);
     let _ = cx.open_window(
         WindowOptions {
@@ -460,7 +459,7 @@ impl ClipEditor {
                 .cursor(gpui::CursorStyle::ResizeLeftRight)
                 .child(div().w(px(2.)).h(px(18.)).rounded_full().bg(t.on_accent))
         };
-        let weak: WeakEntity<Self> = cx.entity().downgrade();
+        let weak = cx.entity().downgrade();
         let strip = self.strip.clone();
         div().id("scrubber").px(px(HANDLE_W + 12.)).pt_2().cursor_pointer().on_mouse_down(MouseButton::Left, cx.listener(|this, ev: &gpui::MouseDownEvent, _, cx| this.press(ev.position, cx))).child(
             div()

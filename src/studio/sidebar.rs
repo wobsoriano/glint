@@ -154,11 +154,9 @@ impl Studio {
                             let rx = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some("Choose background".into()) });
                             let w = w1.clone();
                             cx.spawn(async move |cx| {
-                                if let Ok(Ok(Some(paths))) = rx.await {
-                                    if let Some(p) = paths.into_iter().next() {
-                                        let _ = w.update(cx, |s, cx| s.edit(None, cx, |pr| pr.design.background = Background::Image(p)));
-                                    }
-                                }
+                                let Ok(Ok(Some(paths))) = rx.await else { return };
+                                let Some(p) = paths.into_iter().next() else { return };
+                                let _ = w.update(cx, |s, cx| s.edit(None, cx, |pr| pr.design.background = Background::Image(p)));
                             })
                             .detach();
                         }))

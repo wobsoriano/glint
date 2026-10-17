@@ -460,11 +460,9 @@ fn folder_row(id: &'static str, label: &'static str, path: std::path::PathBuf, c
                     d.child(ui::button(SharedString::from(format!("{id}-pick")), "Change…", None, false, move |_, _, cx| {
                         let rx = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some("Choose Folder".into()) });
                         cx.spawn(async move |cx| {
-                            if let Ok(Ok(Some(paths))) = rx.await {
-                                if let Some(p) = paths.into_iter().next() {
-                                    let _ = cx.update(|cx| update(cx, |s| f(p, s)));
-                                }
-                            }
+                            let Ok(Ok(Some(paths))) = rx.await else { return };
+                            let Some(p) = paths.into_iter().next() else { return };
+                            let _ = cx.update(|cx| update(cx, |s| f(p, s)));
                         })
                         .detach();
                     }))
@@ -626,7 +624,6 @@ impl Render for Prefs {
             .track_focus(&self.focus)
             .size_full()
             .flex()
-            
             .font_family(FONT)
             .text_color(ui::theme().text)
             .on_key_down(cx.listener(Self::on_key))
