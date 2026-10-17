@@ -54,7 +54,7 @@ impl VideoReader {
                 .context("SetCurrentMediaType RGB32")?;
 
             let duration = reader.GetPresentationAttribute(MF_SOURCE_READER_MEDIASOURCE.0 as u32, &MF_PD_DURATION)?;
-            let duration_ms = (duration.Anonymous.Anonymous.Anonymous.uhVal / 10_000) as u64;
+            let duration_ms = duration.Anonymous.Anonymous.Anonymous.uhVal / 10_000;
             Ok(Self { reader, width, height, fps, duration_ms, skip_until_ms: None })
         }
     }
@@ -97,7 +97,7 @@ impl VideoReader {
     pub fn thumbnails(&mut self, n: u32) -> anyhow::Result<Vec<VideoFrame>> {
         let mut out = Vec::with_capacity(n as usize);
         for i in 0..n {
-            let t = self.duration_ms * i as u64 / n.max(1) as u64;
+            let t = self.duration_ms * i as u64 / n as u64;
             self.seek(t)?;
             match self.next_frame()? {
                 Some(f) => out.push(f),

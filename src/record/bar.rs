@@ -57,10 +57,6 @@ fn button(id: &'static str, icon: &str, danger: bool, on: impl Fn(&ClickEvent, &
         .on_click(on)
 }
 
-fn later(f: fn(&mut App)) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
-    move |_, _, cx| cx.defer(f)
-}
-
 impl Render for Bar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let progress = progress(cx);
@@ -104,7 +100,7 @@ impl Render for Bar {
                                 .text_color(rgb(0xFFFFFF))
                                 .child(ui::icon("trash", 14., rgb(0xFFFFFF)))
                                 .child("Delete")
-                                .on_click(later(super::delete)),
+                                .on_click(chrome::defer_past_teardown(super::delete)),
                         ),
                 )
                 .into_any_element();
@@ -129,9 +125,9 @@ impl Render for Bar {
                     .when(paused, |d| d.child(div().text_xs().text_color(ui::theme().muted).child("Paused"))),
             )
             .child(div().w(px(1.)).h(px(22.)).bg(ui::theme().border))
-            .child(button("pause", if paused { "play" } else { "pause" }, false, later(super::pause_toggle)))
-            .child(button("restart", "restart", false, later(super::restart)))
-            .child(button("stop", "stop", false, later(super::stop)))
+            .child(button("pause", if paused { "play" } else { "pause" }, false, chrome::defer_past_teardown(super::pause_toggle)))
+            .child(button("restart", "restart", false, chrome::defer_past_teardown(super::restart)))
+            .child(button("stop", "stop", false, chrome::defer_past_teardown(super::stop)))
             .child(button("delete", "trash", true, cx.listener(|this, _, _, cx| {
                 this.confirm_delete = true;
                 cx.notify();

@@ -105,7 +105,6 @@ fn export_follows_the_clip_map_and_caches() {
     let names: Vec<String> = std::fs::read_dir(s.render_dir()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     assert_eq!(names, vec![path.file_name().unwrap().to_string_lossy().into_owned()], "the cancelled render left nothing behind");
 
-    opts.format = Format::Gif;
     let gif = export(&s, &opts, |_| {}, &AtomicBool::new(false)).unwrap();
     let bytes = std::fs::read(&gif).unwrap();
     assert_eq!(&bytes[..6], b"GIF89a");

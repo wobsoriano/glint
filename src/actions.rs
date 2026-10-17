@@ -62,7 +62,7 @@ pub fn with_recording_file(item: &Item, cx: &mut App, f: impl FnOnce(anyhow::Res
 }
 
 pub fn copy_video(item: &Item, video: &Path) -> anyhow::Result<()> {
-    let file = named_copy(video, item.id(), &item.meta.title)?;
+    let file = hard_link_outside_cache(video, item.id(), &item.meta.title)?;
     shell::copy_files(&[file], None)
 }
 
@@ -360,10 +360,10 @@ pub fn export_to_folder(items: Vec<Item>, cx: &mut App) {
 }
 
 pub fn drag_file(item: &Item) -> anyhow::Result<PathBuf> {
-    named_copy(&item.deliverable(), item.id(), &item.meta.title)
+    hard_link_outside_cache(&item.deliverable(), item.id(), &item.meta.title)
 }
 
-pub fn named_copy(file: &Path, id: &str, title: &str) -> anyhow::Result<PathBuf> {
+pub fn hard_link_outside_cache(file: &Path, id: &str, title: &str) -> anyhow::Result<PathBuf> {
     let dir = crate::settings::data_dir().join("Drag").join(id);
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let ext = file.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();

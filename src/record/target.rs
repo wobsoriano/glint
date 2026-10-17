@@ -35,7 +35,7 @@ impl Target {
 
     pub fn from_selection(rect: [i32; 4]) -> anyhow::Result<Option<Self>> {
         let list = glint_media::displays()?;
-        if let Some(d) = list.iter().find(|d| [d.rect.x, d.rect.y, d.rect.width as i32, d.rect.height as i32] == rect) {
+        if let Some(d) = list.iter().find(|d| display_rect(d) == rect) {
             return Ok(Some(Target::Display(d.clone())));
         }
         Self::area(rect)

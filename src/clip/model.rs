@@ -9,8 +9,6 @@ pub fn is_video(path: &Path) -> bool {
         .is_some_and(|e| VIDEO_EXTENSIONS.iter().any(|v| v.eq_ignore_ascii_case(e)))
 }
 
-const AUDIO_BYTES_PER_SEC: u64 = 24_000;
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Source {
     pub path: PathBuf,
@@ -135,7 +133,7 @@ fn video_bitrate(source: &Source, opts: &Options) -> u32 {
 pub fn estimate_bytes(source: &Source, trim: Trim, opts: &Options, has_audio: bool) -> u64 {
     let secs = trim.duration_ms() as f64 / 1000.0;
     let video = video_bitrate(source, opts) as f64 / 8.0 * secs;
-    let audio = if has_audio && opts.keep_audio { AUDIO_BYTES_PER_SEC as f64 * secs } else { 0.0 };
+    let audio = if has_audio && opts.keep_audio { glint_media::AAC_BYTES_PER_SEC as f64 * secs } else { 0.0 };
     (video + audio) as u64
 }
 

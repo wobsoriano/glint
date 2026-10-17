@@ -171,7 +171,6 @@ impl Stack {
             CardAction::More => {
                 self.more = if self.more == Some(id) { None } else { Some(id) };
                 cx.notify();
-                return;
             }
         }
     }

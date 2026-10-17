@@ -102,7 +102,7 @@ impl Studio {
             match job {
                 Job::Copy => {
                     let id = snap.dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    let file = crate::actions::named_copy(&rendered, &id, &stem)?;
+                    let file = crate::actions::hard_link_outside_cache(&rendered, &id, &stem)?;
                     shell::copy_files(std::slice::from_ref(&file), None)?;
                     anyhow::Ok(file)
                 }

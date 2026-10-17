@@ -141,7 +141,7 @@ impl WordBuilder {
             text: text.to_string(),
             start_ms,
             end_ms: self.end_ms.max(start_ms),
-            confidence: self.p_sum / self.pieces.max(1) as f32,
+            confidence: self.p_sum / self.pieces as f32,
         })
     }
 }
