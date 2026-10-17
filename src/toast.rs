@@ -39,6 +39,11 @@ impl Render for Toast {
 }
 
 pub fn show(msg: impl Into<SharedString>, cx: &mut App) {
+    show_at(msg, 24., cx)
+}
+
+/// Like [`show`], with the toast's bottom edge `bottom` pixels (DIP) above the work area's.
+pub fn show_at(msg: impl Into<SharedString>, bottom: f32, cx: &mut App) {
     if let Some(h) = cx.default_global::<ToastState>().0.take() {
         let _ = h.update(cx, |_, window, _| window.remove_window());
     }
@@ -47,7 +52,7 @@ pub fn show(msg: impl Into<SharedString>, cx: &mut App) {
     let h = 50.;
     let (area, scale) = crate::shell::work_area_at_cursor();
     let (pw, ph) = ((w * scale) as i32, (h * scale) as i32);
-    let rect = [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (24. * scale) as i32, pw, ph];
+    let rect = [area[0] + (area[2] - pw) / 2, area[1] + area[3] - ph - (bottom * scale) as i32, pw, ph];
     let handle = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds { origin: point(px(0.), px(0.)), size: size(px(w), px(h)) })),
