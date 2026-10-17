@@ -300,6 +300,9 @@ impl Capture {
         let _ = self.pool.Close();
         drop(self.item);
         let frames = self.sink.frames();
+        if !stop.load(Ordering::Relaxed) {
+            clock.end_at(Duration::from_nanos(frames * self.sink.params().frame_duration() as u64 * 100));
+        }
         let hardware = self.sink.hardware();
         let finished = self.sink.finish();
         let source_closed = captured? == CaptureEnd::SourceClosed;

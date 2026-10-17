@@ -8,6 +8,8 @@ pub struct MediaClock {
 enum State {
     Paused { elapsed: Duration },
     Running { elapsed_before: Duration, since: Instant },
+    /// The master track ended at `elapsed`; nothing resumes an ended clock.
+    Ended { elapsed: Duration },
 }
 
 impl MediaClock {
@@ -18,7 +20,7 @@ impl MediaClock {
     /// Media time elapsed so far, excluding paused spans.
     pub fn now(&self) -> Duration {
         match &*self.state.lock().unwrap() {
-            State::Paused { elapsed } => *elapsed,
+            State::Paused { elapsed } | State::Ended { elapsed } => *elapsed,
             State::Running { elapsed_before, since } => *elapsed_before + since.elapsed(),
         }
     }
@@ -27,8 +29,16 @@ impl MediaClock {
         self.now().as_millis() as u64
     }
 
+    /// True whenever media time stands still, so tracks stop writing.
     pub fn is_paused(&self) -> bool {
-        matches!(&*self.state.lock().unwrap(), State::Paused { .. })
+        !matches!(&*self.state.lock().unwrap(), State::Running { .. })
+    }
+
+    /// Ends media time at `elapsed`, which may lie before now when the master track's last
+    /// frame is already behind the wall clock. Every track stops writing there, and
+    /// `resume` no longer does anything.
+    pub fn end_at(&self, elapsed: Duration) {
+        *self.state.lock().unwrap() = State::Ended { elapsed };
     }
 
     /// Freezes media time. Pausing a paused clock is a no-op.
@@ -75,6 +85,20 @@ mod tests {
         let total = clock.now();
         assert!(total >= Duration::from_millis(60), "ran twice for 30ms: {total:?}");
         assert!(total < Duration::from_millis(100), "the 60ms pause leaked in: {total:?}");
+    }
+
+    #[test]
+    fn an_ended_clock_reads_the_end_time_and_ignores_resume() {
+        let clock = MediaClock::paused();
+        clock.resume();
+        sleep(Duration::from_millis(30));
+        clock.end_at(Duration::from_millis(10));
+        assert_eq!(clock.now(), Duration::from_millis(10));
+        assert!(clock.is_paused());
+        clock.resume();
+        sleep(Duration::from_millis(10));
+        assert_eq!(clock.now(), Duration::from_millis(10));
+        assert!(clock.is_paused());
     }
 
     #[test]

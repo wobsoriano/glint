@@ -147,6 +147,19 @@ impl WavWriter {
         Ok(())
     }
 
+    /// Drops every frame after the first `frames`.
+    pub fn truncate(&mut self, frames: u64) -> anyhow::Result<()> {
+        if frames >= self.frames {
+            return Ok(());
+        }
+        self.file.flush()?;
+        let file = self.file.get_mut();
+        file.set_len(46 + frames * self.channels as u64 * 4)?;
+        file.seek(SeekFrom::End(0))?;
+        self.frames = frames;
+        Ok(())
+    }
+
     pub fn finish(mut self) -> anyhow::Result<u64> {
         let data_len = self.frames * self.channels as u64 * 4;
         self.file.flush()?;
@@ -180,6 +193,22 @@ mod tests {
             WavData { sample_rate: 48000, channels: 2, samples: vec![0.25, -0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0] }
         );
         assert_eq!(data.frames(), 4);
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), bytes);
+    }
+
+    #[test]
+    fn truncate_cuts_the_tail_and_the_header_follows() {
+        let dir = std::env::temp_dir().join("glint-media-wav-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cut.wav");
+        let mut w = WavWriter::create(&path, 48000, 2).unwrap();
+        w.write(&[0.25, -0.5, 1.0, 0.0, 0.5, 0.5]).unwrap();
+        w.truncate(5).unwrap();
+        w.truncate(2).unwrap();
+        let bytes = w.finish().unwrap();
+        assert_eq!(bytes, 46 + 4 * 4);
+        let data = read_wav(&path).unwrap();
+        assert_eq!(data, WavData { sample_rate: 48000, channels: 2, samples: vec![0.25, -0.5, 1.0, 0.0] });
         assert_eq!(std::fs::metadata(&path).unwrap().len(), bytes);
     }
 
