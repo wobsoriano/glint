@@ -1,5 +1,5 @@
 use crate::encoder::Mp4Sink;
-pub use crate::encoder::{available_codecs, decodable_codecs, AudioParams, VideoCodec, VideoParams};
+pub use crate::encoder::{available_codecs, AAC_BYTES_PER_SEC, decodable_codecs, AudioParams, VideoCodec, VideoParams};
 use crate::frames::FrameReader;
 use crate::reader::{frame_at, AudioReader};
 use anyhow::{bail, Context};

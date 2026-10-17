@@ -321,6 +321,9 @@ fn uncompressed_type(subtype: GUID, width: u32, height: u32, fps: u32) -> anyhow
     }
 }
 
+/// The highest rate the Microsoft AAC encoder accepts for 1-2 channels.
+pub const AAC_BYTES_PER_SEC: u32 = 24_000;
+
 unsafe fn add_aac_stream(writer: &IMFSinkWriter, audio: AudioParams) -> anyhow::Result<u32> {
     let out = MFCreateMediaType()?;
     out.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
@@ -328,8 +331,7 @@ unsafe fn add_aac_stream(writer: &IMFSinkWriter, audio: AudioParams) -> anyhow::
     out.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
     out.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, audio.sample_rate)?;
     out.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, audio.channels as u32)?;
-    // 24000 bytes/s is the highest rate the Microsoft AAC encoder accepts for 1-2 channels.
-    out.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 24000)?;
+    out.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, AAC_BYTES_PER_SEC)?;
     let stream = writer.AddStream(&out).context("AddStream AAC")?;
 
     let input = MFCreateMediaType()?;
