@@ -17,7 +17,7 @@ Windows build, where the platform code sits, and the open decisions.
 
 ## Progress on macOS
 
-Steps 1 to 3 of the suggested first steps are done. Everything below was checked in the running
+Steps 1 to 4 of the suggested first steps are done, and Studio plays macOS recordings. Everything below was checked in the running
 app on a 2x display, unless it says otherwise.
 
 - **Build and layout.** The workspace builds on macOS (Apple silicon, Xcode clang, Homebrew
@@ -26,9 +26,8 @@ app on a 2x display, unless it says otherwise.
   `docs/architecture.md` describes the layout.
 - **Windows stays green.** `tools/check-windows.sh --workspace --all-targets` type-checks the
   Windows build from the Mac with zero warnings. Run it after every change to shared code.
-- **Tests.** `cargo test --workspace` passes on macOS except the tests that need the
-  AVFoundation backend: `glint-media` `roundtrip` (8) and `screen_failure` (4), and `glint-studio`
-  `engine` (6). They are its acceptance tests.
+- **Tests.** `cargo test --workspace` passes on macOS. Hardware tests are `#[ignore]`: run them
+  with `--ignored` on a Mac with a microphone and camera.
 - **Screen space.** `glint_media::space` (`crates/glint-media/src/mac/space.rs`) is the one place
   that converts between macOS points and Glint pixels. Read its module doc before touching
   coordinates.
@@ -65,9 +64,19 @@ app on a 2x display, unless it says otherwise.
   `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and root items
   that only the Windows backend uses so far. The macOS backend will use them. Don't silence the
   warnings.
-- **Next.** The AVFoundation writer and readers (MP4 encode and decode), then recording (step 4)
-  with ScreenCaptureKit streams, microphone and system audio, the camera and an event tap for
-  `input.json`, with their permission prompts, then Studio playback.
+- **Recording (step 4).** `glint-media`'s macOS backend records the screen and system audio
+  through one `SCStream` (`mac/screen.rs`) at a constant frame rate, the microphone and camera
+  through `AVCaptureSession` (`mac/audio.rs`, `mac/camera.rs`), and input through an event tap
+  (`mac/hooks.rs`). `mac/recorder.rs` mirrors the Windows recorder. Shared logic lives in
+  `audio::{Converter, ClockedWav}` and `input_recorder`, so both backends use the same pause and
+  drift rules.
+- **Studio (step 5).** MP4 decode (`mac/reader.rs`, `mac/frames.rs`) and CoreAudio playback
+  (`mac/audio_out.rs`) let Studio open and play macOS sessions.
+- **Bundle.** `tools/bundle-mac.sh` builds a signed `Glint.app` with the permission usage
+  strings. See `docs/building.md`.
+- **Next.** See the unchecked macOS lines in `docs/parity.md`: the recording picker with a
+  microphone and camera, Studio export and transcription (enable whisper-rs's Metal feature),
+  Trim & Compress, and the permission prompts from a signed bundle.
 
 ## What already works on macOS
 

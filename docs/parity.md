@@ -83,3 +83,26 @@ calls the real code. The evidence column points at that proof.
 - [x] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences — W9 s20-s25, t6
 - [x] Export: quality, resolution, format, 30/60 fps, motion blur, audio; progress; cancel; cached renders — W8a proof.log, W8b s22/s23
 - [x] Trim-and-compress editor for regular video files — W10 shots 10/11 (4K trim to 2 s 720p, ffprobe), 31-38
+
+## macOS
+
+The sections above record the Windows build. This section tracks the macOS port on its own: a
+line is checked only after it ran in the macOS app or in a test that calls the real macOS code.
+M1 is the first port session (2026-10-17, MacBook Pro, 2x built-in display, macOS 27.2).
+
+- [x] Capture full screen, window (click) and area; previous area; Capture Text through Vision — M1 area 500x300 pt gave a 1000x600 px clipboard image; OCR read terminal lines in order
+- [x] Global hotkeys (⌃⇧ defaults) and the menu bar menu with key equivalents — M1 ⌃⇧3 added a capture; menu Open Library raised the Library
+- [x] Glint windows excluded from captures (macOS 14+, ScreenCaptureKit filter) — M1 full-screen capture with the Library and stack open showed neither
+- [x] Preview stack in the work area; card drag into Finder; dismiss after drag — M1 PNG landed in a Finder folder
+- [x] Library: grid, ⌘-click multi-select, ⌘C copies files, Delete moves to the Trash — M1 two file URLs on the pasteboard; both captures in the Trash
+- [x] Annotation editor: drawing, ⌘Z, system font and dark appearance, traffic lights — M1 arrow drawn and undone
+- [x] Single instance with CLI forwarding; launch at login through a LaunchAgent — M1 second `glint --library` exited 0; plist written and removed
+- [x] MP4 encode/decode, transcode and trim — `roundtrip` (8) and `glint-studio` `engine` (6) tests on macOS
+- [x] Screen recording with system audio and input, constant 30 fps, pause excluded — M1 18 s session: 545 frames, system.wav 18.15 s, input.json with cursor sprites; `record_mac` ignored tests
+- [x] Microphone track, level meter, live-caption tap; camera track and preview — ignored hardware tests on the built-in mic and FaceTime camera (not yet from the recording picker UI)
+- [x] Studio opens a macOS session and plays it back with audio — M1 timeline, auto zooms, cursor overlay; playback advanced in real time
+- [ ] Recording picker with a microphone and the camera selected, in the app
+- [ ] Studio export, captions and transcription (whisper.cpp with Metal)
+- [ ] Trim & Compress, Quick Look, pins, self-timer, teleprompter on macOS
+- [ ] Permission prompts from a signed Glint.app (Screen Recording, Input Monitoring, Microphone, Camera)
+- [ ] Mixed-scale multi-display setups (covered by `glint_media::space` unit tests only)
