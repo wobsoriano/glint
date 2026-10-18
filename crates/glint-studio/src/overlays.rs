@@ -113,14 +113,18 @@ impl KeyTrack {
         if opacity <= 0.005 {
             return None;
         }
-        let split = label.rfind('+').filter(|&i| i + 1 < label.len()).map_or(0, |i| i + 1);
-        Some(KeyFrame {
-            modifiers: label[..split].to_string(),
-            key: label[split..].to_string(),
-            opacity,
-            scale,
-        })
+        let (modifiers, key) = split_label(label);
+        Some(KeyFrame { modifiers: modifiers.to_string(), key: key.to_string(), opacity, scale })
     }
+}
+
+/// Splits a shortcut label into its modifiers and its key: `Ctrl+Shift+` and `S` for a label
+/// recorded on Windows, `⇧⌘` and `S` for one recorded on macOS.
+fn split_label(label: &str) -> (&str, &str) {
+    let after_plus = label.rfind('+').filter(|&i| i + 1 < label.len()).map(|i| i + 1);
+    let after_symbol = label.char_indices().filter(|(_, c)| "⌃⌥⇧⌘".contains(*c)).last().map(|(i, c)| i + c.len_utf8());
+    let split = after_plus.max(after_symbol).filter(|&i| i < label.len()).unwrap_or(0);
+    label.split_at(split)
 }
 
 /// A transcribed word in source time, produced by the transcription crate.
@@ -296,6 +300,15 @@ mod tests {
         assert_eq!((swapped.modifiers.as_str(), swapped.key.as_str(), swapped.opacity), ("", "Enter", 1.0));
         assert!(track.at(3_000.0).unwrap().opacity < 0.5);
         assert_eq!(track.at(3_100.0), None);
+    }
+
+    #[test]
+    fn labels_split_into_modifiers_and_key_on_both_platforms() {
+        assert_eq!(split_label("Ctrl+Shift+S"), ("Ctrl+Shift+", "S"));
+        assert_eq!(split_label("Enter"), ("", "Enter"));
+        assert_eq!(split_label("⇧⌘S"), ("⇧⌘", "S"));
+        assert_eq!(split_label("⌘Space"), ("⌘", "Space"));
+        assert_eq!(split_label("↩"), ("", "↩"));
     }
 
     #[test]
