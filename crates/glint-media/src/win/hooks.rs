@@ -1,9 +1,9 @@
 use crate::clock::MediaClock;
-use crate::cursor::{self, CursorImage};
-use crate::devices::PhysicalPixels;
+use super::cursor::{self, CursorImage};
+use super::devices::PhysicalPixels;
 use crate::input::{Click, CursorSprite, InputTimeline, KeyPress, MouseButton, PointerSample};
-use crate::keys::{shortcut_label, Mods};
-use crate::screen::{window_capture_rect, WindowBounds};
+use super::keys::{shortcut_label, Mods};
+use super::screen::{window_capture_rect, WindowBounds};
 use anyhow::{bail, Context};
 use std::cell::RefCell;
 use std::collections::HashSet;

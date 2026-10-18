@@ -1,7 +1,9 @@
 use crate::clock::MediaClock;
-use crate::devices::{camera_activate, DeviceId};
-use crate::encoder::{Mp4Sink, VideoCodec, VideoParams};
-use crate::mf::{self, pack2, unpack2};
+use super::devices::camera_activate;
+use crate::devices::DeviceId;
+use super::encoder::Mp4Sink;
+use crate::writer::{VideoCodec, VideoParams};
+use super::mf::{self, pack2, unpack2};
 use anyhow::{bail, Context};
 use image::RgbaImage;
 use std::path::{Path, PathBuf};

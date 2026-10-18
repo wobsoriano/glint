@@ -1,6 +1,6 @@
 fn main() -> anyhow::Result<()> {
     for d in glint_media::displays()? {
-        println!("display {} {:?} rect={:?} scale={} hmonitor={:#x} primary={}", d.index, d.name, d.rect, d.scale, d.hmonitor, d.primary);
+        println!("display {} {:?} rect={:?} scale={} handle={:#x} primary={}", d.index, d.name, d.rect, d.scale, d.handle, d.primary);
     }
     for m in glint_media::microphones()? {
         println!("mic {:?} id={}", m.name, m.id);

@@ -1,5 +1,5 @@
-use crate::encoder::Mp4Sink;
-pub use crate::encoder::{available_codecs, AAC_BYTES_PER_SEC, decodable_codecs, AudioParams, VideoCodec, VideoParams};
+pub use crate::backend::encoder::{available_codecs, decodable_codecs};
+pub use crate::backend::writer::VideoWriter;
 use crate::frames::FrameReader;
 use crate::reader::{frame_at, AudioReader};
 use anyhow::{bail, Context};
@@ -7,51 +7,47 @@ use image::RgbaImage;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VideoCodec {
+    H264,
+    Hevc,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VideoParams {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    /// Average bitrate in bits per second.
+    pub bitrate: u32,
+    pub codec: VideoCodec,
+}
+
+impl VideoParams {
+    /// A bitrate that keeps screen content crisp: 0.1 bits per pixel per frame, clamped to
+    /// 4..80 Mbps (3840x2160 at 30 fps lands on 25 Mbps).
+    pub fn recording_bitrate(width: u32, height: u32, fps: u32) -> u32 {
+        let bits = width as u64 * height as u64 * fps as u64 / 10;
+        bits.clamp(4_000_000, 80_000_000) as u32
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AudioParams {
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+/// The AAC rate every backend encodes at. It is the highest the Microsoft AAC encoder accepts
+/// for 1-2 channels.
+pub const AAC_BYTES_PER_SEC: u32 = 24_000;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WriteSummary {
     pub frames: u64,
     pub duration_ms: u64,
     pub bytes: u64,
     pub hardware: bool,
-}
-
-pub struct VideoWriter {
-    sink: Mp4Sink,
-    path: std::path::PathBuf,
-}
-
-impl VideoWriter {
-    pub fn create(path: &Path, video: VideoParams, audio: Option<AudioParams>) -> anyhow::Result<Self> {
-        let sink = Mp4Sink::create(path, video, audio, None)?;
-        Ok(Self { sink, path: path.to_path_buf() })
-    }
-
-    /// Appends the next frame. Its size must match the writer's `VideoParams`.
-    pub fn write_frame(&mut self, frame: &RgbaImage) -> anyhow::Result<()> {
-        let p = self.sink.params();
-        if frame.width() != p.width || frame.height() != p.height {
-            bail!("frame is {}x{}, writer expects {}x{}", frame.width(), frame.height(), p.width, p.height);
-        }
-        self.sink.write_rgba_sequential(frame.as_raw())
-    }
-
-    /// Appends interleaved f32 PCM at the writer's audio sample rate and channel count.
-    pub fn write_audio(&mut self, interleaved: &[f32]) -> anyhow::Result<()> {
-        self.sink.write_audio(interleaved)
-    }
-
-    pub fn frames(&self) -> u64 {
-        self.sink.frames()
-    }
-
-    pub fn finish(self) -> anyhow::Result<WriteSummary> {
-        let frames = self.sink.frames();
-        let fps = self.sink.params().fps;
-        let hardware = self.sink.hardware();
-        self.sink.finish()?;
-        let bytes = std::fs::metadata(&self.path)?.len();
-        Ok(WriteSummary { frames, duration_ms: frames * 1000 / fps as u64, bytes, hardware })
-    }
 }
 
 /// How to re-encode a video. Unset fields keep the source's values.

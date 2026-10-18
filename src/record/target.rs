@@ -20,7 +20,7 @@ impl Target {
     pub fn window(hwnd: isize, title: String) -> anyhow::Result<Self> {
         let list = glint_media::displays()?;
         let monitor = unsafe { MonitorFromWindow(HWND(hwnd as *mut _), MONITOR_DEFAULTTONEAREST) }.0 as isize;
-        let display = list.iter().find(|d| d.hmonitor == monitor).unwrap_or(&list[0]).clone();
+        let display = list.iter().find(|d| d.handle == monitor).unwrap_or(&list[0]).clone();
         Ok(Target::Window { hwnd, title, display })
     }
 
@@ -83,7 +83,7 @@ pub fn display_rect(d: &DisplayInfo) -> [i32; 4] {
 
 pub fn work_area(d: &DisplayInfo) -> [i32; 4] {
     let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-    if unsafe { GetMonitorInfoW(HMONITOR(d.hmonitor as *mut _), &mut info) }.as_bool() {
+    if unsafe { GetMonitorInfoW(HMONITOR(d.handle as *mut _), &mut info) }.as_bool() {
         let r = info.rcWork;
         [r.left, r.top, r.right - r.left, r.bottom - r.top]
     } else {

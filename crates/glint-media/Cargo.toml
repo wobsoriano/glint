@@ -2,7 +2,7 @@
 name = "glint-media"
 version = "0.1.0"
 edition = "2021"
-description = "Windows media engine for Glint: screen, camera, audio and input recording, MP4 encode and decode"
+description = "Media engine for Glint: screen, camera, audio and input recording, MP4 encode and decode"
 
 [dependencies]
 serde = { workspace = true }
@@ -10,7 +10,7 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 
-[dependencies.windows]
+[target.'cfg(windows)'.dependencies.windows]
 workspace = true
 features = [
   "Foundation",
