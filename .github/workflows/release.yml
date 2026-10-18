@@ -57,6 +57,8 @@ jobs:
     runs-on: windows-latest
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
+      # Links the C and C++ runtimes into the EXE, so PCs without the Visual C++ Redistributable run it.
+      RUSTFLAGS: -C target-feature=+crt-static
     steps:
       - uses: actions/checkout@v4
       - name: libclang
@@ -68,6 +70,14 @@ jobs:
           }
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
+      - name: No runtime DLLs
+        shell: pwsh
+        run: |
+          $found = Select-String -Path target\release\glint.exe -Pattern 'VCRUNTIME140', 'MSVCP140' -SimpleMatch -List
+          if ($found) {
+            Write-Output "::error::glint.exe still imports the Visual C++ runtime ($($found.Pattern -join ', '))."
+            exit 1
+          }
       - shell: pwsh
         run: Copy-Item target\release\glint.exe "Glint-${{ needs.version.outputs.version }}-windows-x64.exe"
       - uses: actions/upload-artifact@v4

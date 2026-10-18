@@ -105,6 +105,10 @@ The `version` in the root `Cargo.toml` names the release. The Release workflow t
 
 Running the workflow again for the same version replaces the files on the existing release.
 
+The Windows EXE links the C and C++ runtimes statically (`-C target-feature=+crt-static`), so
+it runs on PCs without the Visual C++ Redistributable. The workflow fails if the EXE still
+imports `VCRUNTIME140.dll` or `MSVCP140.dll`.
+
 To build the DMG locally, run `tools/package-mac.sh`. It prints the path of the DMG under
 `target/release`.
 
