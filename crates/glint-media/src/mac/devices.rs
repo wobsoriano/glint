@@ -33,8 +33,9 @@ pub fn displays() -> anyhow::Result<Vec<DisplayInfo>> {
     Ok(layout(raw))
 }
 
+/// Connected microphones, the system default input first.
 pub fn microphones() -> anyhow::Result<Vec<AudioDevice>> {
-    unsupported("microphone enumeration")
+    super::audio::microphones()
 }
 
 pub fn cameras() -> anyhow::Result<Vec<CameraDevice>> {
