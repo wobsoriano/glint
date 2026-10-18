@@ -56,8 +56,8 @@ Steps 1 and 2 of the suggested first steps are done.
   - A window opened by a forwarded CLI request stays behind the active app: macOS 14 lets an
     app take focus only from user input to that app. Menu bar and hotkey actions come to the
     front.
-  - Still open in step 3: dragging a card into other apps (`shell::drag_out`), OCR (Vision),
-    excluding Glint's windows from captures, and the camera, microphone and screen recording
+  - OCR runs Vision's `VNRecognizeTextRequest` on the whole image (`sys/mac/ocr.rs`).
+  - Still open in step 3: dragging a card into other apps (`shell::drag_out`), excluding Glint's windows from captures, and the camera, microphone and screen recording
     permission prompts once recording lands.
 - The macOS build warns about dead code in shared `glint-media` helpers (`WavWriter`,
   `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and in root

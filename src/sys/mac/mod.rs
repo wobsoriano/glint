@@ -5,6 +5,7 @@ pub mod capture;
 pub mod desktop;
 pub mod ipc;
 pub mod library;
+pub mod ocr;
 pub mod shell;
 
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {
@@ -16,16 +17,6 @@ pub mod chrome {
     use gpui::Window;
 
     pub fn style(_window: &Window, _kind: Kind) {}
-}
-
-pub mod ocr {
-    use super::unsupported;
-    use crate::ocr::Line;
-    use image::RgbaImage;
-
-    pub fn recognize(_img: &RgbaImage) -> anyhow::Result<Vec<Line>> {
-        unsupported("text recognition")
-    }
 }
 
 pub mod target {

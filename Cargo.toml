@@ -43,6 +43,7 @@ objc2-app-kit = "0.3.2"
 objc2-core-foundation = "0.3.2"
 objc2-core-graphics = "0.3.2"
 objc2-foundation = "0.3.2"
+objc2-vision = { version = "0.3.2", features = ["objc2-image-io"] }
 
 [target.'cfg(windows)'.dependencies]
 # `#[implement]` expands to `::windows_core` paths.
