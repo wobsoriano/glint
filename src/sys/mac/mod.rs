@@ -3,6 +3,7 @@
 
 pub mod capture;
 pub mod desktop;
+pub mod ipc;
 pub mod library;
 pub mod shell;
 
@@ -15,17 +16,6 @@ pub mod chrome {
     use gpui::Window;
 
     pub fn style(_window: &Window, _kind: Kind) {}
-}
-
-pub mod ipc {
-    use super::unsupported;
-    use crate::ipc::Request;
-
-    pub fn listen() {}
-
-    pub fn forward(_requests: &[Request]) -> anyhow::Result<()> {
-        unsupported("forwarding to a running Glint")
-    }
 }
 
 pub mod ocr {

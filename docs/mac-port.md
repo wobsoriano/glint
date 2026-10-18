@@ -47,10 +47,18 @@ Steps 1 and 2 of the suggested first steps are done.
     Global hotkeys keep the Windows defaults (⌃⇧2 to ⌃⇧7, ⌃⇧L), which avoid the system's
     ⌘⇧3/4/5.
   - Custom title bars leave the traffic lights to the system (`ui::SYSTEM_CAPTION_INSET`).
-  - Still open in step 3: copying and dragging files (`shell::copy_files`, `drag_out`), Trash
-    (`library::recycle`), OCR (Vision), the save-failed dialog, the menu bar item in place of
-    the tray, the accessory activation policy, single instance and IPC, launch at login, and
-    the wallpaper background.
+  - Background app: Glint runs as an accessory app (no Dock icon) with a template icon in the
+    menu bar. Its menu shows the global shortcuts as key equivalents. A Unix socket in the
+    per-user temp folder keeps one instance and forwards CLI requests (`sys/mac/ipc.rs`). Launch
+    at login writes `~/Library/LaunchAgents/com.glint.app.plist`.
+  - The pasteboard (files and images), the Trash, the save-failed alert and the wallpaper path
+    work.
+  - A window opened by a forwarded CLI request stays behind the active app: macOS 14 lets an
+    app take focus only from user input to that app. Menu bar and hotkey actions come to the
+    front.
+  - Still open in step 3: dragging a card into other apps (`shell::drag_out`), OCR (Vision),
+    excluding Glint's windows from captures, and the camera, microphone and screen recording
+    permission prompts once recording lands.
 - The macOS build warns about dead code in shared `glint-media` helpers (`WavWriter`,
   `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and in root
   items only the Windows backend uses so far. The macOS backend will use them. Don't silence the

@@ -2,7 +2,7 @@ use dispatch2::DispatchQueue;
 use glint_media::{space, DisplayInfo};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWorkspace, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWorkspace, NSWindowCollectionBehavior, NSWindowStyleMask};
 use objc2_core_graphics::{CGDisplayBounds, CGMainDisplayID};
 use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -101,8 +101,49 @@ pub fn desktop_wallpaper() -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-pub fn set_launch_at_login(_enabled: bool) {}
+/// Runs Glint as a menu bar app, without a Dock icon or a menu bar of its own.
+pub fn init_app() {
+    if let Some(mtm) = MainThreadMarker::new() {
+        NSApplication::sharedApplication(mtm).setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+    }
+}
+
+fn launch_agent() -> Option<PathBuf> {
+    Some(dirs::home_dir()?.join("Library/LaunchAgents/com.glint.app.plist"))
+}
+
+/// Starts Glint in the background at login through a per-user LaunchAgent.
+pub fn set_launch_at_login(enabled: bool) {
+    let (Some(plist), Ok(exe)) = (launch_agent(), std::env::current_exe()) else { return };
+    if !enabled {
+        let _ = std::fs::remove_file(plist);
+        return;
+    }
+    let exe = exe.to_string_lossy().replace('&', "&amp;").replace('<', "&lt;");
+    let body = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.glint.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{exe}</string>
+        <string>--background</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+"#
+    );
+    if let Some(dir) = plist.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(plist, body);
+}
 
 pub fn single_instance() -> bool {
-    true
+    super::ipc::claim()
 }

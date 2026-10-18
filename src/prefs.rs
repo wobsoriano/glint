@@ -511,7 +511,11 @@ impl Render for Prefs {
                                 desktop::set_launch_at_login(s.launch_at_login);
                             })
                         }))
-                        .child(note("At login Glint starts quietly in the tray. Opening Glint yourself shows the Library.")),
+                        .child(note(if cfg!(target_os = "macos") {
+                            "At login Glint starts quietly in the menu bar. Opening Glint yourself shows the Library."
+                        } else {
+                            "At login Glint starts quietly in the tray. Opening Glint yourself shows the Library."
+                        })),
                 )
                 .child(
                     group("Captures")

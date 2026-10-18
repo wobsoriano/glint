@@ -62,6 +62,9 @@ pub fn desktop_wallpaper() -> Option<PathBuf> {
 
 const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 
+/// Nothing to set up: a Windows tray app needs no activation policy.
+pub fn init_app() {}
+
 pub fn set_launch_at_login(enabled: bool) {
     unsafe {
         if enabled {

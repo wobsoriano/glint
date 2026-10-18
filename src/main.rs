@@ -110,33 +110,64 @@ fn tray_menu(s: &Settings) -> (Menu, Vec<(MenuId, Command)>) {
     let menu = Menu::new();
     let mut ids = Vec::new();
     let h = &s.hotkeys;
-    let display = |a: HotkeyAction| Some(hotkeys::display(h.get(a)));
+    let keys = |a: HotkeyAction| Hint::Keys(h.get(a).to_string());
     let items = [
-        ("Capture Area", display(HotkeyAction::Area), Command::Capture(CaptureCmd::Area)),
-        ("Capture Window", display(HotkeyAction::Window), Command::Capture(CaptureCmd::Window)),
-        ("Capture Full Screen", display(HotkeyAction::Fullscreen), Command::Capture(CaptureCmd::Screen)),
-        ("Capture Previous Area", display(HotkeyAction::PreviousArea), Command::Capture(CaptureCmd::Previous)),
-        ("Capture Text", display(HotkeyAction::Text), Command::Capture(CaptureCmd::Text)),
-        ("Self-Timer", Some(format!("{} s", s.timer_seconds)), Command::CaptureTimer),
-        ("Record Screen", display(HotkeyAction::Recording), Command::Recording),
+        ("Capture Area", keys(HotkeyAction::Area), Command::Capture(CaptureCmd::Area)),
+        ("Capture Window", keys(HotkeyAction::Window), Command::Capture(CaptureCmd::Window)),
+        ("Capture Full Screen", keys(HotkeyAction::Fullscreen), Command::Capture(CaptureCmd::Screen)),
+        ("Capture Previous Area", keys(HotkeyAction::PreviousArea), Command::Capture(CaptureCmd::Previous)),
+        ("Capture Text", keys(HotkeyAction::Text), Command::Capture(CaptureCmd::Text)),
+        ("Self-Timer", Hint::Text(format!("{} s", s.timer_seconds)), Command::CaptureTimer),
+        ("Record Screen", keys(HotkeyAction::Recording), Command::Recording),
+        ("Trim & Compress Video…", Hint::None, Command::TrimVideo),
     ];
-    let mut add = |label: String, cmd: Command| {
-        let item = MenuItem::new(label, true, None);
+    let mut add = |label: &str, hint: Hint, cmd: Command| {
+        // Menus read a single & as a mnemonic marker, on macOS too.
+        let item = menu_item(&label.replace('&', "&&"), hint);
         ids.push((item.id().clone(), cmd));
         let _ = menu.append(&item);
     };
-    for (label, accel, cmd) in items {
-        add(accel.map(|a| format!("{label}\t{a}")).unwrap_or(label.to_string()), cmd);
+    for (label, hint, cmd) in items {
+        add(label, hint, cmd);
     }
-    // Win32 menus read a single & as a mnemonic marker.
-    add("Trim && Compress Video…".into(), Command::TrimVideo);
     let _ = menu.append(&PredefinedMenuItem::separator());
-    add(format!("Open Library\t{}", hotkeys::display(&h.library)), Command::Library);
-    add("Edit Last Capture".into(), Command::OpenLast);
-    add("Settings…".into(), Command::Settings);
+    add("Open Library", Hint::Keys(h.library.clone()), Command::Library);
+    add("Edit Last Capture", Hint::None, Command::OpenLast);
+    add("Settings…", Hint::None, Command::Settings);
     let _ = menu.append(&PredefinedMenuItem::separator());
-    add("Quit Glint".into(), Command::Quit);
+    add("Quit Glint", Hint::None, Command::Quit);
     (menu, ids)
+}
+
+/// What a tray menu item shows after its label.
+enum Hint {
+    None,
+    /// A global shortcut, as stored in the settings.
+    Keys(String),
+    Text(String),
+}
+
+/// Win32 menus show the hint after a tab.
+#[cfg(windows)]
+fn menu_item(label: &str, hint: Hint) -> MenuItem {
+    let label = label.to_string();
+    let text = match hint {
+        Hint::None => label,
+        Hint::Keys(accel) if accel.is_empty() => label,
+        Hint::Keys(accel) => format!("{label}\t{}", hotkeys::display(&accel)),
+        Hint::Text(t) => format!("{label}\t{t}"),
+    };
+    MenuItem::new(text, true, None)
+}
+
+/// macOS menus show shortcuts as key equivalents at the right edge.
+#[cfg(target_os = "macos")]
+fn menu_item(label: &str, hint: Hint) -> MenuItem {
+    match hint {
+        Hint::None => MenuItem::new(label, true, None),
+        Hint::Keys(accel) => MenuItem::new(label, true, accel.parse().ok()),
+        Hint::Text(t) => MenuItem::new(format!("{label} ({t})"), true, None),
+    }
 }
 
 pub fn refresh_tray(cx: &mut App) {
@@ -150,12 +181,12 @@ pub fn refresh_tray(cx: &mut App) {
 
 fn build_tray(s: &Settings) -> Tray {
     let (menu, ids) = tray_menu(s);
-    let icon = TrayIconBuilder::new()
-        .with_tooltip("Glint")
-        .with_icon(tray_icon_image())
-        .with_menu(Box::new(menu))
-        .build()
-        .ok();
+    let builder = TrayIconBuilder::new().with_tooltip("Glint").with_menu(Box::new(menu));
+    #[cfg(target_os = "macos")]
+    let builder = builder.with_icon_templated(tray_icon_image(true));
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.with_icon(tray_icon_image(false));
+    let icon = builder.build().ok();
     Tray { icon, ids }
 }
 
@@ -195,6 +226,7 @@ fn main() {
     }
 
     Application::new().with_assets(assets::Assets).run(move |cx: &mut App| {
+        desktop::init_app();
         let settings = Settings::load();
         cx.set_global(flow::AppState::default());
         store::init(cx);
@@ -278,7 +310,9 @@ fn main() {
     });
 }
 
-fn tray_icon_image() -> tray_icon::Icon {
+/// Glint's mark: corner brackets on a gradient card. A `template` icon is the brackets alone,
+/// which macOS tints to match the menu bar.
+fn tray_icon_image(template: bool) -> tray_icon::Icon {
     let n = 32u32;
     let mut pm = tiny_skia::Pixmap::new(n, n).unwrap();
     let grad = tiny_skia::LinearGradient::new(
@@ -298,13 +332,15 @@ fn tray_icon_image() -> tray_icon::Icon {
         ..Default::default()
     };
     let card = annotate::R { x: 1.0, y: 1.0, w: 30.0, h: 30.0 };
-    pm.fill_path(
-        &render::rounded_rect(&card, 8.0).unwrap(),
-        &paint,
-        tiny_skia::FillRule::Winding,
-        tiny_skia::Transform::identity(),
-        None,
-    );
+    if !template {
+        pm.fill_path(
+            &render::rounded_rect(&card, 8.0).unwrap(),
+            &paint,
+            tiny_skia::FillRule::Winding,
+            tiny_skia::Transform::identity(),
+            None,
+        );
+    }
     let mut white = tiny_skia::Paint::default();
     white.set_color_rgba8(255, 255, 255, 255);
     white.anti_alias = true;
