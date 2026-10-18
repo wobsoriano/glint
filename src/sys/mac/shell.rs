@@ -8,6 +8,7 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSAlertSecondButtonReturn, NSAlertStyle, NSPasteboard, NSPasteboardTypePNG, NSPasteboardWriting};
 use objc2_foundation::{NSArray, NSData, NSString, NSURL};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Puts files on the pasteboard, as Finder's Copy does, with `image`'s pixels as PNG for apps
 /// that paste images.
@@ -92,4 +93,14 @@ pub fn register_open_with() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn exclude_own_windows_from_capture(_include: bool) {}
+static INCLUDE_OWN: AtomicBool = AtomicBool::new(false);
+
+/// Sets whether Glint's windows show up in captures. Captures read it through
+/// [`include_own_windows`]; the ScreenCaptureKit filter does the excluding.
+pub fn exclude_own_windows_from_capture(include: bool) {
+    INCLUDE_OWN.store(include, Ordering::Relaxed);
+}
+
+pub(crate) fn include_own_windows() -> bool {
+    INCLUDE_OWN.load(Ordering::Relaxed)
+}

@@ -9,14 +9,21 @@ use objc2_core_graphics::{
 use std::ffi::c_void;
 use std::sync::Arc;
 
-/// Captures every display at its backing resolution, placed in Glint pixels.
+/// Captures every display at its backing resolution, placed in Glint pixels. ScreenCaptureKit
+/// (macOS 14 and later) leaves Glint's own windows out unless the setting includes them; the
+/// window-list capture on macOS 13 cannot.
 pub fn capture_monitors() -> Result<Vec<MonitorShot>> {
     let displays = glint_media::displays()?;
-    let monitors = xcap::Monitor::all().context("listing monitors")?;
+    let include_own = super::shell::include_own_windows();
+    let monitors = if objc2::available!(macos = 14.0) { Vec::new() } else { xcap::Monitor::all().context("listing monitors")? };
     let mut out = Vec::new();
     for d in &displays {
-        let Some(m) = monitors.iter().find(|m| m.id().ok() == Some(d.handle as u32)) else { continue };
-        let image = m.capture_image().context("capturing monitor")?;
+        let image = if objc2::available!(macos = 14.0) {
+            glint_media::sck::screenshot(d.handle as u32, d.rect.width, d.rect.height, include_own).context("capturing display")?
+        } else {
+            let Some(m) = monitors.iter().find(|m| m.id().ok() == Some(d.handle as u32)) else { continue };
+            m.capture_image().context("capturing monitor")?
+        };
         let [lx, ly, lw, lh] = space::point_bounds(&displays, d);
         let (width, height) = image.dimensions();
         out.push(MonitorShot {

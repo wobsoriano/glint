@@ -4,6 +4,7 @@
 use std::convert::Infallible;
 
 pub(crate) mod devices;
+pub mod sck;
 pub mod space;
 
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {

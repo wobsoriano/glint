@@ -27,7 +27,7 @@ mod mac;
 #[cfg(target_os = "macos")]
 use mac as backend;
 #[cfg(target_os = "macos")]
-pub use mac::space;
+pub use mac::{sck, space};
 
 pub use audio::{LevelMeter, MicMonitor};
 pub use backend::audio_out::{AudioClock, AudioOutput};
