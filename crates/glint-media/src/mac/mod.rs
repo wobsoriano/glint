@@ -1,11 +1,17 @@
-//! macOS backend. Display enumeration and the screen space work. Everything else is a stub:
+//! macOS backend. Display enumeration, the screen space, and MP4 encode and decode through
+//! AVFoundation work. Everything else is a stub:
 //! constructors return an error, and the types hold `Infallible`, so their methods can never run.
 
 use std::convert::Infallible;
 
+mod av;
 pub(crate) mod devices;
+pub(crate) mod encoder;
+pub(crate) mod frames;
+pub(crate) mod reader;
 pub mod sck;
 pub mod space;
+pub(crate) mod writer;
 
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {
     anyhow::bail!("{what} is not supported on macOS yet")
@@ -78,113 +84,8 @@ pub(crate) mod camera {
     }
 }
 
-pub(crate) mod encoder {
-    use crate::writer::VideoCodec;
 
-    pub fn available_codecs() -> Vec<VideoCodec> {
-        Vec::new()
-    }
 
-    pub fn decodable_codecs() -> Vec<VideoCodec> {
-        Vec::new()
-    }
-}
-
-pub(crate) mod frames {
-    use super::*;
-    use crate::frames::Nv12Frame;
-    use std::path::Path;
-
-    pub struct FrameReader(Infallible);
-
-    impl FrameReader {
-        pub fn open(_path: &Path) -> anyhow::Result<Self> {
-            unsupported("video decoding")
-        }
-
-        pub fn size(&self) -> (u32, u32) {
-            match self.0 {}
-        }
-
-        pub fn fps(&self) -> f64 {
-            match self.0 {}
-        }
-
-        pub fn duration_ms(&self) -> u64 {
-            match self.0 {}
-        }
-
-        pub fn hardware(&self) -> bool {
-            match self.0 {}
-        }
-
-        pub fn seek(&mut self, _ms: u64) -> anyhow::Result<()> {
-            match self.0 {}
-        }
-
-        pub fn next_frame(&mut self) -> anyhow::Result<Option<Nv12Frame>> {
-            match self.0 {}
-        }
-    }
-}
-
-pub(crate) mod reader {
-    use super::*;
-    use crate::reader::VideoFrame;
-    use std::path::Path;
-
-    pub struct VideoReader(Infallible);
-
-    impl VideoReader {
-        pub fn open(_path: &Path) -> anyhow::Result<Self> {
-            unsupported("video decoding")
-        }
-
-        pub fn size(&self) -> (u32, u32) {
-            match self.0 {}
-        }
-
-        pub fn fps(&self) -> f64 {
-            match self.0 {}
-        }
-
-        pub fn duration_ms(&self) -> u64 {
-            match self.0 {}
-        }
-
-        pub fn seek(&mut self, _ms: u64) -> anyhow::Result<()> {
-            match self.0 {}
-        }
-
-        pub fn next_frame(&mut self) -> anyhow::Result<Option<VideoFrame>> {
-            match self.0 {}
-        }
-    }
-
-    pub struct AudioReader(Infallible);
-
-    impl AudioReader {
-        pub fn open(_path: &Path) -> anyhow::Result<Option<Self>> {
-            unsupported("audio decoding")
-        }
-
-        pub fn sample_rate(&self) -> u32 {
-            match self.0 {}
-        }
-
-        pub fn channels(&self) -> u16 {
-            match self.0 {}
-        }
-
-        pub fn seek(&mut self, _ms: u64) -> anyhow::Result<()> {
-            match self.0 {}
-        }
-
-        pub fn next_chunk(&mut self, _out: &mut Vec<f32>) -> anyhow::Result<bool> {
-            match self.0 {}
-        }
-    }
-}
 
 pub(crate) mod recorder {
     use super::*;
@@ -236,37 +137,6 @@ pub(crate) mod recorder {
         }
 
         pub fn cancel(self) {
-            match self.0 {}
-        }
-    }
-}
-
-pub(crate) mod writer {
-    use super::*;
-    use crate::writer::{AudioParams, VideoParams, WriteSummary};
-    use image::RgbaImage;
-    use std::path::Path;
-
-    pub struct VideoWriter(Infallible);
-
-    impl VideoWriter {
-        pub fn create(_path: &Path, _video: VideoParams, _audio: Option<AudioParams>) -> anyhow::Result<Self> {
-            unsupported("video encoding")
-        }
-
-        pub fn write_frame(&mut self, _frame: &RgbaImage) -> anyhow::Result<()> {
-            match self.0 {}
-        }
-
-        pub fn write_audio(&mut self, _interleaved: &[f32]) -> anyhow::Result<()> {
-            match self.0 {}
-        }
-
-        pub fn frames(&self) -> u64 {
-            match self.0 {}
-        }
-
-        pub fn finish(self) -> anyhow::Result<WriteSummary> {
             match self.0 {}
         }
     }

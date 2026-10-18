@@ -181,27 +181,46 @@ fn write_stepped_file(path: &PathBuf) {
     w.finish().unwrap();
 }
 
-/// The AAC round trip fades the first 512 frames in and pads the track to whole 1024-frame
-/// blocks, so the content's position is what a trim must preserve: the source's tone starts
-/// at frame 512 and steps at 44096, and a 1000..2000 ms trim at 44.1 kHz keeps exactly the
-/// quiet second, landing its content on the same frames.
+/// Silence after `samples`, so a tone that runs to the very end of a decode still shows where
+/// it stops. Decoders differ there: Media Foundation pads AAC to whole 1024-frame blocks,
+/// AVFoundation trims the track to the written frames.
+fn with_tail(samples: &[f32], channels: usize) -> Vec<f32> {
+    let mut v = samples.to_vec();
+    v.resize(v.len() + 1024 * channels, 0.0);
+    v
+}
+
+/// The source's step from loud to quiet sits at frame 44100, and a 1000..2000 ms trim at
+/// 44.1 kHz keeps exactly the quiet second, so its content must land on the source's frames
+/// shifted by 44100: it starts where the source's tone starts (decoders may fade in the first
+/// block) and stops where the source steps.
 #[test]
 fn transcode_keeps_audio_aligned_at_44100_hz() {
     let src = temp("align_src.mp4");
     write_stepped_file(&src);
     let whole = read_mp4_audio(&src).unwrap().unwrap();
-    assert_eq!((whole.sample_rate, whole.channels, whole.frames()), (44_100, 2, 89_088));
-    assert_eq!(envelope(&whole.samples, 2, 0.3, 0.2), (Some(512), Some(44_096)), "source tone start and step");
+    assert_eq!((whole.sample_rate, whole.channels), (44_100, 2));
+    assert!((88_200..88_200 + 1024).contains(&whole.frames()), "two seconds within one AAC block: {}", whole.frames());
+    let (start, step) = envelope(&with_tail(&whole.samples, 2), 2, 0.3, 0.2);
+    let (start, step) = (start.expect("source tone"), step.expect("source step"));
+    assert!(start < 1024, "source tone starts in the first AAC block, at {start}");
+    assert_eq!(step, 44_096, "source steps in the 64-frame window that holds frame 44100");
 
     let dst = temp("align_dst.mp4");
     let opts = TranscodeOptions { trim: Some((1000, 2000)), ..Default::default() };
     transcode(&src, &dst, &opts, &AtomicBool::new(false), |_| {}).unwrap();
     let out = read_mp4_audio(&dst).unwrap().unwrap();
-    assert_eq!(out.frames(), 45_056, "44100 frames padded to 1024-frame AAC blocks");
+    assert!((44_100..44_100 + 1024).contains(&out.frames()), "one second within one AAC block: {}", out.frames());
     assert_eq!(envelope(&out.samples, 2, 0.2, 0.0).0, None, "no loud audio from before the trim start");
-    assert_eq!(envelope(&out.samples, 2, 0.05, 0.03), (Some(512), Some(44_096)), "quiet tone starts and ends on the source's frames");
+    assert_eq!(
+        envelope(&with_tail(&out.samples, 2), 2, 0.05, 0.03),
+        (Some(start), Some(step)),
+        "quiet tone starts and ends on the source's frames"
+    );
 }
 
+/// AVFoundation's AAC decode can differ by an ulp between two decodes of the same file, so
+/// samples compare within 1e-6. A one-frame slip of the quiet tone is off by about 6e-3.
 #[test]
 fn audio_reader_seeks_to_the_exact_frame() {
     let src = temp("seek_src.mp4");
@@ -212,10 +231,12 @@ fn audio_reader_seeks_to_the_exact_frame() {
     r.seek(1000).unwrap();
     let mut chunks = Vec::new();
     assert!(r.next_chunk(&mut chunks).unwrap());
-    assert_eq!(chunks.len(), (1024 - 44_100 % 1024) * 2, "the rest of the 1024-frame block that holds frame 44100");
+    let first = chunks.len();
+    assert!(first > 0 && first % 2 == 0, "first chunk holds whole frames: {first} samples");
     assert!(r.next_chunk(&mut chunks).unwrap());
-    assert_eq!(chunks.len(), (1024 - 44_100 % 1024 + 1024) * 2);
-    assert_eq!(chunks, whole.samples[88_200..88_200 + chunks.len()], "seeked chunks equal the continuous decode from frame 44100");
+    assert!(chunks.len() > first, "second chunk is not empty");
+    let off = chunks.iter().zip(&whole.samples[88_200..88_200 + chunks.len()]).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+    assert!(off <= 1e-6, "seeked chunks equal the continuous decode from frame 44100, off by {off}");
 }
 
 const BLOCKS: [[u8; 3]; 8] =

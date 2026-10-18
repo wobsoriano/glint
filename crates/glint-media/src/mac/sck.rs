@@ -37,7 +37,7 @@ pub(crate) fn shareable_content() -> anyhow::Result<Retained<SCShareableContent>
 
 /// Carries an Objective-C object out of a completion handler. It is only read after the
 /// handler is done with it.
-struct SendBox<T>(T);
+pub(crate) struct SendBox<T>(pub(crate) T);
 unsafe impl<T> Send for SendBox<T> {}
 
 /// Captures display `display_id` at `width` x `height` pixels in sRGB, without the cursor.
@@ -82,7 +82,7 @@ pub fn screenshot(display_id: u32, width: u32, height: u32, include_own: bool) -
 
 /// Draws `image` into an sRGB RGBA buffer. Screen pixels are opaque, so premultiplied and
 /// straight alpha are the same.
-fn to_rgba(image: &CGImage) -> anyhow::Result<RgbaImage> {
+pub(crate) fn to_rgba(image: &CGImage) -> anyhow::Result<RgbaImage> {
     let (w, h) = (CGImage::width(Some(image)), CGImage::height(Some(image)));
     let mut buf = vec![0u8; w * h * 4];
     let space = CGColorSpace::with_name(Some(unsafe { kCGColorSpaceSRGB })).context("sRGB color space")?;
