@@ -23,6 +23,13 @@ app="target/$profile/Glint.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "target/$profile/glint" "$app/Contents/MacOS/glint"
+iconset=$(mktemp -d)/Glint.iconset
+mkdir -p "$iconset" "$app/Contents/Resources"
+for s in 16 32 128 256 512; do
+    sips -z $s $s assets/glint-mac-1024.png --out "$iconset/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s * 2)) $((s * 2)) assets/glint-mac-1024.png --out "$iconset/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/Glint.icns"
 cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -36,6 +43,8 @@ cat > "$app/Contents/Info.plist" <<EOF
     <string>com.glint.app</string>
     <key>CFBundleExecutable</key>
     <string>glint</string>
+    <key>CFBundleIconFile</key>
+    <string>Glint</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
