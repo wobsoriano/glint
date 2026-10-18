@@ -12,6 +12,7 @@ pub mod clock;
 pub mod devices;
 pub mod frames;
 pub mod input;
+mod input_recorder;
 pub mod reader;
 pub mod recorder;
 pub mod wav;

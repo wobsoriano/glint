@@ -1,7 +1,8 @@
 use crate::clock::MediaClock;
-use super::cursor::{self, CursorImage};
+use super::cursor;
+use crate::input_recorder::InputRecorder;
 use super::devices::PhysicalPixels;
-use crate::input::{Click, CursorSprite, InputTimeline, KeyPress, MouseButton, PointerSample};
+use crate::input::{InputTimeline, MouseButton};
 use super::keys::{shortcut_label, Mods};
 use super::screen::{window_capture_rect, WindowBounds};
 use anyhow::{bail, Context};
@@ -111,25 +112,18 @@ impl Drop for InputTrack {
 }
 
 const CURSOR_POLL_MS: u32 = 32;
-const POINTER_INTERVAL_MS: u64 = 8;
 
 thread_local! {
     static STATE: RefCell<Option<HookState>> = const { RefCell::new(None) };
 }
 
+/// Turns hook messages into recorder calls: maps screen positions to the capture, tracks
+/// modifiers for shortcut labels, and renders new cursor shapes.
 struct HookState {
-    clock: Arc<MediaClock>,
+    rec: InputRecorder,
     map: PointerMap,
     last_origin: (i32, i32),
-    scale: f32,
-    cursors_dir: PathBuf,
-    timeline: InputTimeline,
-    known_cursors: Vec<(u64, u32)>,
     current_handle: isize,
-    current_cursor: u32,
-    last_pos: (f32, f32),
-    last_pointer_ms: Option<u64>,
-    pending: [Option<usize>; 3],
     mods: Mods,
     down: HashSet<u32>,
 }
@@ -137,25 +131,13 @@ struct HookState {
 impl HookState {
     fn new(map: PointerMap, size: [u32; 2], scale: f32, cursors_dir: PathBuf, clock: Arc<MediaClock>) -> Self {
         Self {
-            clock,
+            rec: InputRecorder::new(size, scale, cursors_dir, clock),
             map,
             last_origin: (0, 0),
-            scale,
-            cursors_dir,
-            timeline: InputTimeline { version: 1, size, ..Default::default() },
-            known_cursors: Vec::new(),
             current_handle: 0,
-            current_cursor: 0,
-            last_pos: (0.0, 0.0),
-            last_pointer_ms: None,
-            pending: [None; 3],
             mods: Mods::default(),
             down: HashSet::new(),
         }
-    }
-
-    fn now(&self) -> Option<u64> {
-        (!self.clock.is_paused()).then(|| self.clock.now_ms())
     }
 
     fn map(&mut self, x: i32, y: i32) -> (f32, f32) {
@@ -164,28 +146,14 @@ impl HookState {
     }
 
     fn on_mouse(&mut self, msg: u32, x: i32, y: i32) {
-        let Some(t) = self.now() else { return };
+        if self.rec.clock.is_paused() {
+            return;
+        }
         let pos = self.map(x, y);
-        self.last_pos = pos;
         match msg {
-            WM_MOUSEMOVE => {
-                if self.last_pointer_ms.is_some_and(|last| t < last + POINTER_INTERVAL_MS) {
-                    return;
-                }
-                self.push_pointer(t, pos);
-            }
-            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
-                let (button, slot) = button_of(msg);
-                self.push_pointer(t, pos);
-                self.timeline.clicks.push(Click { t, up: t, x: pos.0, y: pos.1, button });
-                self.pending[slot] = Some(self.timeline.clicks.len() - 1);
-            }
-            WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP => {
-                let (_, slot) = button_of(msg);
-                if let Some(i) = self.pending[slot].take() {
-                    self.timeline.clicks[i].up = t;
-                }
-            }
+            WM_MOUSEMOVE => self.rec.moved(pos),
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => self.rec.pressed(button_of(msg), pos),
+            WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP => self.rec.released(button_of(msg), pos),
             _ => {}
         }
     }
@@ -202,76 +170,39 @@ impl HookState {
         if !self.down.insert(vk) {
             return;
         }
-        let Some(t) = self.now() else { return };
         if let Some(label) = shortcut_label(vk, self.mods) {
-            self.timeline.keys.push(KeyPress { t, label });
+            self.rec.key(label);
         }
     }
 
-    fn push_pointer(&mut self, t: u64, pos: (f32, f32)) {
-        self.timeline.pointer.push(PointerSample(t, pos.0, pos.1, self.current_cursor));
-        self.last_pointer_ms = Some(t);
-    }
-
-    /// Notices cursor shape changes, saving each new shape once, and position changes the
-    /// hooks did not see (`SetCursorPos` moves the cursor without input events).
+    /// Notices cursor shape changes and position changes the hooks did not see
+    /// (`SetCursorPos` moves the cursor without input events).
     fn poll_cursor(&mut self) {
         let mut info = CURSORINFO { cbSize: std::mem::size_of::<CURSORINFO>() as u32, ..Default::default() };
         if unsafe { GetCursorInfo(&mut info) }.is_err() || info.flags.0 & CURSOR_SHOWING.0 == 0 {
             return;
         }
         let pos = self.map(info.ptScreenPos.x, info.ptScreenPos.y);
-        if pos != self.last_pos {
-            if let Some(t) = self.now() {
-                self.last_pos = pos;
-                self.push_pointer(t, pos);
-            }
-        }
+        self.rec.polled(pos);
         let handle = info.hCursor.0 as isize;
         if handle == self.current_handle {
             return;
         }
         let Some(image) = cursor::render(info.hCursor) else { return };
         self.current_handle = handle;
-        let id = self.sprite_id(image);
-        if id != self.current_cursor {
-            self.current_cursor = id;
-            if let Some(t) = self.now() {
-                let pos = self.map(info.ptScreenPos.x, info.ptScreenPos.y);
-                self.push_pointer(t, pos);
-            }
-        }
+        self.rec.cursor_changed(image, pos);
     }
 
-    fn sprite_id(&mut self, image: CursorImage) -> u32 {
-        let hash = image.hash();
-        if let Some((_, id)) = self.known_cursors.iter().find(|(h, _)| *h == hash) {
-            return *id;
-        }
-        let id = self.known_cursors.len() as u32;
-        let file = format!("cursors/{id}.png");
-        let path = self.cursors_dir.join(format!("{id}.png"));
-        if image::save_buffer(&path, &image.rgba, image.width, image.height, image::ColorType::Rgba8).is_ok() {
-            self.known_cursors.push((hash, id));
-            self.timeline.cursors.push(CursorSprite { id, file, hotspot: image.hotspot, scale: self.scale });
-        }
-        id
-    }
-
-    fn finish(mut self) -> InputTimeline {
-        let end = self.clock.now_ms();
-        for i in self.pending.into_iter().flatten() {
-            self.timeline.clicks[i].up = end;
-        }
-        self.timeline
+    fn finish(self) -> InputTimeline {
+        self.rec.finish()
     }
 }
 
-fn button_of(msg: u32) -> (MouseButton, usize) {
+fn button_of(msg: u32) -> MouseButton {
     match msg {
-        WM_LBUTTONDOWN | WM_LBUTTONUP => (MouseButton::Left, 0),
-        WM_RBUTTONDOWN | WM_RBUTTONUP => (MouseButton::Right, 1),
-        _ => (MouseButton::Middle, 2),
+        WM_LBUTTONDOWN | WM_LBUTTONUP => MouseButton::Left,
+        WM_RBUTTONDOWN | WM_RBUTTONUP => MouseButton::Right,
+        _ => MouseButton::Middle,
     }
 }
 
@@ -316,23 +247,9 @@ mod tests {
         let mut s = state(PointerMap::Fixed { x: 100, y: 50 });
         s.on_mouse(WM_MOUSEMOVE, 110, 70);
         s.on_mouse(WM_MOUSEMOVE, 111, 71);
-        assert_eq!(s.timeline.pointer.len(), 1, "a second move within 8 ms is dropped");
-        let p = s.timeline.pointer[0];
+        assert_eq!(s.rec.timeline.pointer.len(), 1, "a second move within 8 ms is dropped");
+        let p = s.rec.timeline.pointer[0];
         assert_eq!((p.pos(), p.cursor()), ((10.0, 20.0), 0));
-    }
-
-    #[test]
-    fn clicks_pair_down_with_up_and_close_at_finish() {
-        let mut s = state(PointerMap::Fixed { x: 0, y: 0 });
-        s.on_mouse(WM_LBUTTONDOWN, 5, 6);
-        s.on_mouse(WM_LBUTTONUP, 5, 6);
-        s.on_mouse(WM_RBUTTONDOWN, 7, 8);
-        let tl = s.finish();
-        assert_eq!(tl.clicks.len(), 2);
-        assert_eq!((tl.clicks[0].button, tl.clicks[0].x, tl.clicks[0].y), (MouseButton::Left, 5.0, 6.0));
-        assert!(tl.clicks[0].up >= tl.clicks[0].t);
-        assert_eq!(tl.clicks[1].button, MouseButton::Right);
-        assert!(tl.clicks[1].up >= tl.clicks[1].t, "an unreleased button closes at the end");
     }
 
     const SC_Q: u32 = 0x10;
@@ -342,7 +259,7 @@ mod tests {
     const SC_ALTGR_LCONTROL: u32 = 0x21D;
 
     fn labels(s: &HookState) -> Vec<&str> {
-        s.timeline.keys.iter().map(|k| k.label.as_str()).collect()
+        s.rec.timeline.keys.iter().map(|k| k.label.as_str()).collect()
     }
 
     fn altgr_chord(s: &mut HookState, vk: u32, scan: u32) {
@@ -397,10 +314,10 @@ mod tests {
     #[test]
     fn nothing_is_recorded_while_paused() {
         let mut s = state(PointerMap::Fixed { x: 0, y: 0 });
-        s.clock.pause();
+        s.rec.clock.pause();
         s.on_mouse(WM_MOUSEMOVE, 1, 1);
         s.on_mouse(WM_LBUTTONDOWN, 1, 1);
         s.on_key(WM_KEYDOWN, windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN.0 as u32, SC_RETURN);
-        assert_eq!(s.timeline, InputTimeline { version: 1, size: [1920, 1080], ..Default::default() });
+        assert_eq!(s.rec.timeline, InputTimeline { version: 1, size: [1920, 1080], ..Default::default() });
     }
 }
