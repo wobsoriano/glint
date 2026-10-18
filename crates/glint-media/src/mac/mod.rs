@@ -8,9 +8,12 @@ mod av;
 pub(crate) mod devices;
 pub(crate) mod encoder;
 pub(crate) mod frames;
+pub(crate) mod hooks;
+mod keys;
 pub(crate) mod reader;
 pub mod sck;
 pub mod space;
+mod window;
 pub(crate) mod writer;
 
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {

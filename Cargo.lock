@@ -2538,8 +2538,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "block2",
+ "dispatch2",
  "image",
  "objc2",
+ "objc2-app-kit",
  "objc2-av-foundation",
  "objc2-avf-audio",
  "objc2-core-audio-types",
