@@ -59,45 +59,9 @@ pub struct VideoWriter {
 
 impl VideoWriter {
     pub fn create(path: &Path, video: VideoParams, audio: Option<AudioParams>) -> anyhow::Result<Self> {
-        if video.width % 2 != 0 || video.height % 2 != 0 || video.width == 0 || video.height == 0 {
-            bail!("video size must be even and non-zero, got {}x{}", video.width, video.height);
-        }
-        if video.fps == 0 {
-            bail!("frame rate must be non-zero");
-        }
-        if path.exists() {
-            std::fs::remove_file(path).with_context(|| format!("replace {}", path.display()))?;
-        }
-        let url = NSURL::from_file_path(path).with_context(|| format!("file URL for {}", path.display()))?;
-        let writer = unsafe { AVAssetWriter::assetWriterWithURL_fileType_error(&url, constant(AVFileTypeMPEG4)) }
-            .map_err(|e| ns_error(Some(e), &format!("create {}", path.display())))?;
-
-        let video_input = unsafe {
-            AVAssetWriterInput::assetWriterInputWithMediaType_outputSettings(constant(AVMediaTypeVideo), Some(&video_settings(video)))
-        };
-        if !unsafe { writer.canAddInput(&video_input) } {
-            bail!("AVAssetWriter rejects {:?} at {}x{}", video.codec, video.width, video.height);
-        }
-        unsafe { writer.addInput(&video_input) };
-        let (bgra, width, height) =
-            (number(kCVPixelFormatType_32BGRA as i64), number(video.width as i64), number(video.height as i64));
-        let source = settings(&[
-            (cf_key(unsafe { kCVPixelBufferPixelFormatTypeKey }), &bgra),
-            (cf_key(unsafe { kCVPixelBufferWidthKey }), &width),
-            (cf_key(unsafe { kCVPixelBufferHeightKey }), &height),
-        ]);
-        let adaptor = unsafe {
-            AVAssetWriterInputPixelBufferAdaptor::assetWriterInputPixelBufferAdaptorWithAssetWriterInput_sourcePixelBufferAttributes(
-                &video_input,
-                Some(&source),
-            )
-        };
-
+        let (writer, video_input, adaptor) = add_video(path, video, false)?;
         let audio = audio.map(|a| AudioTrack::add(&writer, a)).transpose()?;
-        if !unsafe { writer.startWriting() } {
-            return Err(ns_error(unsafe { writer.error() }, &format!("start writing {}", path.display())));
-        }
-        unsafe { writer.startSessionAtSourceTime(kCMTimeZero) };
+        start_writing(&writer, path)?;
         Ok(Self { writer, video_input, adaptor, audio, params: video, frames: 0, path: path.to_path_buf() })
     }
 
@@ -155,16 +119,7 @@ impl VideoWriter {
         if self.frames > 0 {
             unsafe { self.writer.endSessionAtSourceTime(CMTime::new(self.frames as i64, self.params.fps as i32)) };
         }
-        let (tx, rx) = mpsc::channel();
-        let done = RcBlock::new(move || {
-            let _ = tx.send(());
-        });
-        unsafe { self.writer.finishWritingWithCompletionHandler(&done) };
-        rx.recv_timeout(Duration::from_secs(60)).context("AVAssetWriter did not finish")?;
-        if unsafe { self.writer.status() } != AVAssetWriterStatus::Completed {
-            return Err(ns_error(unsafe { self.writer.error() }, &format!("finish {}", self.path.display())));
-        }
-        let bytes = std::fs::metadata(&self.path)?.len();
+        let bytes = finish_writing(&self.writer, &self.path)?;
         let frames = self.frames;
         Ok(WriteSummary { frames, duration_ms: frames * 1000 / self.params.fps as u64, bytes, hardware: true })
     }
@@ -184,6 +139,128 @@ impl VideoWriter {
 }
 
 impl Drop for VideoWriter {
+    fn drop(&mut self) {
+        if unsafe { self.writer.status() } == AVAssetWriterStatus::Writing {
+            unsafe { self.writer.cancelWriting() };
+        }
+    }
+}
+
+/// A writer for `path` with one video input for `video` and a BGRA pixel buffer adaptor on it.
+fn add_video(
+    path: &Path,
+    video: VideoParams,
+    realtime: bool,
+) -> anyhow::Result<(Retained<AVAssetWriter>, Retained<AVAssetWriterInput>, Retained<AVAssetWriterInputPixelBufferAdaptor>)> {
+    if video.width % 2 != 0 || video.height % 2 != 0 || video.width == 0 || video.height == 0 {
+        bail!("video size must be even and non-zero, got {}x{}", video.width, video.height);
+    }
+    if video.fps == 0 {
+        bail!("frame rate must be non-zero");
+    }
+    if path.exists() {
+        std::fs::remove_file(path).with_context(|| format!("replace {}", path.display()))?;
+    }
+    let url = NSURL::from_file_path(path).with_context(|| format!("file URL for {}", path.display()))?;
+    let writer = unsafe { AVAssetWriter::assetWriterWithURL_fileType_error(&url, constant(AVFileTypeMPEG4)) }
+        .map_err(|e| ns_error(Some(e), &format!("create {}", path.display())))?;
+
+    let input =
+        unsafe { AVAssetWriterInput::assetWriterInputWithMediaType_outputSettings(constant(AVMediaTypeVideo), Some(&video_settings(video))) };
+    unsafe { input.setExpectsMediaDataInRealTime(realtime) };
+    if !unsafe { writer.canAddInput(&input) } {
+        bail!("AVAssetWriter rejects {:?} at {}x{}", video.codec, video.width, video.height);
+    }
+    unsafe { writer.addInput(&input) };
+    let (bgra, width, height) = (number(kCVPixelFormatType_32BGRA as i64), number(video.width as i64), number(video.height as i64));
+    let source = settings(&[
+        (cf_key(unsafe { kCVPixelBufferPixelFormatTypeKey }), &bgra),
+        (cf_key(unsafe { kCVPixelBufferWidthKey }), &width),
+        (cf_key(unsafe { kCVPixelBufferHeightKey }), &height),
+    ]);
+    let adaptor = unsafe {
+        AVAssetWriterInputPixelBufferAdaptor::assetWriterInputPixelBufferAdaptorWithAssetWriterInput_sourcePixelBufferAttributes(
+            &input,
+            Some(&source),
+        )
+    };
+    Ok((writer, input, adaptor))
+}
+
+fn start_writing(writer: &AVAssetWriter, path: &Path) -> anyhow::Result<()> {
+    if !unsafe { writer.startWriting() } {
+        return Err(ns_error(unsafe { writer.error() }, &format!("start writing {}", path.display())));
+    }
+    unsafe { writer.startSessionAtSourceTime(kCMTimeZero) };
+    Ok(())
+}
+
+/// Waits for `writer` to close the file and returns its size.
+fn finish_writing(writer: &AVAssetWriter, path: &Path) -> anyhow::Result<u64> {
+    let (tx, rx) = mpsc::channel();
+    let done = RcBlock::new(move || {
+        let _ = tx.send(());
+    });
+    unsafe { writer.finishWritingWithCompletionHandler(&done) };
+    rx.recv_timeout(Duration::from_secs(60)).context("AVAssetWriter did not finish")?;
+    if unsafe { writer.status() } != AVAssetWriterStatus::Completed {
+        return Err(ns_error(unsafe { writer.error() }, &format!("finish {}", path.display())));
+    }
+    Ok(std::fs::metadata(path)?.len())
+}
+
+/// A video-only MP4 fed live pixel buffers at the caller's timestamps: the screen and camera
+/// tracks. The input runs in real time, so the encoder never holds capture back for long.
+pub(super) struct PixelWriter {
+    writer: Retained<AVAssetWriter>,
+    input: Retained<AVAssetWriterInput>,
+    adaptor: Retained<AVAssetWriterInputPixelBufferAdaptor>,
+    frames: u64,
+    path: PathBuf,
+}
+
+impl PixelWriter {
+    pub fn create(path: &Path, video: VideoParams) -> anyhow::Result<Self> {
+        let (writer, input, adaptor) = add_video(path, video, true)?;
+        start_writing(&writer, path)?;
+        Ok(Self { writer, input, adaptor, frames: 0, path: path.to_path_buf() })
+    }
+
+    /// Appends `pixels`, which must have the writer's size, shown from `at` on.
+    pub fn append(&mut self, pixels: &CVPixelBuffer, at: CMTime) -> anyhow::Result<()> {
+        let started = Instant::now();
+        while !unsafe { self.input.isReadyForMoreMediaData() } {
+            if unsafe { self.writer.status() } == AVAssetWriterStatus::Failed {
+                return Err(ns_error(unsafe { self.writer.error() }, "encode"));
+            }
+            if started.elapsed() > STALL {
+                bail!("the video encoder stopped taking frames");
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        tag_bt709(pixels);
+        if !unsafe { self.adaptor.appendPixelBuffer_withPresentationTime(pixels, at) } {
+            return Err(ns_error(unsafe { self.writer.error() }, "append frame"));
+        }
+        self.frames += 1;
+        Ok(())
+    }
+
+    pub fn frames(&self) -> u64 {
+        self.frames
+    }
+
+    /// Ends the last frame at `end` and closes the file. Returns its size in bytes.
+    pub fn finish(self, end: CMTime) -> anyhow::Result<u64> {
+        unsafe { self.input.markAsFinished() };
+        if self.frames > 0 {
+            unsafe { self.writer.endSessionAtSourceTime(end) };
+        }
+        finish_writing(&self.writer, &self.path)
+    }
+}
+
+impl Drop for PixelWriter {
     fn drop(&mut self) {
         if unsafe { self.writer.status() } == AVAssetWriterStatus::Writing {
             unsafe { self.writer.cancelWriting() };
@@ -237,21 +314,13 @@ fn video_settings(v: VideoParams) -> Retained<av::Settings> {
     ])
 }
 
-/// A BGRA copy of `frame` from the adaptor's pool, tagged BT.709 so VideoToolbox converts it
-/// with the same matrix the stream is tagged with.
+/// A BGRA copy of `frame` from the adaptor's pool, tagged BT.709.
 fn bgra_buffer(pool: &CVPixelBufferPool, frame: &RgbaImage) -> anyhow::Result<CFRetained<CVPixelBuffer>> {
     let mut out = ptr::null_mut();
     let status = unsafe { CVPixelBufferPool::create_pixel_buffer(None, pool, NonNull::from(&mut out)) };
     let pixels = NonNull::new(out).filter(|_| status == 0).with_context(|| format!("pixel buffer from pool: CVReturn {status}"))?;
     let pixels = unsafe { CFRetained::from_raw(pixels) };
-    for (key, value) in [
-        (unsafe { kCVImageBufferColorPrimariesKey }, unsafe { kCVImageBufferColorPrimaries_ITU_R_709_2 }),
-        (unsafe { kCVImageBufferTransferFunctionKey }, unsafe { kCVImageBufferTransferFunction_ITU_R_709_2 }),
-        (unsafe { kCVImageBufferYCbCrMatrixKey }, unsafe { kCVImageBufferYCbCrMatrix_ITU_R_709_2 }),
-    ] {
-        let value: &CFType = value;
-        unsafe { pixels.set_attachment(key, value, CVAttachmentMode::ShouldPropagate) };
-    }
+    tag_bt709(&pixels);
     let w = frame.width() as usize;
     let status = unsafe { CVPixelBufferLockBaseAddress(&pixels, CVPixelBufferLockFlags(0)) };
     if status != 0 {
@@ -270,6 +339,19 @@ fn bgra_buffer(pool: &CVPixelBufferPool, frame: &RgbaImage) -> anyhow::Result<CF
     }
     unsafe { CVPixelBufferUnlockBaseAddress(&pixels, CVPixelBufferLockFlags(0)) };
     Ok(pixels)
+}
+
+/// Tags `pixels` BT.709, the matrix the stream is tagged with, so VideoToolbox converts
+/// sRGB-like screen pixels to YCbCr without a color space conversion.
+fn tag_bt709(pixels: &CVPixelBuffer) {
+    for (key, value) in [
+        (unsafe { kCVImageBufferColorPrimariesKey }, unsafe { kCVImageBufferColorPrimaries_ITU_R_709_2 }),
+        (unsafe { kCVImageBufferTransferFunctionKey }, unsafe { kCVImageBufferTransferFunction_ITU_R_709_2 }),
+        (unsafe { kCVImageBufferYCbCrMatrixKey }, unsafe { kCVImageBufferYCbCrMatrix_ITU_R_709_2 }),
+    ] {
+        let value: &CFType = value;
+        unsafe { pixels.set_attachment(key, value, CVAttachmentMode::ShouldPropagate) };
+    }
 }
 
 /// The AAC input and the PCM queued for it.

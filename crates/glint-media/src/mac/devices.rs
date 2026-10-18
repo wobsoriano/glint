@@ -37,6 +37,30 @@ pub fn microphones() -> anyhow::Result<Vec<AudioDevice>> {
     unsupported("microphone enumeration")
 }
 
+/// Built-in, external and Continuity cameras. The device types are spelled out because the
+/// newer constants are missing from macOS 13's AVFoundation.
 pub fn cameras() -> anyhow::Result<Vec<CameraDevice>> {
-    unsupported("camera enumeration")
+    use crate::devices::DeviceId;
+    use objc2_av_foundation::{AVCaptureDeviceDiscoverySession, AVCaptureDevicePosition, AVMediaTypeVideo};
+    use objc2_foundation::{NSArray, NSOperatingSystemVersion, NSProcessInfo, NSString};
+
+    let macos_14 = NSProcessInfo::processInfo()
+        .isOperatingSystemAtLeastVersion(NSOperatingSystemVersion { majorVersion: 14, minorVersion: 0, patchVersion: 0 });
+    let types: &[&str] = if macos_14 {
+        &["AVCaptureDeviceTypeBuiltInWideAngleCamera", "AVCaptureDeviceTypeExternal", "AVCaptureDeviceTypeContinuityCamera"]
+    } else {
+        &["AVCaptureDeviceTypeBuiltInWideAngleCamera", "AVCaptureDeviceTypeExternalUnknown"]
+    };
+    let types: Vec<_> = types.iter().map(|t| NSString::from_str(t)).collect();
+    let session = unsafe {
+        AVCaptureDeviceDiscoverySession::discoverySessionWithDeviceTypes_mediaType_position(
+            &NSArray::from_retained_slice(&types),
+            Some(super::av::constant(AVMediaTypeVideo)),
+            AVCaptureDevicePosition::Unspecified,
+        )
+    };
+    Ok(unsafe { session.devices() }
+        .iter()
+        .map(|d| CameraDevice { id: DeviceId(unsafe { d.uniqueID() }.to_string()), name: unsafe { d.localizedName() }.to_string() })
+        .collect())
 }
