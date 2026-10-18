@@ -589,7 +589,7 @@ impl ClipEditor {
                             .text_sm()
                             .child(format!("Saved {name} · {} ({:+.0}%)", crate::actions::human_bytes(*bytes), -saved * 100.0)),
                     )
-                    .child(ui::button("reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
+                    .child(ui::button("reveal", format!("Show in {}", crate::shell::FILE_MANAGER), Some("folder"), false, move |_, _, _| {
                         shell::reveal(std::slice::from_ref(&reveal))
                     }))
                     .child(ui::button("copy", "Copy", Some("copy"), false, move |_, _, cx| match shell::copy_files(std::slice::from_ref(&copy), None) {

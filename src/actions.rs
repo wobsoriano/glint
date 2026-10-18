@@ -379,7 +379,7 @@ pub fn delete(dirs: Vec<PathBuf>, cx: &mut App, done: impl FnOnce(bool, &mut App
     let n = dirs.len();
     store::recycle(dirs, cx, move |result, cx| match result {
         Ok(()) => {
-            toast::show(if n == 1 { "Moved to the Recycle Bin".to_string() } else { format!("Moved {n} captures to the Recycle Bin") }, cx);
+            toast::show(if n == 1 { format!("Moved to the {}", shell::TRASH) } else { format!("Moved {n} captures to the {}", shell::TRASH) }, cx);
             done(true, cx);
         }
         Err(e) => {

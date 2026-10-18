@@ -129,7 +129,7 @@ impl Render for QuickLook {
                     .border_t_1()
                     .border_color(ui::theme().border)
                     .child(div().flex_1().text_sm().text_color(ui::theme().muted).child(info))
-                    .child(ui::button("ql-reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
+                    .child(ui::button("ql-reveal", format!("Show in {}", crate::shell::FILE_MANAGER), Some("folder"), false, move |_, _, _| {
                         shell::reveal(std::slice::from_ref(&reveal_item.dir))
                     }))
                     .child(ui::button("ql-copy", "Copy", Some("copy"), false, move |_, _, cx| actions::copy(&copy_item, cx)))

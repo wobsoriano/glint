@@ -73,6 +73,7 @@ impl CardAction {
             CardAction::QuickLook => "Open a large preview",
             CardAction::Edit => "Open in the editor",
             CardAction::CopyText => "Copy recognized text (on-device OCR)",
+            CardAction::Delete if cfg!(target_os = "macos") => "Move the capture to the Trash",
             CardAction::Delete => "Move the capture to the Recycle Bin",
             CardAction::Dismiss => "Close the card and keep the capture",
             CardAction::More => "Show the hidden actions",

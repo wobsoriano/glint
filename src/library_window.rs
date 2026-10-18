@@ -253,15 +253,17 @@ impl LibraryWindow {
             return;
         }
         let msg = if items.len() == 1 {
-            format!("Move \u{201c}{}\u{201d} to the Recycle Bin?", items[0].meta.title)
+            format!("Move \u{201c}{}\u{201d} to the {}?", items[0].meta.title, shell::TRASH)
         } else {
-            format!("Move {} captures to the Recycle Bin?", items.len())
+            format!("Move {} captures to the {}?", items.len(), shell::TRASH)
         };
+        let detail = format!("Edits and recording tracks go with them. You can restore them from the {}.", shell::TRASH);
+        let confirm = format!("Move to {}", shell::TRASH);
         let rx = window.prompt(
             PromptLevel::Warning,
             &msg,
-            Some("Edits and recording tracks go with them. You can restore them from the Recycle Bin."),
-            &["Move to Recycle Bin", "Cancel"],
+            Some(&detail),
+            &[confirm.as_str(), "Cancel"],
             cx,
         );
         let dirs: Vec<PathBuf> = items.into_iter().map(|i| i.dir).collect();
@@ -333,7 +335,7 @@ impl LibraryWindow {
                 cx.notify();
             }
             "i" if ctrl && k.modifiers.alt => prefs_update(cx, |p| p.inspector = !p.inspector),
-            "delete" => self.confirm_delete(window, cx),
+            "delete" | "backspace" => self.confirm_delete(window, cx),
             "enter" | "f2" => self.start_rename(cx),
             "space" => {
                 if !quicklook::close(cx) {
@@ -595,11 +597,11 @@ impl LibraryWindow {
                             many => actions::copy_files(many, cx),
                         }))
                         .child(ui::button("i-export", "Export…", Some("save"), false, move |_, _, cx| actions::export_to_folder(export_items.clone(), cx)))
-                        .child(ui::button("i-reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| {
+                        .child(ui::button("i-reveal", format!("Show in {}", shell::FILE_MANAGER), Some("folder"), false, move |_, _, _| {
                             let dirs: Vec<PathBuf> = reveal_items.iter().map(|i| i.dir.clone()).collect();
                             shell::reveal(&dirs);
                         }))
-                        .child(ui::button("i-trash", "Move to Recycle Bin", Some("trash"), false, cx.listener(|this, _, window, cx| this.confirm_delete(window, cx)))),
+                        .child(ui::button("i-trash", format!("Move to {}", shell::TRASH), Some("trash"), false, cx.listener(|this, _, window, cx| this.confirm_delete(window, cx)))),
                 )
             })
     }

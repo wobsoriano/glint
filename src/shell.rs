@@ -57,5 +57,15 @@ pub enum SaveChoice {
     Cancel,
 }
 
+/// Where deleted captures go, and the app that shows files, as the platform names them.
+#[cfg(windows)]
+pub const TRASH: &str = "Recycle Bin";
+#[cfg(windows)]
+pub const FILE_MANAGER: &str = "Explorer";
+#[cfg(target_os = "macos")]
+pub const TRASH: &str = "Trash";
+#[cfg(target_os = "macos")]
+pub const FILE_MANAGER: &str = "Finder";
+
 pub const OPEN_WITH_TYPES: [&str; 6] = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"];
 pub const OPEN_WITH_VIDEO_TYPES: [&str; 3] = [".mp4", ".mov", ".m4v"];

@@ -55,6 +55,11 @@ pub(crate) fn layout(mut raw: Vec<RawDisplay>) -> Vec<DisplayInfo> {
         .collect()
 }
 
+/// The display that holds pixel (`x`, `y`).
+pub fn display_at(displays: &[DisplayInfo], x: i32, y: i32) -> Option<&DisplayInfo> {
+    displays.iter().find(|d| x >= d.rect.x && y >= d.rect.y && x < d.rect.x + d.rect.width as i32 && y < d.rect.y + d.rect.height as i32)
+}
+
 fn global_scale(displays: &[DisplayInfo]) -> f64 {
     displays.iter().map(|d| d.scale).fold(1.0, f32::max) as f64
 }
@@ -107,13 +112,7 @@ pub fn to_points(displays: &[DisplayInfo], x: i32, y: i32) -> (f64, f64) {
 pub fn rect_to_points(displays: &[DisplayInfo], rect: [i32; 4]) -> [f64; 4] {
     let [x, y, w, h] = rect;
     let (cx, cy) = to_points(displays, x + w / 2, y + h / 2);
-    let s = displays
-        .iter()
-        .find(|d| {
-            let (px, py) = (x + w / 2, y + h / 2);
-            px >= d.rect.x && py >= d.rect.y && px < d.rect.x + d.rect.width as i32 && py < d.rect.y + d.rect.height as i32
-        })
-        .map_or(1.0, |d| d.scale as f64);
+    let s = display_at(displays, x + w / 2, y + h / 2).map_or(1.0, |d| d.scale as f64);
     let (pw, ph) = (w as f64 / s, h as f64 / s);
     [cx - pw / 2.0, cy - ph / 2.0, pw, ph]
 }

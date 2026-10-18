@@ -2,7 +2,7 @@ use dispatch2::DispatchQueue;
 use glint_media::{space, DisplayInfo};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2_app_kit::{NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWorkspace, NSWindowCollectionBehavior, NSWindowStyleMask};
 use objc2_core_graphics::{CGDisplayBounds, CGMainDisplayID};
 use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -93,8 +93,12 @@ pub fn bring_to_front(window: &gpui::Window) {
     window.activate_window();
 }
 
+/// The picture on the main display's desktop, when it is a file.
 pub fn desktop_wallpaper() -> Option<PathBuf> {
-    None
+    let screen = NSScreen::mainScreen(MainThreadMarker::new()?)?;
+    let url = NSWorkspace::sharedWorkspace().desktopImageURLForScreen(&screen)?;
+    let path = PathBuf::from(url.path()?.to_string());
+    path.is_file().then_some(path)
 }
 
 pub fn set_launch_at_login(_enabled: bool) {}

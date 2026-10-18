@@ -383,7 +383,7 @@ impl Studio {
                     .child(text.clone())
                     .when_some(file, |d, path| {
                         let p2 = path.clone();
-                        d.child(ui::button("reveal", "Show in Explorer", Some("folder"), false, move |_, _, _| shell::reveal(std::slice::from_ref(&path))))
+                        d.child(ui::button("reveal", format!("Show in {}", crate::shell::FILE_MANAGER), Some("folder"), false, move |_, _, _| shell::reveal(std::slice::from_ref(&path))))
                             .child(ui::button("copy-file", "Copy", Some("copy"), false, cx.listener(move |s, _, _, cx| {
                                 match shell::copy_files(std::slice::from_ref(&p2), None) {
                                     Ok(()) => s.notify("Copied the video to the clipboard", false, cx),
