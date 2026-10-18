@@ -78,7 +78,7 @@ impl Studio {
     fn tracks_scroll(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
         let d = e.delta.pixel_delta(px(20.));
         let x = self.timeline_x(e.position);
-        if e.modifiers.control {
+        if e.modifiers.secondary() {
             self.set_timeline_zoom(self.tl_zoom * (1.0 + f32::from(d.y) as f64 / 300.0), x, cx);
         } else if self.tl_zoom > 1.0 {
             let delta = if d.x != px(0.) { d.x } else { d.y };
@@ -250,7 +250,7 @@ impl Studio {
             .child(sep())
             .child(ui::button("add-zoom", "Add zoom", Some("zoom"), false, cx.listener(|s, _, _, cx| s.add_zoom(cx))))
             .child(div().flex_1())
-            .child(div().text_xs().text_color(ui::theme().muted).child("Ctrl+scroll to zoom"))
+            .child(div().text_xs().text_color(ui::theme().muted).child(ui::keys("Ctrl+scroll to zoom")))
             .child(ui::icon_button("tl-out", "minus", false, "Zoom timeline out", cx.listener(|s, _, _, cx| {
                 let mid = s.tracks_width() / 2.0;
                 s.set_timeline_zoom(s.tl_zoom / 1.5, mid, cx)

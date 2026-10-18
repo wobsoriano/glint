@@ -169,7 +169,7 @@ impl Editor {
             ScrollDelta::Pixels(d) => (f32::from(d.x), f32::from(d.y)),
             ScrollDelta::Lines(d) => (d.x * 48.0, d.y * 48.0),
         };
-        if e.modifiers.control || e.modifiers.alt {
+        if e.modifiers.secondary() || e.modifiers.alt {
             let anchor = pt(f32::from(e.position.x - a.origin.x) * sf, f32::from(e.position.y - a.origin.y) * sf);
             let factor = (dy * 0.0035).exp();
             let z = p.view.zoom * factor;

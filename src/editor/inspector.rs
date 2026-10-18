@@ -207,7 +207,7 @@ impl Editor {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .pl_4()
+                    .pl(px(ui::SYSTEM_CAPTION_INSET.unwrap_or(16.)))
                     .window_control_area(WindowControlArea::Drag)
                     .child(
                         div()
@@ -247,14 +247,14 @@ impl Editor {
                     .child(ui::icon_button("redact", "shield", false, "Smart redaction (Ctrl+Shift+R)", on(weak, |e, cx| e.auto_redact(cx))))
                     .child(ui::icon_button("ocr", "scan", false, "Copy text from image (Ctrl+Shift+T)", on(weak, |e, cx| e.copy_text(cx)))),
             )
-            .child(
+            .when(ui::SYSTEM_CAPTION_INSET.is_none(), |bar| bar.child(
                 div()
                     .h_full()
                     .flex()
                     .child(caption("min", "min", WindowControlArea::Min, false))
                     .child(caption("max", "max", WindowControlArea::Max, false))
                     .child(caption("close", "close", WindowControlArea::Close, true)),
-            )
+            ))
     }
 
     pub(super) fn style_bar(&self, weak: &WeakEntity<Editor>) -> impl IntoElement {

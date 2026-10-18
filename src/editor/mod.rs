@@ -74,7 +74,8 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: EditDoc, title: String, on_sav
             titlebar: Some(TitlebarOptions {
                 title: Some(format!("Glint — {title}").into()),
                 appears_transparent: true,
-                traffic_light_position: None,
+                // Centered in the 48 px title bar.
+                traffic_light_position: Some(gpui::point(px(18.), px(17.))),
             }),
             window_min_size: Some(size(px(1040.), px(660.))),
             window_background: gpui::WindowBackgroundAppearance::Transparent,

@@ -186,7 +186,7 @@ impl LibraryWindow {
                 let (lo, hi) = (a.min(b), a.max(b));
                 self.selection = visible[lo..=hi].iter().map(|i| i.dir.clone()).collect();
             }
-        } else if m.control {
+        } else if m.secondary() {
             if let Some(i) = self.selection.iter().position(|d| d == &dir) {
                 self.selection.remove(i);
             } else {
@@ -310,7 +310,7 @@ impl LibraryWindow {
             return;
         }
         let k = &e.keystroke;
-        let ctrl = k.modifiers.control;
+        let ctrl = k.modifiers.secondary();
         let columns = match cx.global::<Settings>().library.view {
             LibraryView::Grid => self.columns_hint as isize,
             LibraryView::List => 1,
@@ -692,11 +692,12 @@ impl Render for LibraryWindow {
         let n = visible.len();
         let content = if n == 0 {
             let msg = if !loaded {
-                "Loading…"
+                "Loading…".to_string()
             } else if !self.search.is_empty() {
-                "No captures match your search."
+                "No captures match your search.".to_string()
             } else {
-                "No captures yet. Press Ctrl+Shift+4 to capture an area."
+                let area = crate::hotkeys::display(&cx.global::<crate::settings::Settings>().hotkeys.area);
+                format!("No captures yet. Press {area} to capture an area.")
             };
             div().flex_1().flex().items_center().justify_center().text_sm().text_color(ui::theme().muted).child(msg).into_any_element()
         } else {

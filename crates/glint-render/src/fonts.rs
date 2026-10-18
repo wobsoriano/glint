@@ -1,5 +1,5 @@
 use crate::style::Color;
-use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
+use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -48,36 +48,98 @@ pub struct TextFont {
 
 impl Default for TextFont {
     fn default() -> Self {
-        Self { family: "Segoe UI".into(), weight: Weight::Semibold, align: Align::Left }
+        Self { family: DEFAULT_FAMILY.into(), weight: Weight::Semibold, align: Align::Left }
     }
 }
 
-const CATALOG: &[(&str, [&str; 5])] = &[
-    ("Segoe UI", ["segoeuil.ttf", "segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguibl.ttf"]),
-    ("Arial", ["", "arial.ttf", "", "arialbd.ttf", "ariblk.ttf"]),
-    ("Calibri", ["calibril.ttf", "calibri.ttf", "", "calibrib.ttf", ""]),
-    ("Cambria", ["", "cambria.ttc", "", "cambriab.ttf", ""]),
-    ("Candara", ["Candaral.ttf", "Candara.ttf", "", "Candarab.ttf", ""]),
-    ("Corbel", ["corbell.ttf", "corbel.ttf", "", "corbelb.ttf", ""]),
-    ("Constantia", ["", "constan.ttf", "", "constanb.ttf", ""]),
-    ("Georgia", ["", "georgia.ttf", "", "georgiab.ttf", ""]),
-    ("Times New Roman", ["", "times.ttf", "", "timesbd.ttf", ""]),
-    ("Palatino Linotype", ["", "pala.ttf", "", "palab.ttf", ""]),
-    ("Verdana", ["", "verdana.ttf", "", "verdanab.ttf", ""]),
-    ("Tahoma", ["", "tahoma.ttf", "", "tahomabd.ttf", ""]),
-    ("Trebuchet MS", ["", "trebuc.ttf", "", "trebucbd.ttf", ""]),
-    ("Bahnschrift", ["", "bahnschrift.ttf", "", "", ""]),
-    ("Consolas", ["", "consola.ttf", "", "consolab.ttf", ""]),
-    ("Cascadia Code", ["", "CascadiaCode.ttf", "", "", ""]),
-    ("Comic Sans MS", ["", "comic.ttf", "", "comicbd.ttf", ""]),
-    ("Impact", ["", "impact.ttf", "", "", ""]),
-    ("Segoe Print", ["", "segoepr.ttf", "", "segoeprb.ttf", ""]),
-    ("Segoe Script", ["", "segoesc.ttf", "", "segoescb.ttf", ""]),
+/// One face of a family: a font file, the face's index in a collection, and for variable
+/// fonts the `wght` axis value.
+#[derive(Clone, Copy, Debug)]
+struct Face {
+    file: &'static str,
+    index: u32,
+    wght: Option<f32>,
+}
+
+/// A static face, the only one in its file.
+const fn f(file: &'static str) -> Option<Face> {
+    Some(Face { file, index: 0, wght: None })
+}
+
+/// A face at `index` of a collection.
+const fn c(file: &'static str, index: u32) -> Option<Face> {
+    Some(Face { file, index, wght: None })
+}
+
+/// An instance of a variable font.
+#[cfg(target_os = "macos")]
+const fn v(file: &'static str, wght: f32) -> Option<Face> {
+    Some(Face { file, index: 0, wght: Some(wght) })
+}
+
+/// Families with their Light, Regular, Semibold, Bold and Black faces. Regular is required.
+#[cfg(not(target_os = "macos"))]
+const CATALOG: &[(&str, [Option<Face>; 5])] = &[
+    ("Segoe UI", [f("segoeuil.ttf"), f("segoeui.ttf"), f("seguisb.ttf"), f("segoeuib.ttf"), f("seguibl.ttf")]),
+    ("Arial", [None, f("arial.ttf"), None, f("arialbd.ttf"), f("ariblk.ttf")]),
+    ("Calibri", [f("calibril.ttf"), f("calibri.ttf"), None, f("calibrib.ttf"), None]),
+    ("Cambria", [None, c("cambria.ttc", 0), None, f("cambriab.ttf"), None]),
+    ("Candara", [f("Candaral.ttf"), f("Candara.ttf"), None, f("Candarab.ttf"), None]),
+    ("Corbel", [f("corbell.ttf"), f("corbel.ttf"), None, f("corbelb.ttf"), None]),
+    ("Constantia", [None, f("constan.ttf"), None, f("constanb.ttf"), None]),
+    ("Georgia", [None, f("georgia.ttf"), None, f("georgiab.ttf"), None]),
+    ("Times New Roman", [None, f("times.ttf"), None, f("timesbd.ttf"), None]),
+    ("Palatino Linotype", [None, f("pala.ttf"), None, f("palab.ttf"), None]),
+    ("Verdana", [None, f("verdana.ttf"), None, f("verdanab.ttf"), None]),
+    ("Tahoma", [None, f("tahoma.ttf"), None, f("tahomabd.ttf"), None]),
+    ("Trebuchet MS", [None, f("trebuc.ttf"), None, f("trebucbd.ttf"), None]),
+    ("Bahnschrift", [None, f("bahnschrift.ttf"), None, None, None]),
+    ("Consolas", [None, f("consola.ttf"), None, f("consolab.ttf"), None]),
+    ("Cascadia Code", [None, f("CascadiaCode.ttf"), None, None, None]),
+    ("Comic Sans MS", [None, f("comic.ttf"), None, f("comicbd.ttf"), None]),
+    ("Impact", [None, f("impact.ttf"), None, None, None]),
+    ("Segoe Print", [None, f("segoepr.ttf"), None, f("segoeprb.ttf"), None]),
+    ("Segoe Script", [None, f("segoesc.ttf"), None, f("segoescb.ttf"), None]),
 ];
 
-fn fonts_dir() -> String {
+#[cfg(not(target_os = "macos"))]
+const DEFAULT_FAMILY: &str = "Segoe UI";
+
+#[cfg(not(target_os = "macos"))]
+fn fonts_dir() -> std::path::PathBuf {
     let dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
-    format!("{dir}\\Fonts")
+    std::path::Path::new(&dir).join("Fonts")
+}
+
+/// Paths are relative to /System/Library/Fonts. Collection indices and variable instances come
+/// from the faces CoreText lists for each file.
+#[cfg(target_os = "macos")]
+const CATALOG: &[(&str, [Option<Face>; 5])] = &[
+    ("SF Pro", [v("SFNS.ttf", 300.), v("SFNS.ttf", 400.), v("SFNS.ttf", 600.), v("SFNS.ttf", 700.), v("SFNS.ttf", 900.)]),
+    ("New York", [None, v("NewYork.ttf", 400.), v("NewYork.ttf", 600.), v("NewYork.ttf", 700.), v("NewYork.ttf", 900.)]),
+    ("SF Mono", [v("SFNSMono.ttf", 300.), v("SFNSMono.ttf", 400.), v("SFNSMono.ttf", 600.), v("SFNSMono.ttf", 700.), v("SFNSMono.ttf", 800.)]),
+    ("Helvetica Neue", [c("HelveticaNeue.ttc", 7), c("HelveticaNeue.ttc", 0), c("HelveticaNeue.ttc", 10), c("HelveticaNeue.ttc", 1), None]),
+    ("Avenir Next", [c("Avenir Next.ttc", 10), c("Avenir Next.ttc", 7), c("Avenir Next.ttc", 2), c("Avenir Next.ttc", 0), c("Avenir Next.ttc", 8)]),
+    ("Arial", [None, f("Supplemental/Arial.ttf"), None, f("Supplemental/Arial Bold.ttf"), f("Supplemental/Arial Black.ttf")]),
+    ("Georgia", [None, f("Supplemental/Georgia.ttf"), None, f("Supplemental/Georgia Bold.ttf"), None]),
+    ("Times New Roman", [None, f("Supplemental/Times New Roman.ttf"), None, f("Supplemental/Times New Roman Bold.ttf"), None]),
+    ("Palatino", [None, c("Palatino.ttc", 0), None, c("Palatino.ttc", 2), None]),
+    ("Optima", [None, c("Optima.ttc", 0), None, c("Optima.ttc", 1), c("Optima.ttc", 4)]),
+    ("Verdana", [None, f("Supplemental/Verdana.ttf"), None, f("Supplemental/Verdana Bold.ttf"), None]),
+    ("Tahoma", [None, f("Supplemental/Tahoma.ttf"), None, f("Supplemental/Tahoma Bold.ttf"), None]),
+    ("Trebuchet MS", [None, f("Supplemental/Trebuchet MS.ttf"), None, f("Supplemental/Trebuchet MS Bold.ttf"), None]),
+    ("Menlo", [None, c("Menlo.ttc", 0), None, c("Menlo.ttc", 1), None]),
+    ("Courier New", [None, f("Supplemental/Courier New.ttf"), None, f("Supplemental/Courier New Bold.ttf"), None]),
+    ("Comic Sans MS", [None, f("Supplemental/Comic Sans MS.ttf"), None, f("Supplemental/Comic Sans MS Bold.ttf"), None]),
+    ("Impact", [None, f("Supplemental/Impact.ttf"), None, None, None]),
+];
+
+#[cfg(target_os = "macos")]
+const DEFAULT_FAMILY: &str = "SF Pro";
+
+#[cfg(target_os = "macos")]
+fn fonts_dir() -> std::path::PathBuf {
+    "/System/Library/Fonts".into()
 }
 
 /// Families from the catalog whose regular face is installed.
@@ -86,7 +148,7 @@ pub fn families() -> &'static [&'static str] {
         let dir = fonts_dir();
         CATALOG
             .iter()
-            .filter(|(_, files)| std::path::Path::new(&format!("{dir}\\{}", files[1])).exists())
+            .filter(|(_, faces)| faces[1].is_some_and(|f| dir.join(f.file).exists()))
             .map(|(name, _)| *name)
             .collect()
     });
@@ -95,32 +157,37 @@ pub fn families() -> &'static [&'static str] {
 
 /// Weights with a real face for `family`.
 pub fn weights(family: &str) -> Vec<Weight> {
-    let Some((_, files)) = CATALOG.iter().find(|(n, _)| *n == family) else {
+    let Some((_, faces)) = CATALOG.iter().find(|(n, _)| *n == family) else {
         return vec![Weight::Regular];
     };
-    Weight::ALL.into_iter().filter(|w| !files[w.index()].is_empty()).collect()
+    Weight::ALL.into_iter().filter(|w| faces[w.index()].is_some()).collect()
 }
 
 type FontCache = Mutex<HashMap<(String, Weight), Option<Arc<FontVec>>>>;
 static CACHE: LazyLock<FontCache> = LazyLock::new(Default::default);
 
-fn load(file: &str) -> Option<FontVec> {
-    let bytes = std::fs::read(format!("{}\\{file}", fonts_dir())).ok()?;
-    FontVec::try_from_vec_and_index(bytes, 0).ok()
+fn load(face: Face) -> Option<FontVec> {
+    let bytes = std::fs::read(fonts_dir().join(face.file)).ok()?;
+    let mut font = FontVec::try_from_vec_and_index(bytes, face.index).ok()?;
+    if let Some(wght) = face.wght {
+        font.set_variation(b"wght", wght);
+    }
+    Some(font)
 }
 
-/// The face for `family` at the nearest available weight, falling back to Segoe UI, then Arial.
+/// The face for `family` at the nearest available weight, falling back to the platform's
+/// default family, then Arial.
 pub fn font(family: &str, weight: Weight) -> Option<Arc<FontVec>> {
     let key = (family.to_string(), weight);
     if let Some(f) = CACHE.lock().unwrap().get(&key) {
         return f.clone();
     }
-    let loaded = [family, "Segoe UI", "Arial"].iter().find_map(|fam| {
-        let (_, files) = CATALOG.iter().find(|(n, _)| n == fam)?;
+    let loaded = [family, DEFAULT_FAMILY, "Arial"].iter().find_map(|fam| {
+        let (_, faces) = CATALOG.iter().find(|(n, _)| n == fam)?;
         let want = weight.index() as i32;
-        let mut order: Vec<usize> = (0..5).filter(|i| !files[*i].is_empty()).collect();
+        let mut order: Vec<usize> = (0..5).filter(|i| faces[*i].is_some()).collect();
         order.sort_by_key(|i| ((*i as i32 - want).abs(), -(*i as i32)));
-        order.into_iter().find_map(|i| load(files[i])).map(Arc::new)
+        order.into_iter().find_map(|i| load(faces[i]?)).map(Arc::new)
     });
     CACHE.lock().unwrap().insert(key, loaded.clone());
     loaded
@@ -234,12 +301,22 @@ mod tests {
 
     #[test]
     fn catalog_lists_installed_families_and_falls_back() {
-        assert!(families().contains(&"Segoe UI"));
+        assert!(families().contains(&DEFAULT_FAMILY));
         assert_eq!(weights("Georgia"), vec![Weight::Regular, Weight::Bold]);
         assert!(font("Georgia", Weight::Black).is_some(), "nearest weight is used");
-        assert!(font("No Such Font", Weight::Regular).is_some(), "falls back to Segoe UI");
-        let (w1, _) = measure(font("Segoe UI", Weight::Regular).as_deref(), "Hello", 40.0);
-        let (w2, _) = measure(font("Segoe UI", Weight::Black).as_deref(), "Hello", 40.0);
+        assert!(font("No Such Font", Weight::Regular).is_some(), "falls back to the default family");
+        let (w1, _) = measure(font(DEFAULT_FAMILY, Weight::Regular).as_deref(), "Hello", 40.0);
+        let (w2, _) = measure(font(DEFAULT_FAMILY, Weight::Black).as_deref(), "Hello", 40.0);
         assert!(w2 > w1, "black is wider than regular: {w2} vs {w1}");
+    }
+
+    #[test]
+    fn every_face_of_an_installed_family_loads() {
+        for family in families() {
+            let (_, faces) = CATALOG.iter().find(|(n, _)| n == family).unwrap();
+            for face in faces.iter().flatten() {
+                assert!(load(*face).is_some(), "{family}: {face:?}");
+            }
+        }
     }
 }

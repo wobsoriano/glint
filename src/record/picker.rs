@@ -153,7 +153,7 @@ impl Picker {
 
 fn edit_script(text: &mut String, e: &KeyDownEvent) -> bool {
     let k = &e.keystroke;
-    let ctrl = k.modifiers.control;
+    let ctrl = k.modifiers.secondary();
     match k.key.as_str() {
         "enter" => text.push('\n'),
         "backspace" if ctrl => {
@@ -295,7 +295,7 @@ impl Picker {
                     .border_color(ui::accent())
                     .text_sm()
                     .text_color(ui::theme().text)
-                    .when(empty, |d| d.justify_start().child(div().text_color(ui::theme().muted).child("Type or paste your script (Ctrl+V)")))
+                    .when(empty, |d| d.justify_start().child(div().text_color(ui::theme().muted).child(ui::keys("Type or paste your script (Ctrl+V)"))))
                     .children(paragraphs.into_iter().enumerate().map(move |(i, line)| {
                         div()
                             .min_h(px(18.))

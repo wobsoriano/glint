@@ -326,7 +326,7 @@ impl Editor {
 
     pub(super) fn on_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &e.keystroke;
-        let (ctrl, shift) = (k.modifiers.control, k.modifiers.shift);
+        let (ctrl, shift) = (k.modifiers.secondary(), k.modifiers.shift);
         let key = k.key.as_str();
 
         if let Some(typing) = self.typing {

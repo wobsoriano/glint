@@ -102,7 +102,7 @@ pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     let m = &k.modifiers;
     let function_key = key.starts_with('F') && key.len() > 1 && key[1..].chars().all(|c| c.is_ascii_digit());
     if !(m.control || m.alt || m.platform || function_key || key == "Printscreen") {
-        return Err("Include Ctrl, Alt or Win in the shortcut".into());
+        return Err(if cfg!(target_os = "macos") { "Include ⌃, ⌥ or ⌘ in the shortcut" } else { "Include Ctrl, Alt or Win in the shortcut" }.into());
     }
     let mut parts = Vec::new();
     if m.control {
@@ -121,8 +121,13 @@ pub fn accelerator(k: &gpui::Keystroke) -> Result<Option<String>, String> {
     parse(&accel).map(|_| Some(accel)).map_err(|_| format!("{key} cannot be used in a global shortcut"))
 }
 
+/// A global shortcut as the platform writes it: `Ctrl+Shift+4` on Windows, `⌃⇧4` on macOS.
 pub fn display(accel: &str) -> String {
-    accel.replace("Super", "Win")
+    if cfg!(target_os = "macos") {
+        crate::ui::mac_chords(accel, "⌃")
+    } else {
+        accel.replace("Super", "Win")
+    }
 }
 
 #[cfg(test)]
@@ -138,7 +143,7 @@ mod tests {
         assert_eq!(accelerator(&key("ctrl-shift-4")), Ok(Some("Ctrl+Shift+4".into())));
         assert_eq!(accelerator(&key("ctrl-alt-l")), Ok(Some("Ctrl+Alt+L".into())));
         assert_eq!(accelerator(&key("f9")), Ok(Some("F9".into())));
-        assert_eq!(accelerator(&key("shift-k")), Err("Include Ctrl, Alt or Win in the shortcut".into()));
+        assert!(accelerator(&key("shift-k")).is_err_and(|e| e.starts_with("Include ")), "a modifier is required");
         assert_eq!(accelerator(&key("ctrl-a")), Ok(Some("Ctrl+A".into())));
         assert_eq!(accelerator(&key("ctrl-up")), Ok(Some("Ctrl+Up".into())));
     }

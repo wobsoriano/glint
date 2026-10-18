@@ -6,7 +6,7 @@ pub fn appearance() -> Appearance {
     let light = reg_dword(w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"), w!("AppsUseLightTheme")) == Some(1);
     // AccentColor is stored as 0xAABBGGRR.
     let accent = reg_dword(w!(r"Software\Microsoft\Windows\DWM"), w!("AccentColor")).map(|v| [v as u8, (v >> 8) as u8, (v >> 16) as u8]);
-    Appearance { light, accent }
+    Appearance { light, accent, backdrop: true }
 }
 
 fn reg_dword(key: PCWSTR, value: PCWSTR) -> Option<u32> {

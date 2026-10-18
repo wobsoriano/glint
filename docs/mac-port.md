@@ -27,10 +27,30 @@ Steps 1 and 2 of the suggested first steps are done.
   styling calls do nothing. `docs/architecture.md` describes the layout.
 - `tools/check-windows.sh --workspace --all-targets` type-checks the Windows build from the Mac.
   It passes with zero warnings. Run it after every change to shared code.
-- `cargo test --workspace` on macOS: everything passes except tests that need the media backend
-  or Windows fonts. These are `glint-media` `roundtrip` (8) and `screen_failure` (4), `glint-studio`
-  `engine` (6), and `glint-render` `fonts::tests` (1). Treat the first three files as the
-  acceptance tests for the AVFoundation backend.
+- `cargo test --workspace` on macOS: everything passes except the tests that need the media
+  backend: `glint-media` `roundtrip` (8) and `screen_failure` (4), and `glint-studio` `engine`
+  (6). Treat them as the acceptance tests for the AVFoundation backend.
+- Step 3 (screenshots) is mostly done and checked in the running app on a 2x display:
+  full-screen, click-a-window and area capture, the overlay with loupe, the preview stack, the
+  Library, the editor (drawing, ⌘Z), and the clipboard.
+  - Screen space: `glint_media::space` (`crates/glint-media/src/mac/space.rs`) is the one place
+    that converts between macOS points and Glint pixels. Read its module doc before touching
+    coordinates.
+  - Floating windows (overlay, stack, toasts, pins, recording chrome) drop AppKit's `Titled`
+    style in `sys/mac/desktop.rs::float`, because AppKit keeps titled windows below the menu
+    bar.
+  - Fonts: `glint-render/src/fonts.rs` has a macOS catalog (SF Pro is the default, and variable
+    fonts use the `wght` axis). The UI font is `.SystemUIFont`.
+  - Theme: light or dark and the accent come from the system. Without Mica, window surfaces are
+    opaque (`Appearance::backdrop`).
+  - Shortcuts: in-app shortcuts use `modifiers.secondary()` and show as ⌘ through `ui::keys`.
+    Global hotkeys keep the Windows defaults (⌃⇧2 to ⌃⇧7, ⌃⇧L), which avoid the system's
+    ⌘⇧3/4/5.
+  - Custom title bars leave the traffic lights to the system (`ui::SYSTEM_CAPTION_INSET`).
+  - Still open in step 3: copying and dragging files (`shell::copy_files`, `drag_out`), Trash
+    (`library::recycle`), OCR (Vision), the save-failed dialog, the menu bar item in place of
+    the tray, the accessory activation policy, single instance and IPC, launch at login, and
+    the wallpaper background.
 - The macOS build warns about dead code in shared `glint-media` helpers (`WavWriter`,
   `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and in root
   items only the Windows backend uses so far. The macOS backend will use them. Don't silence the
@@ -95,12 +115,6 @@ For Objective-C interop, use `objc2` and its framework crates (`objc2-app-kit`,
 
 ## Things that will bite
 
-- **Fonts.** `glint-render/src/fonts.rs` loads faces from `%WINDIR%\Fonts` by file name, and
-  `TextFont::default()` is Segoe UI. On macOS no face loads, so text annotations and captions
-  draw nothing. It needs a per-platform catalog (`/System/Library/Fonts` and its `Supplemental`
-  folder have Arial, Georgia, Verdana, Helvetica Neue and others; `.ttc` faces need an index)
-  and a macOS default family. Documents saved on Windows name Segoe UI, so keep the fallback
-  chain.
 - **Permissions.** Screen Recording (TCC), Accessibility (event taps), Microphone and Camera
   each need a prompt and an `Info.plist` usage string. macOS keys the grants to the code
   signature, so a `cargo run` binary loses them on every rebuild. Build into a `.app` bundle

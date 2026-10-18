@@ -66,7 +66,7 @@ impl Pin {
         if dy == 0.0 {
             return;
         }
-        if e.modifiers.control {
+        if e.modifiers.secondary() {
             self.opacity = (self.opacity + dy.signum() * 0.08).clamp(0.2, 1.0);
             cx.notify();
             return;
@@ -103,7 +103,7 @@ impl Render for Pin {
                 let k = &e.keystroke;
                 if k.key == "escape" {
                     window.remove_window();
-                } else if k.key == "c" && k.modifiers.control {
+                } else if k.key == "c" && k.modifiers.secondary() {
                     let _ = desktop::copy_image(&this.raw);
                 }
             }))

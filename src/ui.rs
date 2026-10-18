@@ -8,7 +8,15 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{LazyLock, RwLock};
 
+#[cfg(windows)]
 pub const FONT: &str = "Segoe UI Variable Text";
+/// The system font (San Francisco), as CoreText names it.
+#[cfg(target_os = "macos")]
+pub const FONT: &str = ".SystemUIFont";
+
+/// The system draws the window controls (the macOS traffic lights), so custom title bars leave
+/// them out and keep this much room for them at the left.
+pub const SYSTEM_CAPTION_INSET: Option<f32> = if cfg!(target_os = "macos") { Some(86.) } else { None };
 
 pub const RADIUS_WINDOW: f32 = 8.;
 pub const RADIUS_CONTROL: f32 = 4.;
@@ -35,10 +43,13 @@ pub(crate) struct Appearance {
     pub light: bool,
     /// The user's accent color as RGB, when the system has one.
     pub accent: Option<[u8; 3]>,
+    /// The system draws a backdrop behind the window (Mica on Windows), so the window's own
+    /// surfaces stay translucent.
+    pub backdrop: bool,
 }
 
 fn read_theme() -> Theme {
-    let Appearance { light, accent } = crate::sys::ui::appearance();
+    let Appearance { light, accent, backdrop } = crate::sys::ui::appearance();
     let (mut r, mut g, mut b) = accent.map(|[r, g, b]| (r as u32, g as u32, b as u32)).unwrap_or((0x00, 0x67, 0xC0));
     if !light && r.max(g).max(b) < 0x90 {
         let lift = |c: u32| c + (0xFF - c) / 3;
@@ -47,7 +58,7 @@ fn read_theme() -> Theme {
     let accent = (r << 24) | (g << 16) | (b << 8) | 0xFF;
     let luma = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0;
     let on_accent = if luma > 0.6 { 0x000000FF } else { 0xFFFFFFFF };
-    if light {
+    let theme = if light {
         Theme {
             dark: false,
             accent: rgba(accent),
@@ -81,7 +92,18 @@ fn read_theme() -> Theme {
             field: rgba(0x1C1C1CE6),
             flyout: rgba(0x2C2C2CF8),
         }
+    };
+    if backdrop {
+        return theme;
     }
+    let base = Rgba { a: 1., ..theme.base };
+    Theme { base, layer: over(theme.layer, base), ..theme }
+}
+
+/// `top` composited over the opaque `bottom`.
+fn over(top: Rgba, bottom: Rgba) -> Rgba {
+    let mix = |t: f32, b: f32| t * top.a + b * (1. - top.a);
+    Rgba { r: mix(top.r, bottom.r), g: mix(top.g, bottom.g), b: mix(top.b, bottom.b), a: 1. }
 }
 
 static THEME: LazyLock<RwLock<Theme>> = LazyLock::new(|| RwLock::new(read_theme()));
@@ -135,8 +157,48 @@ impl Render for Tip {
     }
 }
 
+/// Shortcut text as the platform writes it. In-app shortcuts are written with `Ctrl`, which
+/// stands for the secondary modifier: Ctrl on Windows, ⌘ on macOS (`Undo (Ctrl+Z)` reads
+/// `Undo (⌘Z)` there).
+pub fn keys(text: &str) -> String {
+    if cfg!(target_os = "macos") {
+        mac_chords(text, "⌘")
+    } else {
+        text.to_string()
+    }
+}
+
+/// Rewrites each `Mod+Mod+Key` chord in `text` with Mac symbols in the Mac order (⌃⌥⇧⌘), with
+/// `ctrl` as the symbol for `Ctrl`. A word key keeps a space: `Ctrl+scroll` becomes `⌘ scroll`.
+pub fn mac_chords(text: &str, ctrl: &str) -> String {
+    static CHORD: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\b((?:(?:Ctrl|Alt|Shift|Super|Win|Cmd)\+)+)([^\s)]+)").unwrap());
+    CHORD
+        .replace_all(text, |c: &regex::Captures| {
+            let mods: Vec<&str> = c[1].split('+').collect();
+            let has = |m: &[&str]| mods.iter().any(|x| m.contains(x));
+            let mut out = String::new();
+            for (present, symbol) in [
+                (has(&["Ctrl"]) && ctrl == "⌃", "⌃"),
+                (has(&["Alt"]), "⌥"),
+                (has(&["Shift"]), "⇧"),
+                (has(&["Super", "Win", "Cmd"]) || (has(&["Ctrl"]) && ctrl == "⌘"), "⌘"),
+            ] {
+                if present {
+                    out.push_str(symbol);
+                }
+            }
+            let key = &c[2];
+            if key.len() > 1 && key.chars().all(|ch| ch.is_ascii_lowercase()) {
+                out.push(' ');
+            }
+            out + key
+        })
+        .into_owned()
+}
+
 pub fn tooltip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    let text = text.into();
+    let text: SharedString = keys(&text.into()).into();
     move |_, cx| cx.new(|_| Tip(text.clone())).into()
 }
 
@@ -432,7 +494,7 @@ pub enum Edit {
 
 pub fn edit_text(text: &mut String, e: &gpui::KeyDownEvent) -> Edit {
     let k = &e.keystroke;
-    let ctrl = k.modifiers.control;
+    let ctrl = k.modifiers.secondary();
     match k.key.as_str() {
         "enter" => Edit::Submit,
         "escape" => Edit::Cancel,
@@ -506,5 +568,22 @@ impl ToRgba for crate::style::Color {
             b: self.b() as f32 / 255.0,
             a: self.a() as f32 / 255.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mac_chords;
+
+    #[test]
+    fn chords_become_mac_symbols_in_mac_order() {
+        assert_eq!(mac_chords("Undo (Ctrl+Z)", "⌘"), "Undo (⌘Z)");
+        assert_eq!(mac_chords("Smart redaction (Ctrl+Shift+R)", "⌘"), "Smart redaction (⇧⌘R)");
+        assert_eq!(mac_chords("Inspector (Ctrl+Alt+I)", "⌘"), "Inspector (⌥⌘I)");
+        assert_eq!(mac_chords("Zoom out (Ctrl+-)", "⌘"), "Zoom out (⌘-)");
+        assert_eq!(mac_chords("Ctrl+scroll to zoom", "⌘"), "⌘ scroll to zoom");
+        assert_eq!(mac_chords("Ctrl+Shift+4", "⌃"), "⌃⇧4");
+        assert_eq!(mac_chords("Ctrl+Alt+Shift+Super+F1", "⌃"), "⌃⌥⇧⌘F1");
+        assert_eq!(mac_chords("No chords here, Ctrl alone.", "⌘"), "No chords here, Ctrl alone.");
     }
 }

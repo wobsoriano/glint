@@ -126,8 +126,16 @@ pub mod target {
 
 pub mod ui {
     use crate::ui::Appearance;
+    use objc2_app_kit::{NSColor, NSColorSpace};
+    use objc2_foundation::{NSString, NSUserDefaults};
 
     pub fn appearance() -> Appearance {
-        Appearance { light: true, accent: None }
+        let style = NSUserDefaults::standardUserDefaults().stringForKey(&NSString::from_str("AppleInterfaceStyle"));
+        let light = style.is_none_or(|s| s.to_string() != "Dark");
+        let accent = NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()).map(|c| {
+            let byte = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            [byte(c.redComponent()), byte(c.greenComponent()), byte(c.blueComponent())]
+        });
+        Appearance { light, accent, backdrop: false }
     }
 }

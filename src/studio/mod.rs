@@ -590,7 +590,7 @@ impl Studio {
             return self.caption_key(e, cx);
         }
         let k = &e.keystroke;
-        let (ctrl, shift) = (k.modifiers.control, k.modifiers.shift);
+        let (ctrl, shift) = (k.modifiers.secondary(), k.modifiers.shift);
         match k.key.as_str() {
             "z" if ctrl && shift => self.redo(cx),
             "z" if ctrl => self.undo(cx),
