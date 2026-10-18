@@ -3,3 +3,17 @@
 todo.md
 .claude/
 .cargo/config.toml
+
+# Promo videos and their build inputs (fonts, audio, renders) stay local
+promo/
+
+# Editor and OS clutter
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Local media from manual testing
+*.mp4
+*.wav

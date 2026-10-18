@@ -1,7 +1,0 @@
-/target
-/frames
-*.mp4
-*.png
-/media/*.ttf
-/media/*.wav
-/.cargo/config.toml
