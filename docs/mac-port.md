@@ -17,52 +17,57 @@ Windows build, where the platform code sits, and the open decisions.
 
 ## Progress on macOS
 
-Steps 1 and 2 of the suggested first steps are done.
+Steps 1 to 3 of the suggested first steps are done. Everything below was checked in the running
+app on a 2x display, unless it says otherwise.
 
-- The whole workspace builds on macOS (Apple silicon, Xcode clang, Homebrew cmake), and
-  `cargo run -- --library` opens the Library window.
-- The Windows code sits behind per-platform backends: `crates/glint-media/src/win/` and
-  `src/sys/win/`. The macOS backends, `crates/glint-media/src/mac/mod.rs` and
-  `src/sys/mac/mod.rs`, are stubs. Actions return "... is not supported on macOS yet", and window
-  styling calls do nothing. `docs/architecture.md` describes the layout.
-- `tools/check-windows.sh --workspace --all-targets` type-checks the Windows build from the Mac.
-  It passes with zero warnings. Run it after every change to shared code.
-- `cargo test --workspace` on macOS: everything passes except the tests that need the media
-  backend: `glint-media` `roundtrip` (8) and `screen_failure` (4), and `glint-studio` `engine`
-  (6). Treat them as the acceptance tests for the AVFoundation backend.
-- Step 3 (screenshots) is mostly done and checked in the running app on a 2x display:
-  full-screen, click-a-window and area capture, the overlay with loupe, the preview stack, the
-  Library, the editor (drawing, ⌘Z), and the clipboard.
-  - Screen space: `glint_media::space` (`crates/glint-media/src/mac/space.rs`) is the one place
-    that converts between macOS points and Glint pixels. Read its module doc before touching
-    coordinates.
-  - Floating windows (overlay, stack, toasts, pins, recording chrome) drop AppKit's `Titled`
-    style in `sys/mac/desktop.rs::float`, because AppKit keeps titled windows below the menu
-    bar.
-  - Fonts: `glint-render/src/fonts.rs` has a macOS catalog (SF Pro is the default, and variable
-    fonts use the `wght` axis). The UI font is `.SystemUIFont`.
-  - Theme: light or dark and the accent come from the system. Without Mica, window surfaces are
-    opaque (`Appearance::backdrop`).
-  - Shortcuts: in-app shortcuts use `modifiers.secondary()` and show as ⌘ through `ui::keys`.
-    Global hotkeys keep the Windows defaults (⌃⇧2 to ⌃⇧7, ⌃⇧L), which avoid the system's
-    ⌘⇧3/4/5.
-  - Custom title bars leave the traffic lights to the system (`ui::SYSTEM_CAPTION_INSET`).
-  - Background app: Glint runs as an accessory app (no Dock icon) with a template icon in the
-    menu bar. Its menu shows the global shortcuts as key equivalents. A Unix socket in the
-    per-user temp folder keeps one instance and forwards CLI requests (`sys/mac/ipc.rs`). Launch
-    at login writes `~/Library/LaunchAgents/com.glint.app.plist`.
+- **Build and layout.** The workspace builds on macOS (Apple silicon, Xcode clang, Homebrew
+  cmake). The Windows code sits behind per-platform backends (`crates/glint-media/src/win/`,
+  `src/sys/win/`), next to the macOS ones (`crates/glint-media/src/mac/`, `src/sys/mac/`).
+  `docs/architecture.md` describes the layout.
+- **Windows stays green.** `tools/check-windows.sh --workspace --all-targets` type-checks the
+  Windows build from the Mac with zero warnings. Run it after every change to shared code.
+- **Tests.** `cargo test --workspace` passes on macOS except the tests that need the
+  AVFoundation backend: `glint-media` `roundtrip` (8) and `screen_failure` (4), and `glint-studio`
+  `engine` (6). They are its acceptance tests.
+- **Screen space.** `glint_media::space` (`crates/glint-media/src/mac/space.rs`) is the one place
+  that converts between macOS points and Glint pixels. Read its module doc before touching
+  coordinates.
+- **Screenshots.** Full-screen, window, area, previous-area and text capture work, with the
+  overlay, loupe, preview stack, Library, editor, clipboard and global hotkeys.
+  - On macOS 14 and later, screenshots go through ScreenCaptureKit (`glint_media::sck`). Its
+    content filter leaves Glint's windows out unless the setting includes them.
+    `NSWindow.sharingType` no longer affects captures on current macOS. macOS 13 falls back to
+    `xcap`, which includes Glint's windows.
+  - OCR runs Vision's `VNRecognizeTextRequest` on the whole image (`sys/mac/ocr.rs`).
+  - Dragging a card into other apps starts an AppKit dragging session (`sys/mac/drag.rs`).
+    `shell::drag_out` reports the end through a callback, because AppKit drags are
+    asynchronous. On Windows the callback runs when the modal OLE drag returns.
   - The pasteboard (files and images), the Trash, the save-failed alert and the wallpaper path
     work.
-  - A window opened by a forwarded CLI request stays behind the active app: macOS 14 lets an
-    app take focus only from user input to that app. Menu bar and hotkey actions come to the
-    front.
-  - OCR runs Vision's `VNRecognizeTextRequest` on the whole image (`sys/mac/ocr.rs`).
-  - Still open in step 3: dragging a card into other apps (`shell::drag_out`), excluding Glint's windows from captures, and the camera, microphone and screen recording
-    permission prompts once recording lands.
-- The macOS build warns about dead code in shared `glint-media` helpers (`WavWriter`,
-  `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and in root
-  items only the Windows backend uses so far. The macOS backend will use them. Don't silence the
+- **Windows and chrome.** Floating windows (overlay, stack, toasts, pins, recording chrome) drop
+  AppKit's `Titled` style in `sys/mac/desktop.rs::float`, because AppKit keeps titled windows
+  below the menu bar. Custom title bars leave the traffic lights to the system
+  (`ui::SYSTEM_CAPTION_INSET`).
+- **Look.** `glint-render/src/fonts.rs` has a macOS catalog (SF Pro is the default, and variable
+  fonts use the `wght` axis). The UI font is `.SystemUIFont`. Light or dark and the accent come
+  from the system. Without Mica, window surfaces are opaque (`Appearance::backdrop`). Labels say
+  Trash and Finder.
+- **Shortcuts.** In-app shortcuts use `modifiers.secondary()` and show as ⌘ through `ui::keys`.
+  Global hotkeys keep the Windows defaults (⌃⇧2 to ⌃⇧7, ⌃⇧L), which avoid the system's
+  ⌘⇧3/4/5.
+- **Background app.** Glint runs as an accessory app (no Dock icon) with a template icon in the
+  menu bar. Its menu shows the global shortcuts as key equivalents. A Unix socket in the
+  per-user temp folder keeps one instance and forwards CLI requests (`sys/mac/ipc.rs`). Launch
+  at login writes `~/Library/LaunchAgents/com.glint.app.plist`. A window opened by a forwarded
+  CLI request stays behind the active app, because macOS 14 lets an app take focus only from
+  user input to that app. Menu bar and hotkey actions come to the front.
+- **Dead-code warnings.** The macOS build warns about shared `glint-media` helpers (`WavWriter`,
+  `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and root items
+  that only the Windows backend uses so far. The macOS backend will use them. Don't silence the
   warnings.
+- **Next.** The AVFoundation writer and readers (MP4 encode and decode), then recording (step 4)
+  with ScreenCaptureKit streams, microphone and system audio, the camera and an event tap for
+  `input.json`, with their permission prompts, then Studio playback.
 
 ## What already works on macOS
 

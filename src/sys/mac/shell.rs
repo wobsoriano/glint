@@ -1,4 +1,3 @@
-use super::unsupported;
 use crate::shell::SaveChoice;
 use dispatch2::DispatchQueue;
 use glint_media::space;
@@ -27,8 +26,10 @@ pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow
     Ok(())
 }
 
-pub fn drag_out(_path: &Path, _image: Option<&image::RgbaImage>, _thumb: &gpui::RenderImage) -> anyhow::Result<bool> {
-    unsupported("dragging into other apps")
+/// Drags one file into other apps. AppKit drags run asynchronously, so `done` runs when the drag
+/// ends, with whether something took the drop.
+pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>, thumb: &gpui::RenderImage, done: impl FnOnce(anyhow::Result<bool>) + 'static) {
+    super::drag::start(path, image, thumb, Box::new(done));
 }
 
 pub fn refuse_drops(_window: &gpui::Window) {}

@@ -3,14 +3,11 @@
 
 pub mod capture;
 pub mod desktop;
+mod drag;
 pub mod ipc;
 pub mod library;
 pub mod ocr;
 pub mod shell;
-
-fn unsupported<T>(what: &str) -> anyhow::Result<T> {
-    anyhow::bail!("{what} is not supported on macOS yet")
-}
 
 pub mod chrome {
     use crate::record::chrome::Kind;

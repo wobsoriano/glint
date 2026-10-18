@@ -108,10 +108,15 @@ pub fn copy_files(paths: &[PathBuf], image: Option<&image::RgbaImage>) -> anyhow
     }
 }
 
-/// Runs a modal OLE drag of one file, with its pixels attached for apps that take bitmaps and
-/// `thumb` floating under the cursor. Call it while no GPUI borrow is held: the drag loop
-/// pumps window messages.
-pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>, thumb: &gpui::RenderImage) -> anyhow::Result<bool> {
+/// Drags one file into other apps, with its pixels attached for apps that take bitmaps and
+/// `thumb` floating under the cursor. `done` gets whether something took the drop. The OLE drag
+/// is modal, so `done` runs before this returns. Call it while no GPUI borrow is held: the drag
+/// loop pumps window messages.
+pub fn drag_out(path: &Path, image: Option<&image::RgbaImage>, thumb: &gpui::RenderImage, done: impl FnOnce(anyhow::Result<bool>) + 'static) {
+    done(drag_modal(path, image, thumb))
+}
+
+fn drag_modal(path: &Path, image: Option<&image::RgbaImage>, thumb: &gpui::RenderImage) -> anyhow::Result<bool> {
     let data = DragData::default();
     data.set(CF_HDROP.0, Medium::HGlobal, drop_files(std::slice::from_ref(&path.to_path_buf())));
     if let Some(img) = image {

@@ -249,15 +249,21 @@ impl Stack {
         // The drag loop pumps messages, so it must run outside any GPUI update.
         cx.spawn(async move |_, cx| {
             Timer::after(Duration::from_millis(1)).await;
-            let dropped = actions::drag_file(&item).and_then(|path| shell::drag_out(&path, image.as_deref(), &thumb));
-            let _ = handle.update(cx, |_, window, cx| {
-                let _ = this.update(cx, |s, cx| match dropped {
-                    Ok(true) if dismiss => s.remove(id, window, cx),
-                    Ok(false) if past_edge(area, side) => s.remove(id, window, cx),
-                    Ok(_) => cx.notify(),
-                    Err(e) => s.flash(id, format!("Drag failed: {e}"), cx),
+            let mut cx = cx.clone();
+            let mut finish = move |dropped: anyhow::Result<bool>| {
+                let _ = handle.update(&mut cx, |_, window, cx| {
+                    let _ = this.update(cx, |s, cx| match dropped {
+                        Ok(true) if dismiss => s.remove(id, window, cx),
+                        Ok(false) if past_edge(area, side) => s.remove(id, window, cx),
+                        Ok(_) => cx.notify(),
+                        Err(e) => s.flash(id, format!("Drag failed: {e}"), cx),
+                    });
                 });
-            });
+            };
+            match actions::drag_file(&item) {
+                Ok(path) => shell::drag_out(&path, image.as_deref(), &thumb, finish),
+                Err(e) => finish(Err(e)),
+            }
         })
         .detach();
     }
