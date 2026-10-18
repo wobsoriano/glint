@@ -1,5 +1,5 @@
-//! macOS backend. Mostly stubs so far: actions report "not supported on macOS yet", and
-//! window styling calls do nothing.
+//! macOS backend for the root crate: AppKit, CoreGraphics, Vision and ScreenCaptureKit behind
+//! the same `sys::<module>` functions as the Windows backend.
 
 pub mod capture;
 pub mod desktop;
@@ -13,7 +13,16 @@ pub mod chrome {
     use crate::record::chrome::Kind;
     use gpui::Window;
 
-    pub fn style(_window: &Window, _kind: Kind) {}
+    /// Recording chrome floats like the other pop-ups, casts no shadow, and lets clicks
+    /// through when it only marks an area. ScreenCaptureKit's filter keeps it out of the
+    /// recording.
+    pub fn style(window: &Window, kind: Kind) {
+        super::desktop::later(window, move |w| {
+            super::desktop::float(w);
+            w.setHasShadow(false);
+            w.setIgnoresMouseEvents(kind == Kind::ClickThrough);
+        });
+    }
 }
 
 pub mod target {
