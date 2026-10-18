@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn names_and_clock() {
-        assert_eq!(output_stem(Path::new(r"C:\v\My clip.mov")), "My clip (trimmed)");
+        assert_eq!(output_stem(&Path::new("v").join("My clip.mov")), "My clip (trimmed)");
         assert_eq!(clock(0), "0:00.0");
         assert_eq!(clock(65_432), "1:05.4");
         assert_eq!(clock(3_725_000), "1:02:05");

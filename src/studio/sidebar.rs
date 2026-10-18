@@ -1,7 +1,7 @@
 use super::{Mode, Selection, Studio, Tab, TABS};
 use crate::style::{Background, Color, Gradient, GRADIENTS, SOLIDS};
 use crate::ui::{self, OnValue, ToRgba};
-use crate::win;
+use crate::desktop;
 use glint_studio::{AspectMode, AspectPreset, CropRect, KeystrokePosition, Project, ZoomFocus};
 use gpui::prelude::*;
 use gpui::{div, px, Context, ElementId, PathPromptOptions, SharedString, WeakEntity};
@@ -95,7 +95,7 @@ impl Studio {
         };
         let set_bg = |bg: Background| cx.listener(move |s: &mut Studio, _, _, cx| s.edit(None, cx, |p| p.design.background = bg.clone()));
         let mode_chip = |id: &'static str, label: &'static str, m: BgMode, bg: Background| ui::chip(id, label, mode == m, set_bg(bg));
-        let wallpaper = win::desktop_wallpaper();
+        let wallpaper = desktop::desktop_wallpaper();
         let mut section = ui::section("Background").child(
             div()
                 .flex()

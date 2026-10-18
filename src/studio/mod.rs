@@ -7,7 +7,7 @@ mod timeline;
 
 use crate::settings;
 use crate::ui::{self, FONT};
-use crate::{library, toast, win};
+use crate::{library, toast, desktop};
 use geometry::CropRatio;
 use glint_studio::{CropRect, History, Player, Preset, PresetStore, Project, Session};
 use gpui::prelude::*;
@@ -36,7 +36,7 @@ impl Global for OpenStudios {}
 pub fn open(cx: &mut App, session_dir: PathBuf) {
     let open = cx.default_global::<OpenStudios>().0.clone();
     for (dir, handle) in open {
-        if dir == session_dir && handle.update(cx, |_, window, _| win::bring_to_front(window)).is_ok() {
+        if dir == session_dir && handle.update(cx, |_, window, _| desktop::bring_to_front(window)).is_ok() {
             return;
         }
     }
@@ -62,7 +62,7 @@ pub fn open(cx: &mut App, session_dir: PathBuf) {
             window.on_window_should_close(cx, move |_, cx| weak.update(cx, |s, cx| s.close_requested(cx)).unwrap_or(true));
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -407,7 +407,7 @@ impl Studio {
     fn poll(&mut self, cx: &mut Context<Self>) -> bool {
         if let Some((_, img)) = self.player.latest_frame() {
             if self.frame.as_ref().is_none_or(|(a, _)| !Arc::ptr_eq(a, &img)) {
-                let render = win::render_image(&img);
+                let render = desktop::render_image(&img);
                 if let Some((_, old)) = self.frame.replace((img, render)) {
                     cx.drop_image(old, None);
                 }

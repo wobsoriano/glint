@@ -1,4 +1,4 @@
-use crate::{settings, win};
+use crate::{settings, desktop};
 use anyhow::Context as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -38,7 +38,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 
 fn sources() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Some(p) = win::desktop_wallpaper() {
+    if let Some(p) = desktop::desktop_wallpaper() {
         out.push(p);
     }
     walk(&user_dir(), &mut out);
@@ -78,7 +78,7 @@ pub fn count() -> usize {
 pub fn all() -> Vec<Wallpaper> {
     THUMBS.lock().unwrap()
         .iter()
-        .map(|(path, t)| Wallpaper { path: path.clone(), thumb: win::render_image(t) })
+        .map(|(path, t)| Wallpaper { path: path.clone(), thumb: desktop::render_image(t) })
         .collect()
 }
 

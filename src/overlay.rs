@@ -2,7 +2,7 @@ use crate::capture::{Capture, MonitorShot, WinInfo};
 use crate::flow::{self, AppState};
 use crate::settings::Settings;
 use crate::ui::{self, FONT};
-use crate::win;
+use crate::desktop;
 use gpui::prelude::*;
 use gpui::{
     div, img, px, rgb, rgba, size, App, Bounds, Context, CursorStyle, FocusHandle, ImageSource,
@@ -77,8 +77,8 @@ pub fn open(shots: Vec<MonitorShot>, windows: Vec<WinInfo>, mode: Mode, cx: &mut
                 ..Default::default()
             },
             move |window, cx| {
-                win::make_topmost(window, Some(rect), focus_this);
-                let image = win::render_image(&shot);
+                desktop::make_topmost(window, Some(rect), focus_this);
+                let image = desktop::render_image(&shot);
                 let view = cx.new(|cx| Overlay {
                     mode,
                     shot,
@@ -173,7 +173,7 @@ impl Overlay {
                 }
             }
         }
-        let new = win::render_image(&out);
+        let new = desktop::render_image(&out);
         if let Some((old, _, _)) = self.loupe.replace((new, (px_, py_), center)) {
             cx.drop_image(old, Some(window));
         }

@@ -1,7 +1,7 @@
 use crate::library::{self, CaptureKind, Item};
 use crate::settings::{ExportFormat, Settings};
 use crate::shell::{self, SaveChoice};
-use crate::{editor, ocr, stack, store, toast, win};
+use crate::{editor, ocr, stack, store, toast, desktop};
 use anyhow::Context as _;
 use glint_render::doc::EditDoc;
 use gpui::{App, AppContext as _, PathPromptOptions, Task};
@@ -74,7 +74,7 @@ pub fn copy(item: &Item, cx: &mut App) {
             Err(e) => toast::show(format!("Copy failed: {e:#}"), cx),
         });
     }
-    with_pixels(item, cx, |img, cx| match win::copy_image(&img) {
+    with_pixels(item, cx, |img, cx| match desktop::copy_image(&img) {
         Ok(()) => toast::show("Copied to clipboard", cx),
         Err(e) => toast::show(format!("Copy failed: {e}"), cx),
     });
@@ -137,7 +137,7 @@ pub fn copy_text(item: &Item, cx: &mut App) {
             let result = task.await;
             let _ = cx.update(|cx| match result {
                 Ok(text) if !text.trim().is_empty() => {
-                    let _ = win::copy_text(&text);
+                    let _ = desktop::copy_text(&text);
                     let preview: String = text.chars().take(60).collect();
                     toast::show(format!("Copied text: {}", preview.replace('\n', " ")), cx);
                 }

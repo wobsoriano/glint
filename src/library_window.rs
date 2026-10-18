@@ -2,7 +2,7 @@ use crate::library::{CaptureKind, Item};
 use crate::settings::{LibraryView, Settings, SortKey};
 use crate::store::{self, Store};
 use crate::ui::{self, Edit, FONT};
-use crate::{actions, clip, flow, overlay, prefs, quicklook, shell, toast, win};
+use crate::{actions, clip, flow, overlay, prefs, quicklook, shell, toast, desktop};
 use gpui::prelude::*;
 use gpui::{
     div, img, px, rgb, rgba, size, uniform_list, App, Bounds, ClickEvent, Context, ExternalPaths, FocusHandle, Global, ImageSource,
@@ -72,7 +72,7 @@ pub fn show(cx: &mut App) {
     if let Some(h) = cx.default_global::<LibraryState>().0 {
         if h.update(cx, |_, window, _| {
             window.activate_window();
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
         })
         .is_ok()
         {
@@ -109,7 +109,7 @@ pub fn show(cx: &mut App) {
             });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -161,7 +161,7 @@ impl LibraryWindow {
             }
         }
         let path = item.thumb();
-        let task = cx.background_spawn(async move { image::open(&path).ok().map(|i| win::render_image(&i.to_rgba8())) });
+        let task = cx.background_spawn(async move { image::open(&path).ok().map(|i| desktop::render_image(&i.to_rgba8())) });
         cx.spawn(async move |this, cx| {
             let loaded = task.await;
             let _ = this.update(cx, |this, cx| {

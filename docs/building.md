@@ -1,10 +1,12 @@
 # Building Glint
 
+## Windows
+
 Glint builds with `cargo build` on Windows 10/11 with the Rust MSVC toolchain. Two native build
 tools are needed because `glint-transcribe` depends on `whisper-rs`, which compiles whisper.cpp
 at build time.
 
-## Prerequisites
+### Prerequisites
 
 | Tool | Why | Where to get it |
 | --- | --- | --- |
@@ -13,7 +15,7 @@ at build time.
 | cmake | `whisper-rs-sys` builds whisper.cpp with it | Visual Studio Build Tools 2022 ships one under `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin` (select "C++ CMake tools for Windows"), or install cmake from cmake.org |
 | libclang | `whisper-rs-sys` runs bindgen, which loads `libclang.dll` | See below |
 
-### libclang
+#### libclang
 
 bindgen finds libclang through the `LIBCLANG_PATH` environment variable, which must name the
 folder that contains `libclang.dll`. Two routes:
@@ -32,7 +34,7 @@ folder that contains `libclang.dll`. Two routes:
 
    Then `LIBCLANG_PATH` is `C:\Users\<you>\.glint-build\libclang-18.1.1`.
 
-## Telling cargo where the tools are
+### Telling cargo where the tools are
 
 `.cargo/config.toml` is git-ignored because it holds machine-specific paths. Copy the example and
 edit both paths:
@@ -45,7 +47,7 @@ The `[env]` table sets `CMAKE` (full path to `cmake.exe`) and `LIBCLANG_PATH` fo
 invocation in this workspace. Setting the same two variables in your shell works too, if you
 prefer not to keep the file.
 
-## Build and test
+### Build and test
 
 ```powershell
 cargo build --workspace --all-targets   # expected: zero warnings
@@ -55,3 +57,21 @@ cargo run --release
 
 The first build compiles whisper.cpp and GPUI and takes several minutes. Later builds are
 incremental.
+
+## macOS
+
+The macOS port is in progress (see `mac-port.md`). It needs Xcode, which provides the clang
+that whisper.cpp builds with and the Metal compiler GPUI uses, and cmake from Homebrew
+(`brew install cmake`). No `.cargo/config.toml` is needed.
+
+```sh
+cargo build --workspace --all-targets
+cargo test --workspace
+```
+
+To check that a change still compiles for Windows without a Windows machine:
+
+```sh
+rustup target add x86_64-pc-windows-msvc
+tools/check-windows.sh --workspace --all-targets   # expected: zero warnings
+```

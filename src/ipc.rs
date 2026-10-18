@@ -1,20 +1,9 @@
-use anyhow::{bail, Context as _, Result};
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
-use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::DataExchange::COPYDATASTRUCT;
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowExW,
-    GetMessageW, GetWindowThreadProcessId, RegisterClassW, SendMessageTimeoutW, HWND_MESSAGE, MSG,
-    SMTO_ABORTIFHUNG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COPYDATA, WNDCLASSW,
-};
 
-const CLASS: PCWSTR = w!("Glint.Ipc");
-const MAGIC: usize = 0x6C6E_7467;
+pub use crate::sys::ipc::{forward, listen};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CaptureCmd {
@@ -81,90 +70,24 @@ pub fn parse(args: &[String], cwd: &Path) -> Result<Launch> {
 
 static INBOX: Mutex<Vec<Request>> = Mutex::new(Vec::new());
 
+/// Queues requests a second instance forwarded. The platform listener calls it.
+pub(crate) fn deliver(requests: Vec<Request>) {
+    INBOX.lock().unwrap().extend(requests);
+}
+
 pub fn drain() -> Vec<Request> {
     std::mem::take(&mut *INBOX.lock().unwrap())
-}
-
-unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if msg == WM_COPYDATA {
-        let data = unsafe { &*(lparam.0 as *const COPYDATASTRUCT) };
-        if data.dwData == MAGIC && !data.lpData.is_null() {
-            let bytes = unsafe { std::slice::from_raw_parts(data.lpData as *const u8, data.cbData as usize) };
-            if let Ok(reqs) = serde_json::from_slice::<Vec<Request>>(bytes) {
-                INBOX.lock().unwrap().extend(reqs);
-                return LRESULT(1);
-            }
-        }
-        return LRESULT(0);
-    }
-    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-}
-
-pub fn listen() {
-    std::thread::spawn(|| unsafe {
-        let Ok(module) = GetModuleHandleW(None) else { return };
-        let class = WNDCLASSW { lpfnWndProc: Some(wndproc), hInstance: module.into(), lpszClassName: CLASS, ..Default::default() };
-        RegisterClassW(&class);
-        let Ok(_hwnd) = CreateWindowExW(
-            WINDOW_EX_STYLE(0),
-            CLASS,
-            w!("Glint IPC"),
-            WINDOW_STYLE(0),
-            0,
-            0,
-            0,
-            0,
-            Some(HWND_MESSAGE),
-            None,
-            Some(module.into()),
-            None,
-        ) else {
-            return;
-        };
-        let mut msg = MSG::default();
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            DispatchMessageW(&msg);
-        }
-    });
-}
-
-pub fn forward(requests: &[Request]) -> Result<()> {
-    let payload = serde_json::to_vec(requests)?;
-    let mut target = None;
-    for _ in 0..50 {
-        if let Ok(h) = unsafe { FindWindowExW(Some(HWND_MESSAGE), None, CLASS, PCWSTR::null()) } {
-            target = Some(h);
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    let hwnd = target.context("Glint is starting but not answering")?;
-    unsafe {
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, Some(&mut pid));
-        // Lets the running instance bring its windows to the front for this request.
-        let _ = AllowSetForegroundWindow(pid);
-        let data = COPYDATASTRUCT { dwData: MAGIC, cbData: payload.len() as u32, lpData: payload.as_ptr() as *mut _ };
-        let mut result = 0usize;
-        let sent = SendMessageTimeoutW(
-            hwnd,
-            WM_COPYDATA,
-            WPARAM(0),
-            LPARAM(&data as *const _ as isize),
-            SMTO_ABORTIFHUNG,
-            5000,
-            Some(&mut result),
-        );
-        if sent.0 == 0 || result != 1 {
-            bail!("the running Glint did not accept the request");
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An absolute path on this platform: `C:\a\b` on Windows, `/a/b` elsewhere.
+    fn abs(parts: &str) -> PathBuf {
+        let root = if cfg!(windows) { r"C:\" } else { "/" };
+        Path::new(root).join(parts)
+    }
 
     fn args(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
@@ -172,19 +95,20 @@ mod tests {
 
     #[test]
     fn parses_flags_captures_and_relative_paths() {
-        let cwd = Path::new(r"C:\Users\me\Pictures");
-        let l = parse(&args(&["--background", "--capture", "window", "shot.png", r"D:\x\y.jpg", "--library", "--record", "--studio", "rec.glintrec"]), cwd).unwrap();
+        let cwd = abs("Users/me/Pictures");
+        let other = abs("x/y.jpg");
+        let l = parse(&args(&["--background", "--capture", "window", "shot.png", other.to_str().unwrap(), "--library", "--record", "--studio", "rec.glintrec"]), &cwd).unwrap();
         assert_eq!(
             l,
             Launch {
                 background: true,
                 requests: vec![
                     Request::Capture(CaptureCmd::Window),
-                    Request::Open(PathBuf::from(r"C:\Users\me\Pictures\shot.png")),
-                    Request::Open(PathBuf::from(r"D:\x\y.jpg")),
+                    Request::Open(cwd.join("shot.png")),
+                    Request::Open(other),
                     Request::Library,
                     Request::Record,
-                    Request::Studio(PathBuf::from(r"C:\Users\me\Pictures\rec.glintrec")),
+                    Request::Studio(cwd.join("rec.glintrec")),
                 ],
             }
         );
@@ -192,17 +116,18 @@ mod tests {
 
     #[test]
     fn routes_videos_to_trim() {
-        let cwd = Path::new(r"C:\Users\me\Videos");
-        let l = parse(&args(&["--trim", "talk.mov", r"D:\clip.MP4", "shot.png"]), cwd).unwrap();
+        let cwd = abs("Users/me/Videos");
+        let other = abs("clip.MP4");
+        let l = parse(&args(&["--trim", "talk.mov", other.to_str().unwrap(), "shot.png"]), &cwd).unwrap();
         assert_eq!(
             l.requests,
             vec![
-                Request::Trim(PathBuf::from(r"C:\Users\me\Videos\talk.mov")),
-                Request::Trim(PathBuf::from(r"D:\clip.MP4")),
-                Request::Open(PathBuf::from(r"C:\Users\me\Videos\shot.png")),
+                Request::Trim(cwd.join("talk.mov")),
+                Request::Trim(other),
+                Request::Open(cwd.join("shot.png")),
             ]
         );
-        assert!(parse(&args(&["--trim"]), cwd).unwrap_err().to_string().starts_with("--trim needs a video file"));
+        assert!(parse(&args(&["--trim"]), &cwd).unwrap_err().to_string().starts_with("--trim needs a video file"));
     }
 
     #[test]

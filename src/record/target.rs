@@ -1,6 +1,4 @@
 use glint_media::{CaptureSource, DisplayInfo, Rect};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target {
@@ -19,7 +17,7 @@ impl Target {
 
     pub fn window(hwnd: isize, title: String) -> anyhow::Result<Self> {
         let list = glint_media::displays()?;
-        let monitor = unsafe { MonitorFromWindow(HWND(hwnd as *mut _), MONITOR_DEFAULTTONEAREST) }.0 as isize;
+        let monitor = crate::sys::target::window_monitor(hwnd);
         let display = list.iter().find(|d| d.handle == monitor).unwrap_or(&list[0]).clone();
         Ok(Target::Window { hwnd, title, display })
     }
@@ -70,7 +68,7 @@ impl Target {
         match self {
             Target::Display(d) => display_rect(d),
             Target::Window { hwnd, display, .. } => {
-                crate::capture::window_rect(HWND(*hwnd as *mut _)).unwrap_or_else(|| display_rect(display))
+                crate::capture::window_rect(*hwnd).unwrap_or_else(|| display_rect(display))
             }
             Target::Area { rect, .. } => *rect,
         }
@@ -81,14 +79,9 @@ pub fn display_rect(d: &DisplayInfo) -> [i32; 4] {
     [d.rect.x, d.rect.y, d.rect.width as i32, d.rect.height as i32]
 }
 
+/// The display minus the taskbar or menu bar and Dock.
 pub fn work_area(d: &DisplayInfo) -> [i32; 4] {
-    let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-    if unsafe { GetMonitorInfoW(HMONITOR(d.handle as *mut _), &mut info) }.as_bool() {
-        let r = info.rcWork;
-        [r.left, r.top, r.right - r.left, r.bottom - r.top]
-    } else {
-        display_rect(d)
-    }
+    crate::sys::target::work_area(d.handle).unwrap_or_else(|| display_rect(d))
 }
 
 fn display_containing(list: &[DisplayInfo], x: i32, y: i32) -> Option<&DisplayInfo> {

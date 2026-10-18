@@ -4,13 +4,6 @@ use gpui::{
     WindowOptions,
 };
 use std::time::Duration;
-use windows::Win32::Graphics::Dwm::{
-    DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
-};
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA,
-    WDA_EXCLUDEFROMCAPTURE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
-};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -49,7 +42,7 @@ pub fn open<V: Render + 'static>(
                 ..Default::default()
             },
             move |window, cx| {
-                style(window, kind);
+                crate::sys::chrome::style(window, kind);
                 crate::shell::place(window, rect, cx);
                 if focus {
                     window.activate_window();
@@ -62,7 +55,7 @@ pub fn open<V: Render + 'static>(
         let any: AnyWindowHandle = handle.into();
         cx.spawn(async move |cx| {
             Timer::after(Duration::from_millis(150)).await;
-            let _ = any.update(cx, |_, window, _| style(window, kind));
+            let _ = any.update(cx, |_, window, _| crate::sys::chrome::style(window, kind));
         })
         .detach();
     }
@@ -89,35 +82,7 @@ pub fn defer_past_teardown(f: impl Fn(&mut App) + Clone + 'static) -> impl Fn(&C
     move |_, _, cx| cx.defer(f.clone())
 }
 
-fn capturable() -> bool {
+/// Set `GLINT_CAPTURE_CHROME` to let screenshots and recordings see the recording chrome.
+pub(crate) fn capturable() -> bool {
     std::env::var_os("GLINT_CAPTURE_CHROME").is_some()
-}
-
-fn style(window: &Window, kind: Kind) {
-    let Some(h) = crate::win::hwnd(window) else { return };
-    unsafe {
-        // Windows 11 frames every popup with a rounded 1 px border; the chrome draws its own.
-        let none = DWMWA_COLOR_NONE;
-        let square = DWMWCP_DONOTROUND;
-        let _ = DwmSetWindowAttribute(h, DWMWA_BORDER_COLOR, &none as *const _ as *const _, 4);
-        let _ = DwmSetWindowAttribute(h, DWMWA_WINDOW_CORNER_PREFERENCE, &square as *const _ as *const _, 4);
-        if matches!(kind, Kind::DuringRecording | Kind::ClickThrough) && !capturable() {
-            let _ = SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE);
-        }
-        // Layered, or the transparent parts of the window show a pale tint. Only the picker
-        // takes focus: the rest must not pull it from the picker (Esc) or from the app being
-        // recorded.
-        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
-        let want = ex
-            | WS_EX_LAYERED.0 as isize
-            | match kind {
-                Kind::Focused => 0,
-                Kind::Passive | Kind::DuringRecording => WS_EX_NOACTIVATE.0 as isize,
-                Kind::ClickThrough => (WS_EX_NOACTIVATE.0 | WS_EX_TRANSPARENT.0) as isize,
-            };
-        if want != ex {
-            SetWindowLongPtrW(h, GWL_EXSTYLE, want);
-            let _ = SetLayeredWindowAttributes(h, windows::Win32::Foundation::COLORREF(0), 255, LWA_ALPHA);
-        }
-    }
 }

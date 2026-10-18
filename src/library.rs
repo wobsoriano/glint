@@ -5,6 +5,8 @@ use image::RgbaImage;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub use crate::sys::library::recycle;
+
 pub const THUMB_MAX: u32 = 512;
 const RECORDING_EXT: &str = "glintrec";
 
@@ -325,42 +327,6 @@ fn random_u16() -> u16 {
     let mut h = std::collections::hash_map::RandomState::new().build_hasher();
     h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos());
     h.finish() as u16
-}
-
-pub fn recycle(paths: &[PathBuf]) -> Result<()> {
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    };
-    use windows::Win32::UI::Shell::{
-        FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName, FOFX_RECYCLEONDELETE,
-        FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
-    };
-    if paths.is_empty() {
-        return Ok(());
-    }
-    unsafe {
-        let inited = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
-        let result = (|| -> Result<()> {
-            let op: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL).context("creating IFileOperation")?;
-            op.SetOperationFlags(
-                FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI | FOFX_RECYCLEONDELETE,
-            )?;
-            for p in paths {
-                let item: IShellItem = SHCreateItemFromParsingName(&windows::core::HSTRING::from(p.as_os_str()), None)
-                    .with_context(|| format!("locating {}", p.display()))?;
-                op.DeleteItem(&item, None)?;
-            }
-            op.PerformOperations().context("moving to the Recycle Bin")?;
-            if op.GetAnyOperationsAborted()?.as_bool() {
-                bail!("moving to the Recycle Bin was cancelled");
-            }
-            Ok(())
-        })();
-        if inited {
-            CoUninitialize();
-        }
-        result
-    }
 }
 
 #[cfg(test)]

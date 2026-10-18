@@ -7,8 +7,6 @@ use gpui::{
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{LazyLock, RwLock};
-use windows::core::{w, PCWSTR};
-use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 
 pub const FONT: &str = "Segoe UI Variable Text";
 
@@ -33,21 +31,15 @@ pub struct Theme {
     pub flyout: Rgba,
 }
 
-fn reg_dword(key: PCWSTR, value: PCWSTR) -> Option<u32> {
-    let mut v = 0u32;
-    let mut size = 4u32;
-    let r = unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, key, value, RRF_RT_REG_DWORD, None, Some(&mut v as *mut u32 as *mut _), Some(&mut size))
-    };
-    r.is_ok().then_some(v)
+pub(crate) struct Appearance {
+    pub light: bool,
+    /// The user's accent color as RGB, when the system has one.
+    pub accent: Option<[u8; 3]>,
 }
 
 fn read_theme() -> Theme {
-    let light = reg_dword(w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"), w!("AppsUseLightTheme")) == Some(1);
-    // AccentColor is stored as 0xAABBGGRR.
-    let (mut r, mut g, mut b) = reg_dword(w!(r"Software\Microsoft\Windows\DWM"), w!("AccentColor"))
-        .map(|v| (v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF))
-        .unwrap_or((0x00, 0x67, 0xC0));
+    let Appearance { light, accent } = crate::sys::ui::appearance();
+    let (mut r, mut g, mut b) = accent.map(|[r, g, b]| (r as u32, g as u32, b as u32)).unwrap_or((0x00, 0x67, 0xC0));
     if !light && r.max(g).max(b) < 0x90 {
         let lift = |c: u32| c + (0xFF - c) / 3;
         (r, g, b) = (lift(r), lift(g), lift(b));

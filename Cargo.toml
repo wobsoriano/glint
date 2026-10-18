@@ -2,7 +2,7 @@
 name = "glint"
 version = "0.1.0"
 edition = "2021"
-description = "Screenshots, annotation and screen recording for Windows, built with GPUI"
+description = "Screenshots, annotation and screen recording for Windows and macOS, built with GPUI"
 
 [workspace]
 members = ["crates/*"]
@@ -35,10 +35,12 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 smallvec = "1"
 raw-window-handle = "0.6"
+
+[target.'cfg(windows)'.dependencies]
 # `#[implement]` expands to `::windows_core` paths.
 windows-core = "0.62"
 
-[dependencies.windows]
+[target.'cfg(windows)'.dependencies.windows]
 version = "0.62"
 features = [
   "Foundation",

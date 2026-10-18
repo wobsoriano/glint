@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stands in for lib.exe: a check build compiles C dependencies but never links them, so an
+# empty archive is enough.
+for a in "$@"; do case "$a" in -out:*) : > "${a#-out:}";; esac; done

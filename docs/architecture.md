@@ -1,6 +1,7 @@
 # Glint architecture
 
-Glint is a Windows screenshot, annotation and screen-recording app written in Rust with GPUI.
+Glint is a screenshot, annotation and screen-recording app for Windows, with a macOS port in
+progress, written in Rust with GPUI.
 It is a cargo workspace. The UI lives in the root crate, and everything that can run without a
 window lives in a library crate so it can be tested headlessly.
 
@@ -8,12 +9,33 @@ window lives in a library crate so it can be tested headlessly.
 | --- | --- | --- |
 | `glint` (root, `src/`) | GPUI windows, tray, hotkeys, capture flow, Library UI, editors, Studio UI | all below |
 | `crates/glint-render` | tiny-skia compositor: styles, backgrounds, annotations, screenshot render | none of ours |
-| `crates/glint-media` | Windows media engine: screen/camera/audio/input recording, MP4 encode, MP4/WAV decode | none of ours |
+| `crates/glint-media` | Media engine: screen/camera/audio/input recording, MP4 encode, MP4/WAV decode | none of ours |
 | `crates/glint-studio` | Recording project model, timeline math, auto zoom, frame compositor, export | `glint-render`, `glint-media` |
 | `crates/glint-transcribe` | On-device speech-to-text (whisper.cpp), transcript model, filler and silence detection | none of ours |
 
 Library crates never depend on `gpui`. They expose plain Rust types, blocking functions meant for
 background threads, and `Arc<AtomicBool>` cancel flags plus progress callbacks for long jobs.
+
+## Platform backends
+
+Platform code sits behind one backend per OS, chosen with `cfg(target_os)`. The shared modules
+re-export the backend's items, so callers never name a backend.
+
+| Where | Shared modules | Windows backend | macOS backend |
+| --- | --- | --- | --- |
+| `glint-media` | `src/*.rs`: codec and record option types, `Nv12Frame` conversion, transcode, WAV | `src/win/` | `src/mac/` |
+| root crate | `src/*.rs` | `src/sys/win/` | `src/sys/mac/` |
+
+A backend supplies the same functions and types as the other, with the same signatures. In
+`glint-media` that is device enumeration, `Recorder`, `FrameReader`, `VideoReader`,
+`AudioReader`, `VideoWriter`, `AudioOutput`, `MicMonitor` and `CameraPreview`. In the root
+crate it is the `sys::<module>` functions that `shell.rs`, `desktop.rs`, `capture.rs`, `ipc.rs`,
+`ocr.rs`, `library.rs`, `ui.rs` and `record/{chrome,target}.rs` re-export. Window ids
+(`CaptureSource::Window`, `WinInfo::hwnd`) and display handles (`DisplayInfo::handle`) are
+`isize` everywhere: `HWND` and `HMONITOR` on Windows, `CGWindowID` and `CGDirectDisplayID` on
+macOS.
+
+`tools/check-windows.sh --workspace --all-targets` type-checks the Windows backend from a Mac.
 
 ## Library on disk
 

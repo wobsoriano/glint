@@ -1,7 +1,7 @@
 use super::geometry::{format_time, zoom_around, TimeScale};
 use super::{Drag, Selection, Studio, ZoomPart};
 use crate::ui;
-use crate::win;
+use crate::desktop;
 use glint_studio::timeline::MIN_ZOOM_MS;
 use gpui::prelude::*;
 use gpui::{
@@ -33,7 +33,7 @@ impl Studio {
             let result = task.await;
             let _ = this.update(cx, |s: &mut Studio, cx| match result {
                 Ok(t) => {
-                    s.thumbs = t.iter().map(win::render_image).collect();
+                    s.thumbs = t.iter().map(desktop::render_image).collect();
                     cx.notify();
                 }
                 Err(e) => s.notify(format!("Couldn't load timeline thumbnails: {e:#}"), true, cx),

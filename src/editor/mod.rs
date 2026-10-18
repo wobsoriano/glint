@@ -7,7 +7,7 @@ mod viewport;
 use crate::annotate::{Annotation, Shape, TextStyle, Tool, R, REDACT_STRENGTH};
 use crate::settings::{RedactStyle, Settings};
 use crate::style::{Background, Chrome, Color, Style, INK};
-use crate::{actions, ocr, pin, redact, win};
+use crate::{actions, ocr, pin, redact, desktop};
 use glint_render::compose::{self, Compositor, Frame};
 use glint_render::doc::EditDoc;
 use glint_render::fonts::TextFont;
@@ -97,7 +97,7 @@ pub fn open_doc(base: Arc<image::RgbaImage>, doc: EditDoc, title: String, on_sav
             let f = view.read(cx).focus.clone();
             window.focus(&f);
             crate::shell::mica(window);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -459,7 +459,7 @@ impl Editor {
 
     fn copy(&mut self, cx: &mut Context<Self>) {
         let img = self.export();
-        match win::copy_image(&img) {
+        match desktop::copy_image(&img) {
             Ok(()) => self.show_toast(format!("Copied {} × {} image", img.width(), img.height()), cx),
             Err(e) => self.show_toast(format!("Copy failed: {e}"), cx),
         }
@@ -631,7 +631,7 @@ impl Editor {
                 this.busy = None;
                 match result {
                     Ok(t) if !t.trim().is_empty() => {
-                        let _ = win::copy_text(&t);
+                        let _ = desktop::copy_text(&t);
                         let n = t.split_whitespace().count();
                         this.show_toast(format!("Copied {n} words of text"), cx);
                     }

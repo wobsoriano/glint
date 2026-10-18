@@ -3,7 +3,7 @@ use crate::flow::Shot;
 use crate::settings::{Settings, Side};
 use crate::ui::{self, FONT};
 use crate::library::Item;
-use crate::{actions, pin, quicklook, shell, win};
+use crate::{actions, pin, quicklook, shell, desktop};
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, Global, ImageSource, MouseButton, MouseDownEvent,
@@ -126,7 +126,7 @@ impl Stack {
             Entry::Recording(_) => return self.run_recording(id, item, action, window, cx),
         };
         match action {
-            CardAction::Copy => match win::copy_image(&shot.image) {
+            CardAction::Copy => match desktop::copy_image(&shot.image) {
                 Ok(()) => self.flash(id, "Copied", cx),
                 Err(e) => self.flash(id, format!("Copy failed: {e}"), cx),
             },
@@ -298,7 +298,7 @@ fn past_edge(area: [i32; 4], side: Side) -> bool {
 }
 
 fn thumb_of(shot: &Shot) -> Arc<RenderImage> {
-    win::render_image(&crate::library::thumbnail(&shot.image))
+    desktop::render_image(&crate::library::thumbnail(&shot.image))
 }
 
 pub fn show_edit(item: &Item, image: Arc<image::RgbaImage>, cx: &mut App) {
@@ -324,7 +324,7 @@ pub fn push(shot: Shot, cx: &mut App) {
 
 pub fn push_recording(item: Item, cx: &mut App) {
     let thumb = image::open(item.thumb()).map(|i| i.to_rgba8()).unwrap_or_else(|_| image::RgbaImage::from_pixel(16, 9, image::Rgba([17, 17, 19, 255])));
-    push_entry(Entry::Recording(item), win::render_image(&thumb), cx);
+    push_entry(Entry::Recording(item), desktop::render_image(&thumb), cx);
 }
 
 fn push_entry(entry: Entry, thumb: Arc<RenderImage>, cx: &mut App) {

@@ -1,7 +1,7 @@
 use crate::capture::{self, Capture};
 use crate::library::{self, Item};
 use crate::settings::Settings;
-use crate::{actions, editor, ocr, overlay, pin, redact, stack, store, toast, win};
+use crate::{actions, editor, ocr, overlay, pin, redact, stack, store, toast, desktop};
 use glint_render::compose;
 use gpui::{AnyWindowHandle, App, AppContext as _, Global};
 use std::path::PathBuf;
@@ -135,7 +135,7 @@ fn import(cap: Capture, findings: Vec<redact::Finding>, cx: &mut App) {
 fn automate(shot: Shot, cx: &mut App) {
     let a = cx.global::<Settings>().after_shot.clone();
     if a.copy {
-        if let Err(e) = win::copy_image(&shot.image) {
+        if let Err(e) = desktop::copy_image(&shot.image) {
             toast::show(format!("Copy failed: {e}"), cx);
         }
     }
@@ -162,7 +162,7 @@ pub fn finish_text(cap: Capture, cx: &mut App) {
         let result = task.await;
         let _ = cx.update(|cx| match result {
             Ok(text) if !text.trim().is_empty() => {
-                let _ = win::copy_text(&text);
+                let _ = desktop::copy_text(&text);
                 let preview: String = text.chars().take(60).collect();
                 toast::show(format!("Copied text: {}", preview.replace('\n', " ")), cx);
             }

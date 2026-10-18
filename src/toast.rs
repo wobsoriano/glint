@@ -1,5 +1,5 @@
 use crate::ui::{self, FONT};
-use crate::win;
+use crate::desktop;
 use gpui::prelude::*;
 use gpui::{
     div, point, px, size, AnyWindowHandle, App, Bounds, Context, Global, SharedString, Timer, Window,
@@ -62,7 +62,7 @@ pub fn show_at(msg: impl Into<SharedString>, bottom: f32, cx: &mut App) {
             ..Default::default()
         },
         move |window, cx| {
-            win::make_topmost(window, Some(rect), false);
+            desktop::make_topmost(window, Some(rect), false);
             cx.new(|_| Toast(msg))
         },
     );

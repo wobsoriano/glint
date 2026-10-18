@@ -3,7 +3,7 @@ mod player;
 
 use crate::settings::Settings;
 use crate::ui::{self, FONT};
-use crate::{shell, toast, win};
+use crate::{shell, toast, desktop};
 use anyhow::{bail, Context as _};
 use glint_media::{available_codecs, transcode, TranscodeOptions, VideoCodec, VideoReader};
 use gpui::prelude::*;
@@ -70,7 +70,7 @@ pub fn open(path: PathBuf, cx: &mut App) {
             let view = cx.new(|cx| ClipEditor::new(path, cx));
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -342,7 +342,7 @@ fn thumbnails(path: &Path) -> anyhow::Result<Vec<Arc<RenderImage>>> {
         .map(|f| {
             let (w, h) = f.image.dimensions();
             let tw = (w as u64 * THUMB_H as u64 / h.max(1) as u64).max(1) as u32;
-            win::render_image(&image::imageops::thumbnail(&f.image, tw, THUMB_H))
+            desktop::render_image(&image::imageops::thumbnail(&f.image, tw, THUMB_H))
         })
         .collect())
 }

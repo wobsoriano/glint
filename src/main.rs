@@ -5,6 +5,7 @@ mod assets;
 mod capture;
 mod cards;
 mod clip;
+mod desktop;
 mod editor;
 mod flow;
 mod hotkeys;
@@ -23,9 +24,9 @@ mod shell;
 mod stack;
 mod store;
 mod studio;
+mod sys;
 mod toast;
 mod ui;
-mod win;
 
 pub use glint_render::{annotate, render, style};
 
@@ -177,7 +178,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    if !win::single_instance() {
+    if !desktop::single_instance() {
         if launch.requests.is_empty() && launch.background {
             return;
         }

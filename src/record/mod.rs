@@ -1,5 +1,5 @@
 mod bar;
-mod chrome;
+pub(crate) mod chrome;
 mod countdown;
 mod guide;
 mod picker;

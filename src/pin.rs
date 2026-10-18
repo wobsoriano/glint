@@ -2,7 +2,7 @@
 //! Drag to move, scroll to zoom, Ctrl+scroll for opacity, double-click or Esc to close.
 
 use crate::ui::{self, FONT};
-use crate::win;
+use crate::desktop;
 use gpui::prelude::*;
 use gpui::{
     div, img, point, px, rgb, rgba, size, App, Bounds, Context, FocusHandle, ImageSource,
@@ -30,7 +30,7 @@ pub fn open(raw: Arc<image::RgbaImage>, dpi: f32, cx: &mut App) {
     let origin = display
         .map(|b| b.center() - point(px(w / 2.), px(h / 2.)))
         .unwrap_or(point(px(200.), px(200.)));
-    let image = win::render_image(&raw);
+    let image = desktop::render_image(&raw);
     let _ = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -45,7 +45,7 @@ pub fn open(raw: Arc<image::RgbaImage>, dpi: f32, cx: &mut App) {
             ..Default::default()
         },
         move |window, cx| {
-            win::make_topmost(window, None, true);
+            desktop::make_topmost(window, None, true);
             let view = cx.new(|cx| Pin {
                 image,
                 aspect: iw / ih,
@@ -104,7 +104,7 @@ impl Render for Pin {
                 if k.key == "escape" {
                     window.remove_window();
                 } else if k.key == "c" && k.modifiers.control {
-                    let _ = win::copy_image(&this.raw);
+                    let _ = desktop::copy_image(&this.raw);
                 }
             }))
             .child(

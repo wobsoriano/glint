@@ -15,13 +15,34 @@ Windows build, where the platform code sits, and the open decisions.
 - The evidence from the Windows test runs (screenshots, logs) is local to the Windows machine
   and is not in the repo.
 
+## Progress on macOS
+
+Steps 1 and 2 of the suggested first steps are done.
+
+- The whole workspace builds on macOS (Apple silicon, Xcode clang, Homebrew cmake), and
+  `cargo run -- --library` opens the Library window.
+- The Windows code sits behind per-platform backends: `crates/glint-media/src/win/` and
+  `src/sys/win/`. The macOS backends, `crates/glint-media/src/mac/mod.rs` and
+  `src/sys/mac/mod.rs`, are stubs. Actions return "... is not supported on macOS yet", and window
+  styling calls do nothing. `docs/architecture.md` describes the layout.
+- `tools/check-windows.sh --workspace --all-targets` type-checks the Windows build from the Mac.
+  It passes with zero warnings. Run it after every change to shared code.
+- `cargo test --workspace` on macOS: everything passes except tests that need the media backend
+  or Windows fonts. These are `glint-media` `roundtrip` (8) and `screen_failure` (4), `glint-studio`
+  `engine` (6), and `glint-render` `fonts::tests` (1). Treat the first three files as the
+  acceptance tests for the AVFoundation backend.
+- The macOS build warns about dead code in shared `glint-media` helpers (`WavWriter`,
+  `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and in root
+  items only the Windows backend uses so far. The macOS backend will use them. Don't silence the
+  warnings.
+
 ## What already works on macOS
 
 These parts have no Windows code and should compile on macOS as they are:
 
 | Part | Notes |
 | --- | --- |
-| `crates/glint-render` | tiny-skia compositor: styles, backgrounds, annotations, screenshot render. |
+| `crates/glint-render` | tiny-skia compositor: styles, backgrounds, annotations, screenshot render. Except `fonts.rs`, see below. |
 | `crates/glint-studio` | Project model, timeline, auto zoom, compositor, export logic. It calls `glint-media` for decode and encode. |
 | `crates/glint-transcribe` | whisper.cpp through `whisper-rs`. Turn on the Metal feature on Apple silicon. |
 | GPUI windows and views | GPUI is native on macOS (it is Zed's UI framework). |
@@ -30,7 +51,10 @@ These parts have no Windows code and should compile on macOS as they are:
 
 ## Windows-only code to replace
 
-The counts are `windows::` references in each file at commit 1d33f3c.
+The counts are `windows::` references in each file at commit 1d33f3c. The files now live in
+`crates/glint-media/src/win/` and, for the root crate, in `src/sys/win/` (only the
+Windows-specific functions moved; the shared parts stayed in `src/`). `win.rs` is now
+`desktop.rs` for its shared half and `sys/win/desktop.rs` for the rest.
 
 ### `crates/glint-media` (the media engine)
 
@@ -71,6 +95,12 @@ For Objective-C interop, use `objc2` and its framework crates (`objc2-app-kit`,
 
 ## Things that will bite
 
+- **Fonts.** `glint-render/src/fonts.rs` loads faces from `%WINDIR%\Fonts` by file name, and
+  `TextFont::default()` is Segoe UI. On macOS no face loads, so text annotations and captions
+  draw nothing. It needs a per-platform catalog (`/System/Library/Fonts` and its `Supplemental`
+  folder have Arial, Georgia, Verdana, Helvetica Neue and others; `.ttc` faces need an index)
+  and a macOS default family. Documents saved on Windows name Segoe UI, so keep the fallback
+  chain.
 - **Permissions.** Screen Recording (TCC), Accessibility (event taps), Microphone and Camera
   each need a prompt and an `Info.plist` usage string. macOS keys the grants to the code
   signature, so a `cargo run` binary loses them on every rebuild. Build into a `.app` bundle

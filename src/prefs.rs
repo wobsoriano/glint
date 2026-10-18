@@ -3,7 +3,7 @@ use crate::hotkeys::{self, Hotkeys};
 use crate::library::Library;
 use crate::settings::{ExportFormat, HotkeyAction, RedactRules, RedactStyle, Settings, Side};
 use crate::ui::{self, FONT};
-use crate::{shell, stack, win};
+use crate::{shell, stack, desktop};
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, rgba, size, App, Bounds, Context, FocusHandle, Global, KeyDownEvent, PathPromptOptions, SharedString,
@@ -81,7 +81,7 @@ fn open(pane: Option<Pane>, cx: &mut App) {
                 this.pane = p;
             }
             window.activate_window();
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             cx.notify();
         });
         if ok.is_ok() {
@@ -111,7 +111,7 @@ fn open(pane: Option<Pane>, cx: &mut App) {
             });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -508,7 +508,7 @@ impl Render for Prefs {
                         .child(ui::toggle("login", "Launch at login", s.launch_at_login, |_, _, cx| {
                             update(cx, |s| {
                                 s.launch_at_login = !s.launch_at_login;
-                                win::set_launch_at_login(s.launch_at_login);
+                                desktop::set_launch_at_login(s.launch_at_login);
                             })
                         }))
                         .child(note("At login Glint starts quietly in the tray. Opening Glint yourself shows the Library.")),

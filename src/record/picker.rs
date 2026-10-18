@@ -3,7 +3,7 @@ use super::target::work_area;
 use super::{prefs, rec, update_prefs, Rec, Stage, Target};
 use crate::settings::RecordTarget;
 use crate::ui::{self, FONT};
-use crate::{toast, win};
+use crate::{toast, desktop};
 use glint_media::{AudioDevice, CameraDevice, CameraPreview, DeviceId, DisplayInfo};
 use gpui::prelude::*;
 use gpui::{
@@ -508,7 +508,7 @@ struct CameraBubble {
 impl Render for CameraBubble {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if let Some(frame) = self.latest.lock().unwrap().take() {
-            if let Some(old) = self.image.replace(win::render_image(&frame)) {
+            if let Some(old) = self.image.replace(desktop::render_image(&frame)) {
                 let _ = window.drop_image(old);
             }
         }

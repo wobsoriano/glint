@@ -1,6 +1,6 @@
 use crate::library::{CaptureKind, Item};
 use crate::ui::{self, FONT};
-use crate::{actions, shell, win};
+use crate::{actions, shell, desktop};
 use gpui::prelude::*;
 use gpui::{
     div, img, px, size, App, Bounds, Context, FocusHandle, Global, ImageSource, KeyDownEvent, ObjectFit,
@@ -51,7 +51,7 @@ pub fn open(item: Item, cx: &mut App) {
             });
             let f = view.read(cx).focus.clone();
             window.focus(&f);
-            win::bring_to_front(window);
+            desktop::bring_to_front(window);
             view
         },
     );
@@ -77,7 +77,7 @@ impl QuickLook {
             let result = task.await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    Ok(img) => this.image = Some(win::render_image(&img)),
+                    Ok(img) => this.image = Some(desktop::render_image(&img)),
                     Err(e) => this.error = Some(e.to_string()),
                 }
                 cx.notify();
