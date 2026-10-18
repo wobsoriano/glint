@@ -30,6 +30,17 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Not yet published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.read.outputs.version }}
+        run: |
+          # A published release keeps the files it shipped with. Drafts may be rebuilt.
+          published=$(gh release list --limit 200 --json tagName,isDraft --jq ".[] | select(.tagName == \"$TAG\" and (.isDraft | not)) | .tagName")
+          if [ -n "$published" ]; then
+            echo "::error file=Cargo.toml::$TAG is already published. Bump [package] version for a new release."
+            exit 1
+          fi
 
   macos:
     needs: version
@@ -102,6 +113,7 @@ jobs:
           merge-multiple: true
       - run: |
           # Drafts have no git tag yet, so look them up in the release list rather than by tag.
+          # The version job already refused published releases, so a match here is a draft.
           if gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -qxF "$TAG"; then
             gh release upload "$TAG" dist/* --clobber
           else

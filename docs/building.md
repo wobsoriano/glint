@@ -103,7 +103,8 @@ The `version` in the root `Cargo.toml` names the release. The Release workflow t
 
 3. Review the draft release on GitHub, then publish it.
 
-Running the workflow again for the same version replaces the files on the existing release.
+Running the workflow again for the same version replaces the files on the draft release. Once a
+release is published, the workflow refuses to run for that version until `version` is bumped.
 
 The Windows EXE links the C and C++ runtimes statically (`-C target-feature=+crt-static`), so
 it runs on PCs without the Visual C++ Redistributable. The workflow fails if the EXE still
