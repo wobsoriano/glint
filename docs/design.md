@@ -1,7 +1,10 @@
 # Glint design direction
 
 Features come from Screendrop. Interaction patterns follow CleanShot X, the reference for
-screenshot UX. The look is native Windows 11, so Glint is neither app's clone.
+screenshot UX. The look is native to the platform, so Glint is neither app's clone. On
+Windows that is Windows 11. On macOS the platform parts follow macOS (system font, accent
+color, appearance, menu bar, Cmd shortcuts), while Glint's own surfaces keep the same layout and
+visuals on both, so the Mac build does not become a copy of either Mac app.
 
 ## Interaction patterns (CleanShot)
 

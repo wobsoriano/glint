@@ -115,15 +115,16 @@ For Objective-C interop, use `objc2` and its framework crates (`objc2-app-kit`,
 - **The build is simpler.** whisper-rs builds with Xcode's clang and Homebrew's cmake. No
   `LIBCLANG_PATH` file is needed.
 
-## Open decisions for the user
+## Decisions
 
-1. **The look on macOS.** `docs/design.md` says Glint looks like native Windows 11. The macOS
-   equivalent would follow macOS conventions instead. Screendrop and CleanShot X are both Mac
-   apps, though, so a native Mac look comes close to copying them. Ask the user before styling.
-2. **Repo layout.** One codebase with `cfg(target_os)` backends (recommended, since the shared
-   crates are most of the code), or a separate fork.
-3. **Minimum macOS version.** ScreenCaptureKit system audio needs 13 or later. Presenter
-   overlay and some newer APIs need 14.
+1. **The look on macOS.** Glint follows macOS conventions on macOS, as it follows Windows 11
+   conventions on Windows: the system font, accent color and appearance, the menu bar in place
+   of the tray, and Cmd-based shortcuts. The layout and Glint's own visual identity stay the
+   same on both. Platform conventions are shared by every Mac app, so this does not copy
+   Screendrop or CleanShot X.
+2. **Repo layout.** One codebase with `cfg(target_os)` backends.
+3. **Minimum macOS version.** 13, the first with ScreenCaptureKit system audio. Gate anything
+   that needs 14 at runtime.
 
 ## Suggested first steps
 
