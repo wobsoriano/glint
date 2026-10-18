@@ -69,6 +69,19 @@ cargo build --workspace --all-targets
 cargo test --workspace
 ```
 
+Screen Recording, Input Monitoring, Microphone and Camera access are granted to an app's code
+signature, so a plain `cargo run` binary asks again after each rebuild, and the terminal you
+run it from gets the grants. `tools/bundle-mac.sh` builds `target/debug/Glint.app` (or
+`target/release` with `--release`) with the usage strings the prompts need. It signs ad hoc
+unless `GLINT_SIGN_IDENTITY` names a certificate; sign with a stable identity to keep the
+grants across rebuilds:
+
+```sh
+security find-identity -v -p codesigning
+GLINT_SIGN_IDENTITY="Apple Development: Name (TEAMID)" tools/bundle-mac.sh
+open target/debug/Glint.app
+```
+
 To check that a change still compiles for Windows without a Windows machine:
 
 ```sh
