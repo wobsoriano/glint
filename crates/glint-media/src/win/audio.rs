@@ -1,8 +1,7 @@
-use crate::audio::{LevelMeter, SAMPLE_RATE};
+use crate::audio::{AudioStats, ClockedWav, Converter, LevelMeter, SAMPLE_RATE};
 use crate::clock::MediaClock;
 use crate::devices::DeviceId;
 use super::mf::{self, pcwstr, wide};
-use crate::wav::WavWriter;
 use anyhow::{bail, Context};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,12 +24,6 @@ pub(crate) enum AudioSource {
     Microphone(Option<DeviceId>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AudioStats {
-    pub frames: u64,
-    pub bytes: u64,
-}
-
 pub(crate) struct AudioTrack {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<anyhow::Result<AudioStats>>>,
@@ -50,7 +43,7 @@ impl AudioTrack {
         let level = Arc::new(LevelMeter::default());
         let writer_path = path.to_path_buf();
         let thread = spawn_capture(format!("glint-audio-{source:?}"), source, channels, stop.clone(), level.clone(), tap, move || {
-            WavWriter::create(&writer_path, SAMPLE_RATE, channels).map(|w| Some((w, clock)))
+            ClockedWav::create(&writer_path, channels, clock).map(Some)
         })?;
         Ok(Self { stop, thread: Some(thread), level, path: path.to_path_buf() })
     }
@@ -104,7 +97,7 @@ impl Drop for MicMonitor {
     }
 }
 
-type Sink = Option<(WavWriter, Arc<MediaClock>)>;
+type Sink = Option<ClockedWav>;
 
 /// Starts the capture thread. WASAPI objects are not `Send`, so the device is opened on that
 /// thread and the outcome comes back over a channel before this returns.
@@ -155,8 +148,8 @@ struct Capture {
     client: IAudioClient,
     capture: IAudioCaptureClient,
     format: DeviceFormat,
-    out_channels: u16,
-    resample_pos: f64,
+    converter: Converter,
+    decoded: Vec<f32>,
 }
 
 impl Capture {
@@ -199,7 +192,7 @@ impl Capture {
     unsafe fn started(client: IAudioClient, format: DeviceFormat, out_channels: u16) -> anyhow::Result<Self> {
         let capture: IAudioCaptureClient = unsafe { client.GetService() }.context("IAudioCaptureClient")?;
         unsafe { client.Start() }.context("IAudioClient::Start")?;
-        Ok(Self { client, capture, format, out_channels, resample_pos: 0.0 })
+        Ok(Self { client, capture, format, converter: Converter::new(format.rate, format.channels, out_channels), decoded: Vec::new() })
     }
 
     fn run(mut self, mut sink: Sink, stop: &AtomicBool, level: &LevelMeter, tap: Option<SyncSender<Vec<f32>>>) -> anyhow::Result<AudioStats> {
@@ -226,10 +219,8 @@ impl Capture {
                 if let Some(tap) = &tap {
                     let _ = tap.try_send(out.clone());
                 }
-                if let Some((writer, clock)) = sink.as_mut() {
-                    if !clock.is_paused() {
-                        write_aligned(writer, clock, &out, self.out_channels)?;
-                    }
+                if let Some(wav) = sink.as_mut() {
+                    wav.write(&out)?;
                 }
             }
             if !got_any {
@@ -238,82 +229,30 @@ impl Capture {
         }
         unsafe { self.client.Stop()? };
         match sink {
-            Some((mut writer, clock)) => {
-                let target = (clock.now().as_secs_f64() * SAMPLE_RATE as f64).round() as u64;
-                let have = writer.frames_written();
-                if target > have {
-                    writer.write_silence(target - have)?;
-                } else {
-                    writer.truncate(target)?;
-                }
-                let frames = writer.frames_written();
-                let bytes = writer.finish()?;
-                Ok(AudioStats { frames, bytes })
-            }
+            Some(wav) => wav.finish(),
             None => Ok(AudioStats { frames: 0, bytes: 0 }),
         }
     }
 
+    /// Decodes the device's samples to f32 and converts them to the track's format.
     fn convert(&mut self, raw: &[u8], frames: usize, silent: bool, out: &mut Vec<f32>) {
         let f = self.format;
-        let in_ch = f.channels as usize;
-        let mut mono_or_mapped = Vec::with_capacity(frames * self.out_channels as usize);
-        for i in 0..frames {
-            let sample = |c: usize| -> f32 {
-                if silent {
-                    return 0.0;
-                }
-                let idx = (i * in_ch + c) * (f.bits / 8) as usize;
-                match (f.float, f.bits) {
-                    (true, 32) => f32::from_le_bytes(raw[idx..idx + 4].try_into().unwrap()),
-                    (false, 16) => i16::from_le_bytes(raw[idx..idx + 2].try_into().unwrap()) as f32 / 32768.0,
-                    (false, 32) => i32::from_le_bytes(raw[idx..idx + 4].try_into().unwrap()) as f32 / 2_147_483_648.0,
-                    (false, 24) => (i32::from_le_bytes([0, raw[idx], raw[idx + 1], raw[idx + 2]]) >> 8) as f32 / 8_388_608.0,
-                    _ => 0.0,
-                }
-            };
-            match (in_ch, self.out_channels) {
-                (n, 1) => mono_or_mapped.push((0..n).map(sample).sum::<f32>() / n as f32),
-                (1, 2) => {
-                    let s = sample(0);
-                    mono_or_mapped.extend([s, s]);
-                }
-                (_, _) => mono_or_mapped.extend([sample(0), sample(1)]),
-            }
+        let samples = frames * f.channels as usize;
+        self.decoded.clear();
+        if silent {
+            self.decoded.resize(samples, 0.0);
+        } else {
+            let width = (f.bits / 8) as usize;
+            self.decoded.extend(raw[..samples * width].chunks_exact(width).map(|b| match (f.float, f.bits) {
+                (true, 32) => f32::from_le_bytes(b.try_into().unwrap()),
+                (false, 16) => i16::from_le_bytes(b.try_into().unwrap()) as f32 / 32768.0,
+                (false, 32) => i32::from_le_bytes(b.try_into().unwrap()) as f32 / 2_147_483_648.0,
+                (false, 24) => (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 8) as f32 / 8_388_608.0,
+                _ => 0.0,
+            }));
         }
-        if f.rate == SAMPLE_RATE {
-            out.extend_from_slice(&mono_or_mapped);
-            return;
-        }
-        let ch = self.out_channels as usize;
-        let step = f.rate as f64 / SAMPLE_RATE as f64;
-        let in_frames = frames;
-        while self.resample_pos + 1.0 < in_frames as f64 {
-            let i = self.resample_pos.floor() as usize;
-            let t = (self.resample_pos - i as f64) as f32;
-            for c in 0..ch {
-                let a = mono_or_mapped[i * ch + c];
-                let b = mono_or_mapped[(i + 1) * ch + c];
-                out.push(a + (b - a) * t);
-            }
-            self.resample_pos += step;
-        }
-        self.resample_pos -= in_frames as f64;
+        self.converter.push(&self.decoded, out);
     }
-}
-
-fn write_aligned(writer: &mut WavWriter, clock: &MediaClock, samples: &[f32], channels: u16) -> anyhow::Result<()> {
-    let tolerance = SAMPLE_RATE as i64 * 60 / 1000;
-    let target = (clock.now().as_secs_f64() * SAMPLE_RATE as f64) as i64;
-    let have = writer.frames_written() as i64;
-    let behind = target - have;
-    if behind > tolerance {
-        writer.write_silence((behind - tolerance / 2) as u64)?;
-    } else if behind < -tolerance {
-        let drop = ((-behind - tolerance / 2) as usize * channels as usize).min(samples.len());
-        return writer.write(&samples[drop..]);
-    }
-    writer.write(samples)
 }
 
 fn float_format(rate: u32, channels: u16) -> WAVEFORMATEXTENSIBLE {
