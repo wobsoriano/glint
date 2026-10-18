@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Create the release as a draft
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          version=$(awk '/^\[/ { p = ($0 == "[package]") } p && /^version *=/ { gsub(/^version *= *"|".*$/, ""); print; exit }' Cargo.toml)
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error file=Cargo.toml::[package] version '$version' is not semver, so the tag would not be v<semver>"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      # GPUI's build.rs compiles shaders with `xcrun metal`, which newer Xcodes ship separately.
+      - name: Metal toolchain
+        run: xcrun -f metal || xcodebuild -downloadComponent MetalToolchain
+      - name: cmake
+        run: command -v cmake || brew install cmake
+      - uses: Swatinem/rust-cache@v2
+      - id: package
+        run: |
+          dmg=$(tools/package-mac.sh)
+          echo "dmg=$dmg" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ${{ steps.package.outputs.dmg }}
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - uses: actions/checkout@v4
+      - name: libclang
+        shell: pwsh
+        run: |
+          if (-not (Test-Path (Join-Path $env:LIBCLANG_PATH 'libclang.dll'))) {
+            Write-Output "::error::libclang.dll not found in $env:LIBCLANG_PATH. whisper-rs-sys needs it for bindgen."
+            exit 1
+          }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - shell: pwsh
+        run: Copy-Item target\release\glint.exe "Glint-${{ needs.version.outputs.version }}-windows-x64.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Glint-${{ needs.version.outputs.version }}-windows-x64.exe
+          if-no-files-found: error
+
+  release:
+    needs: [version, macos, windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: v${{ needs.version.outputs.version }}
+      VERSION: ${{ needs.version.outputs.version }}
+      DRAFT: ${{ inputs.draft }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: |
+          # Drafts have no git tag yet, so look them up in the release list rather than by tag.
+          if gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -qxF "$TAG"; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            flags=()
+            if [ "$DRAFT" = true ]; then flags+=(--draft); fi
+            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Glint $VERSION" --generate-notes "${flags[@]}"
+          fi

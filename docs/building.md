@@ -88,3 +88,33 @@ To check that a change still compiles for Windows without a Windows machine:
 rustup target add x86_64-pc-windows-msvc
 tools/check-windows.sh --workspace --all-targets   # expected: zero warnings
 ```
+
+## Releasing
+
+The `version` in the root `Cargo.toml` names the release. The Release workflow tags it
+`v<version>` and attaches `Glint-<version>-macos-arm64.dmg` and `Glint-<version>-windows-x64.exe`.
+
+1. Bump `version` in `Cargo.toml`, then commit and push to `master`.
+2. Run the Release workflow from the Actions tab, or from a terminal:
+
+   ```sh
+   gh workflow run release.yml -f draft=true
+   ```
+
+3. Review the draft release on GitHub, then publish it.
+
+Running the workflow again for the same version replaces the files on the existing release.
+
+To build the DMG locally, run `tools/package-mac.sh`. It prints the path of the DMG under
+`target/release`.
+
+The macOS app is signed ad hoc and is not notarized. Gatekeeper blocks the first launch. On
+macOS 14 and earlier, users open it with right-click > Open. On macOS 15 and later, they click
+Open Anyway under System Settings > Privacy & Security after the first attempt. Either way,
+clearing the quarantine flag also works:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Glint.app
+```
+
+The DMG is for Apple silicon only for now.
