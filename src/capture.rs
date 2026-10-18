@@ -1,8 +1,7 @@
-use anyhow::{Context as _, Result};
 use image::RgbaImage;
 use std::sync::Arc;
 
-pub use crate::sys::capture::{cursor_pos, foreground_window, list_windows, window_rect};
+pub use crate::sys::capture::{capture_monitors, cursor_pos, foreground_window, list_windows, window_rect};
 
 #[derive(Clone)]
 pub struct Capture {
@@ -29,6 +28,8 @@ pub struct MonitorShot {
     pub width: u32,
     pub height: u32,
     pub scale: f32,
+    /// The display's bounds in GPUI's coordinates (logical pixels on Windows, points on macOS).
+    pub logical: [f32; 4],
     pub image: Arc<RgbaImage>,
 }
 
@@ -37,23 +38,6 @@ pub struct WinInfo {
     pub hwnd: isize,
     pub title: String,
     pub rect: [i32; 4],
-}
-
-pub fn capture_monitors() -> Result<Vec<MonitorShot>> {
-    let monitors = xcap::Monitor::all().context("listing monitors")?;
-    let mut out = Vec::new();
-    for m in monitors {
-        let image = m.capture_image().context("capturing monitor")?;
-        out.push(MonitorShot {
-            x: m.x().unwrap_or(0),
-            y: m.y().unwrap_or(0),
-            width: image.width(),
-            height: image.height(),
-            scale: m.scale_factor().unwrap_or(1.0),
-            image: Arc::new(image),
-        });
-    }
-    Ok(out)
 }
 
 pub fn monitor_at(shots: &[MonitorShot], x: i32, y: i32) -> usize {

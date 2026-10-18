@@ -1,4 +1,6 @@
-use crate::capture::WinInfo;
+use crate::capture::{MonitorShot, WinInfo};
+use anyhow::{Context as _, Result};
+use std::sync::Arc;
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
@@ -9,6 +11,26 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TOOLWINDOW,
 };
 use windows::core::BOOL;
+
+pub fn capture_monitors() -> Result<Vec<MonitorShot>> {
+    let monitors = xcap::Monitor::all().context("listing monitors")?;
+    let mut out = Vec::new();
+    for m in monitors {
+        let image = m.capture_image().context("capturing monitor")?;
+        let (x, y, scale) = (m.x().unwrap_or(0), m.y().unwrap_or(0), m.scale_factor().unwrap_or(1.0));
+        let (width, height) = image.dimensions();
+        out.push(MonitorShot {
+            x,
+            y,
+            width,
+            height,
+            scale,
+            logical: [x as f32 / scale, y as f32 / scale, width as f32 / scale, height as f32 / scale],
+            image: Arc::new(image),
+        });
+    }
+    Ok(out)
+}
 
 pub fn cursor_pos() -> (i32, i32) {
     let mut p = POINT::default();

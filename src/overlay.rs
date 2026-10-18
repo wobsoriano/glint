@@ -42,15 +42,14 @@ pub fn open(shots: Vec<MonitorShot>, windows: Vec<WinInfo>, mode: Mode, cx: &mut
     let show_loupe = cx.global::<Settings>().show_loupe;
     let mut handles = Vec::new();
     for (i, m) in shots.iter().enumerate() {
+        let [lx, ly, lw, lh] = m.logical;
         let display = displays.iter().find(|d| {
             let b = d.bounds();
-            ((f32::from(b.origin.x) * m.scale) - m.x as f32).abs() < 4.0
-                && ((f32::from(b.origin.y) * m.scale) - m.y as f32).abs() < 4.0
+            (f32::from(b.origin.x) - lx).abs() < 2.0 && (f32::from(b.origin.y) - ly).abs() < 2.0
         });
-        let bounds = display.map(|d| d.bounds()).unwrap_or(Bounds {
-            origin: gpui::point(px(m.x as f32 / m.scale), px(m.y as f32 / m.scale)),
-            size: size(px(m.width as f32 / m.scale), px(m.height as f32 / m.scale)),
-        });
+        let bounds = display
+            .map(|d| d.bounds())
+            .unwrap_or(Bounds { origin: gpui::point(px(lx), px(ly)), size: size(px(lw), px(lh)) });
         let rect = [m.x, m.y, m.width as i32, m.height as i32];
         let local: Vec<WinInfo> = windows
             .iter()

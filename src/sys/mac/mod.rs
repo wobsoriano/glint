@@ -1,28 +1,11 @@
 //! macOS backend. Mostly stubs so far: actions report "not supported on macOS yet", and
 //! window styling calls do nothing.
 
+pub mod capture;
+pub mod desktop;
+
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {
     anyhow::bail!("{what} is not supported on macOS yet")
-}
-
-pub mod capture {
-    use crate::capture::WinInfo;
-
-    pub fn cursor_pos() -> (i32, i32) {
-        (0, 0)
-    }
-
-    pub fn window_rect(_hwnd: isize) -> Option<[i32; 4]> {
-        None
-    }
-
-    pub fn list_windows() -> Vec<WinInfo> {
-        Vec::new()
-    }
-
-    pub fn foreground_window() -> Option<WinInfo> {
-        None
-    }
 }
 
 pub mod chrome {
@@ -30,26 +13,6 @@ pub mod chrome {
     use gpui::Window;
 
     pub fn style(_window: &Window, _kind: Kind) {}
-}
-
-pub mod desktop {
-    use std::path::PathBuf;
-
-    pub fn make_topmost(_window: &gpui::Window, _rect: Option<[i32; 4]>, _activate: bool) {}
-
-    pub fn bring_to_front(window: &gpui::Window) {
-        window.activate_window();
-    }
-
-    pub fn desktop_wallpaper() -> Option<PathBuf> {
-        None
-    }
-
-    pub fn set_launch_at_login(_enabled: bool) {}
-
-    pub fn single_instance() -> bool {
-        true
-    }
 }
 
 pub mod ipc {
@@ -104,19 +67,27 @@ pub mod shell {
         }
     }
 
+    /// The work area of the display under the pointer, and that display's scale.
     pub fn work_area_at_cursor() -> ([i32; 4], f32) {
-        let primary = xcap::Monitor::all().ok().and_then(|all| all.into_iter().next());
-        match primary {
-            Some(m) => {
-                let scale = m.scale_factor().unwrap_or(1.0);
-                let size = |v: Option<u32>| (v.unwrap_or(0) as f32 * scale) as i32;
-                ([0, 0, size(m.width().ok()), size(m.height().ok())], scale)
-            }
-            None => ([0, 0, 1920, 1080], 1.0),
-        }
+        let displays = glint_media::displays().unwrap_or_default();
+        let (x, y) = crate::capture::cursor_pos();
+        let Some(d) = displays.iter().find(|d| d.rect.x <= x && d.rect.y <= y && x < d.rect.x + d.rect.width as i32 && y < d.rect.y + d.rect.height as i32).or(displays.first()) else {
+            return ([0, 0, 1920, 1080], 1.0);
+        };
+        let rect = super::desktop::work_area(&displays, d).unwrap_or([d.rect.x, d.rect.y, d.rect.width as i32, d.rect.height as i32]);
+        (rect, d.scale)
     }
 
-    pub fn place(_window: &gpui::Window, _rect: [i32; 4], _cx: &gpui::App) {}
+    /// Moves a window to cover a pixel rectangle, above other apps, without activating it.
+    pub fn place(window: &gpui::Window, rect: [i32; 4], _cx: &gpui::App) {
+        let Ok(displays) = glint_media::displays() else { return };
+        let frame = super::desktop::to_frame(glint_media::space::rect_to_points(&displays, rect));
+        super::desktop::later(window, move |w| {
+            super::desktop::float(w);
+            w.setFrame_display(frame, true);
+            w.orderFrontRegardless();
+        });
+    }
 
     pub fn mica(_window: &gpui::Window) {}
 
@@ -134,12 +105,22 @@ pub mod shell {
 }
 
 pub mod target {
-    pub fn window_monitor(_hwnd: isize) -> isize {
-        0
+    /// The display that holds the center of window `hwnd`, as in `DisplayInfo::handle`.
+    pub fn window_monitor(hwnd: isize) -> isize {
+        let displays = glint_media::displays().unwrap_or_default();
+        let center = crate::capture::window_rect(hwnd).map(|[x, y, w, h]| (x + w / 2, y + h / 2));
+        center
+            .and_then(|(x, y)| {
+                displays.iter().find(|d| d.rect.x <= x && d.rect.y <= y && x < d.rect.x + d.rect.width as i32 && y < d.rect.y + d.rect.height as i32)
+            })
+            .or(displays.first())
+            .map_or(0, |d| d.handle)
     }
 
-    pub fn work_area(_monitor: isize) -> Option<[i32; 4]> {
-        None
+    pub fn work_area(monitor: isize) -> Option<[i32; 4]> {
+        let displays = glint_media::displays().ok()?;
+        let d = displays.iter().find(|d| d.handle == monitor)?;
+        super::desktop::work_area(&displays, d)
     }
 }
 

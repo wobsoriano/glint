@@ -1,7 +1,10 @@
-//! macOS backend. Not implemented yet: every constructor returns an error, and the types hold
-//! `Infallible`, so their methods can never run.
+//! macOS backend. Display enumeration and the screen space work. Everything else is a stub:
+//! constructors return an error, and the types hold `Infallible`, so their methods can never run.
 
 use std::convert::Infallible;
+
+pub(crate) mod devices;
+pub mod space;
 
 fn unsupported<T>(what: &str) -> anyhow::Result<T> {
     anyhow::bail!("{what} is not supported on macOS yet")
@@ -71,23 +74,6 @@ pub(crate) mod camera {
         pub fn size(&self) -> (u32, u32) {
             match self.0 {}
         }
-    }
-}
-
-pub(crate) mod devices {
-    use super::*;
-    use crate::devices::{AudioDevice, CameraDevice, DisplayInfo};
-
-    pub fn displays() -> anyhow::Result<Vec<DisplayInfo>> {
-        unsupported("display enumeration")
-    }
-
-    pub fn microphones() -> anyhow::Result<Vec<AudioDevice>> {
-        unsupported("microphone enumeration")
-    }
-
-    pub fn cameras() -> anyhow::Result<Vec<CameraDevice>> {
-        unsupported("camera enumeration")
     }
 }
 

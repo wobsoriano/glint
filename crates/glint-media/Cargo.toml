@@ -10,6 +10,10 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
 features = [
