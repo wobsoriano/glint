@@ -45,7 +45,14 @@ pub(crate) struct InputTrack {
 }
 
 impl InputTrack {
-    pub fn start(map: PointerMap, size: [u32; 2], scale: f32, session_dir: &Path, clock: Arc<MediaClock>) -> anyhow::Result<Self> {
+    pub fn start(
+        map: PointerMap,
+        size: [u32; 2],
+        scale: f32,
+        session_dir: &Path,
+        clock: Arc<MediaClock>,
+        ignored_keys: Vec<String>,
+    ) -> anyhow::Result<Self> {
         let cursors_dir = session_dir.join("cursors");
         std::fs::create_dir_all(&cursors_dir).with_context(|| format!("create {}", cursors_dir.display()))?;
         let displays = crate::devices::displays()?;
@@ -53,7 +60,7 @@ impl InputTrack {
         let thread = std::thread::Builder::new().name("glint-input".into()).spawn(move || {
             let (cursor_tx, cursor_rx) = mpsc::channel();
             let state = RefCell::new(TapState {
-                rec: InputRecorder::new(size, scale, cursors_dir, clock),
+                rec: InputRecorder::new(size, scale, cursors_dir, clock).ignoring(ignored_keys),
                 map,
                 last_origin: (0, 0),
                 displays,
@@ -289,7 +296,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let clock = Arc::new(MediaClock::paused());
         clock.resume();
-        let track = InputTrack::start(PointerMap::Fixed { x: 0, y: 0 }, [3024, 1964], 2.0, &dir, clock).unwrap();
+        let track = InputTrack::start(PointerMap::Fixed { x: 0, y: 0 }, [3024, 1964], 2.0, &dir, clock, Vec::new()).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(3));
         let tl = track.stop().unwrap();
         eprintln!("pointer {} clicks {:?} keys {:?} cursors {:?}", tl.pointer.len(), tl.clicks, tl.keys, tl.cursors);

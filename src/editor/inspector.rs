@@ -209,16 +209,7 @@ impl Editor {
                     .gap_2()
                     .pl(px(ui::SYSTEM_CAPTION_INSET.unwrap_or(16.)))
                     .window_control_area(WindowControlArea::Drag)
-                    .child(
-                        div()
-                            .size(px(20.))
-                            .rounded(px(5.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .bg(t.accent)
-                            .child(ui::icon("area", 12., t.on_accent)),
-                    )
+                    .child(img(ImageSource::Render(crate::mark::badge())).size(px(20.)).flex_none())
                     .child(div().text_sm().truncate().text_color(t.text).child(self.title.clone())),
             )
             .child(div().id("drag-m1").h_full().flex_1().window_control_area(WindowControlArea::Drag))

@@ -46,7 +46,7 @@ impl Recorder {
                 _ => PointerMap::Fixed { x: resolved.origin.0, y: resolved.origin.1 },
             };
             start_optional(&mut warnings, "input", || {
-                InputTrack::start(map, [geometry.width, geometry.height], resolved.scale, &opts.session_dir, clock.clone())
+                InputTrack::start(map, [geometry.width, geometry.height], resolved.scale, &opts.session_dir, clock.clone(), opts.ignored_keys.clone())
             })
         } else {
             None

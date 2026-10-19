@@ -46,6 +46,9 @@ pub struct RecordOptions {
     /// Also offer every microphone buffer (48 kHz mono f32, paused or not) to this channel,
     /// for live speech recognition. A full channel drops the buffer; the recording never waits.
     pub mic_tap: Option<SyncSender<Vec<f32>>>,
+    /// Shortcut labels to leave out of `input.json`, written as the input track labels them
+    /// (`Ctrl+Shift+7` on Windows, `⌃⇧7` on macOS).
+    pub ignored_keys: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

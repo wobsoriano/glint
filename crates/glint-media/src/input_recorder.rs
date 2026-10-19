@@ -38,6 +38,7 @@ pub(crate) struct InputRecorder {
     last_pos: (f32, f32),
     last_pointer_ms: Option<u64>,
     pending: [Option<usize>; 3],
+    ignored_keys: Vec<String>,
 }
 
 impl InputRecorder {
@@ -54,7 +55,14 @@ impl InputRecorder {
             last_pos: (0.0, 0.0),
             last_pointer_ms: None,
             pending: [None; 3],
+            ignored_keys: Vec::new(),
         }
+    }
+
+    /// Leaves these shortcut labels out of the timeline, such as the app's own hotkeys.
+    pub fn ignoring(mut self, labels: Vec<String>) -> Self {
+        self.ignored_keys = labels;
+        self
     }
 
     /// Media time, or `None` while paused, when nothing is recorded.
@@ -89,6 +97,9 @@ impl InputRecorder {
     }
 
     pub fn key(&mut self, label: String) {
+        if self.ignored_keys.contains(&label) {
+            return;
+        }
         if let Some(t) = self.now() {
             self.timeline.keys.push(KeyPress { t, label });
         }
@@ -214,6 +225,14 @@ mod tests {
         assert_eq!(ids, vec![0, 1]);
         assert_eq!(r.timeline.cursors[1].scale, 2.0);
         assert_eq!(r.timeline.pointer.last().unwrap().cursor(), 0, "back on the first shape");
+    }
+
+    #[test]
+    fn ignored_shortcuts_are_left_out() {
+        let mut r = recorder().ignoring(vec!["Ctrl+Shift+7".into()]);
+        r.key("Ctrl+Shift+7".into());
+        r.key("Ctrl+S".into());
+        assert_eq!(r.timeline.keys.iter().map(|k| k.label.as_str()).collect::<Vec<_>>(), vec!["Ctrl+S"]);
     }
 
     #[test]

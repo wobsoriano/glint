@@ -130,9 +130,36 @@ pub fn display(accel: &str) -> String {
     }
 }
 
+/// A global shortcut as a recording's input track labels the key press, so recordings can
+/// leave Glint's own shortcuts out of their keystroke captions.
+pub fn recorded_label(accel: &str) -> String {
+    if cfg!(target_os = "macos") {
+        return crate::ui::mac_chords(accel, "⌃");
+    }
+    let parts: Vec<&str> = accel.split('+').collect();
+    let Some((key, mods)) = parts.split_last() else { return String::new() };
+    let key = if key.eq_ignore_ascii_case("Printscreen") { "PrintScreen" } else { key };
+    let mut out: Vec<&str> = [("Win", &["Super", "Win"][..]), ("Ctrl", &["Ctrl"]), ("Alt", &["Alt"]), ("Shift", &["Shift"])]
+        .into_iter()
+        .filter(|(_, names)| mods.iter().any(|m| names.contains(m)))
+        .map(|(label, _)| label)
+        .collect();
+    out.push(key);
+    out.join("+")
+}
+
 #[cfg(test)]
 mod tests {
     use super::accelerator;
+
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn recorded_labels_follow_the_input_track_order() {
+        use super::recorded_label;
+        assert_eq!(recorded_label("Ctrl+Shift+7"), "Ctrl+Shift+7");
+        assert_eq!(recorded_label("Ctrl+Shift+Super+L"), "Win+Ctrl+Shift+L");
+        assert_eq!(recorded_label("Printscreen"), "PrintScreen");
+    }
 
     fn key(s: &str) -> gpui::Keystroke {
         gpui::Keystroke::parse(s).unwrap()

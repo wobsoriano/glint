@@ -21,6 +21,7 @@ fn options(dir: &PathBuf) -> RecordOptions {
         camera: None,
         record_input: false,
         mic_tap: None,
+        ignored_keys: Vec::new(),
     }
 }
 

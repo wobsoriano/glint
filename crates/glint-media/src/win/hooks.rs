@@ -42,13 +42,21 @@ pub(crate) struct InputTrack {
 }
 
 impl InputTrack {
-    pub fn start(map: PointerMap, size: [u32; 2], scale: f32, session_dir: &Path, clock: Arc<MediaClock>) -> anyhow::Result<Self> {
+    pub fn start(
+        map: PointerMap,
+        size: [u32; 2],
+        scale: f32,
+        session_dir: &Path,
+        clock: Arc<MediaClock>,
+        ignored_keys: Vec<String>,
+    ) -> anyhow::Result<Self> {
         let cursors_dir = session_dir.join("cursors");
         std::fs::create_dir_all(&cursors_dir).with_context(|| format!("create {}", cursors_dir.display()))?;
         let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<u32>>();
         let thread = std::thread::Builder::new().name("glint-input".into()).spawn(move || {
             let _physical = PhysicalPixels::enter();
-            let state = HookState::new(map, size, scale, cursors_dir, clock);
+            let mut state = HookState::new(map, size, scale, cursors_dir, clock);
+            state.rec = state.rec.ignoring(ignored_keys);
             let hooks = unsafe {
                 let module = GetModuleHandleW(None)?;
                 let mouse = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(module.into()), 0).context("WH_MOUSE_LL");

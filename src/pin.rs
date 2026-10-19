@@ -95,7 +95,7 @@ impl Render for Pin {
                 if e.click_count >= 2 {
                     window.remove_window();
                 } else {
-                    window.start_window_move();
+                    desktop::start_window_move(window);
                 }
             })
             .on_scroll_wheel(cx.listener(Self::on_scroll))

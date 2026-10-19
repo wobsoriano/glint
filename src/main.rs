@@ -12,6 +12,7 @@ mod hotkeys;
 mod ipc;
 mod library;
 mod library_window;
+mod mark;
 mod ocr;
 mod overlay;
 mod pin;
@@ -310,63 +311,11 @@ fn main() {
     });
 }
 
-/// Glint's mark: corner brackets on a gradient card. A `template` icon is the brackets alone,
-/// which macOS tints to match the menu bar.
 fn tray_icon_image(template: bool) -> tray_icon::Icon {
-    let n = 32u32;
-    let mut pm = tiny_skia::Pixmap::new(n, n).unwrap();
-    let grad = tiny_skia::LinearGradient::new(
-        tiny_skia::Point::from_xy(0.0, 0.0),
-        tiny_skia::Point::from_xy(n as f32, n as f32),
-        vec![
-            tiny_skia::GradientStop::new(0.0, tiny_skia::Color::from_rgba8(0x63, 0x66, 0xF1, 255)),
-            tiny_skia::GradientStop::new(1.0, tiny_skia::Color::from_rgba8(0xEC, 0x48, 0x99, 255)),
-        ],
-        tiny_skia::SpreadMode::Pad,
-        tiny_skia::Transform::identity(),
-    )
-    .unwrap();
-    let paint = tiny_skia::Paint {
-        shader: grad,
-        anti_alias: true,
-        ..Default::default()
-    };
-    let card = annotate::R { x: 1.0, y: 1.0, w: 30.0, h: 30.0 };
-    if !template {
-        pm.fill_path(
-            &render::rounded_rect(&card, 8.0).unwrap(),
-            &paint,
-            tiny_skia::FillRule::Winding,
-            tiny_skia::Transform::identity(),
-            None,
-        );
-    }
-    let mut white = tiny_skia::Paint::default();
-    white.set_color_rgba8(255, 255, 255, 255);
-    white.anti_alias = true;
-    let stroke = tiny_skia::Stroke {
-        width: 2.6,
-        line_cap: tiny_skia::LineCap::Round,
-        ..Default::default()
-    };
-    let mut pb = tiny_skia::PathBuilder::new();
-    for [a, b, c] in [
-        [(8.0, 13.0), (8.0, 8.0), (13.0, 8.0)],
-        [(19.0, 8.0), (24.0, 8.0), (24.0, 13.0)],
-        [(24.0, 19.0), (24.0, 24.0), (19.0, 24.0)],
-        [(13.0, 24.0), (8.0, 24.0), (8.0, 19.0)],
-    ] {
-        pb.move_to(a.0, a.1);
-        pb.line_to(b.0, b.1);
-        pb.line_to(c.0, c.1);
-    }
-    if let Some(p) = pb.finish() {
-        pm.stroke_path(&p, &white, &stroke, tiny_skia::Transform::identity(), None);
-    }
+    let pm = mark::pixmap(32, template);
     let rgba = render::rgba_from_pixmap(&pm);
-    tray_icon::Icon::from_rgba(rgba.into_raw(), n, n).unwrap()
+    tray_icon::Icon::from_rgba(rgba.into_raw(), 32, 32).unwrap()
 }
-
 
 #[cfg(test)]
 mod pipeline_tests {

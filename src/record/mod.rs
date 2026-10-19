@@ -7,7 +7,7 @@ mod prompter;
 mod target;
 
 use crate::library::{Item, PendingRecording, RecordingInfo};
-use crate::settings::{RecordPrefs, RecordTarget, Settings};
+use crate::settings::{HotkeyAction, RecordPrefs, RecordTarget, Settings};
 use crate::{flow, overlay, stack, store, toast};
 use chrono::Local;
 use glint_media::{DeviceId, Fps, MicMonitor, RecordOptions, Recorder, VideoReader};
@@ -323,6 +323,12 @@ fn begin(cx: &mut App) {
         camera: p.camera.clone().map(DeviceId),
         record_input: true,
         mic_tap,
+        ignored_keys: HotkeyAction::ALL
+            .iter()
+            .map(|a| cx.global::<Settings>().hotkeys.get(*a))
+            .filter(|accel| !accel.is_empty())
+            .map(|accel| crate::hotkeys::recorded_label(accel))
+            .collect(),
     };
     let task = cx.background_spawn(async move { Recorder::start(opts) });
     cx.spawn(async move |cx| {

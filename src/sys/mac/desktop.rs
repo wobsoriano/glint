@@ -2,7 +2,7 @@ use dispatch2::DispatchQueue;
 use glint_media::{space, DisplayInfo};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWorkspace, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSEvent, NSPopUpMenuWindowLevel, NSScreen, NSView, NSWindow, NSWorkspace, NSWindowCollectionBehavior, NSWindowStyleMask};
 use objc2_core_graphics::{CGDisplayBounds, CGMainDisplayID};
 use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -86,6 +86,20 @@ pub fn make_topmost(window: &gpui::Window, rect: Option<[i32; 4]>, activate: boo
         } else {
             w.orderFrontRegardless();
         }
+    });
+}
+
+/// Moves the window with the pointer while the button stays down. GPUI's `start_window_move`
+/// does nothing on macOS.
+pub fn start_window_move(window: &gpui::Window) {
+    struct MainOnlyEvent(Retained<NSEvent>);
+    unsafe impl Send for MainOnlyEvent {}
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() else { return };
+    let event = MainOnlyEvent(event);
+    later(window, move |w| {
+        let event = event;
+        w.performWindowDragWithEvent(&event.0)
     });
 }
 
