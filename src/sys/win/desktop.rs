@@ -1,13 +1,14 @@
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::path::PathBuf;
 use windows::core::{w, HSTRING, PCWSTR};
-use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND};
+use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Registry::{
     RegDeleteKeyValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ,
 };
 use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::WindowsAndMessaging::{
-    SetForegroundWindow, SetWindowPos, SystemParametersInfoW, HWND_TOPMOST, SPI_GETDESKWALLPAPER,
+    PostMessageW, SetForegroundWindow, SetWindowPos, SystemParametersInfoW, HWND_TOPMOST, SPI_GETDESKWALLPAPER, WM_SYSCOMMAND,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
 };
 
@@ -33,6 +34,18 @@ pub fn make_topmost(window: &gpui::Window, rect: Option<[i32; 4]>, activate: boo
         if activate {
             let _ = SetForegroundWindow(h);
         }
+    }
+}
+
+/// Moves the window with the pointer while the left button stays down. GPUI's
+/// `start_window_move` does nothing on Windows. The command is posted so the move loop starts
+/// after GPUI's mouse handler returns, not inside it.
+pub fn start_window_move(window: &gpui::Window) {
+    const SC_DRAGMOVE: usize = 0xF012;
+    let Some(h) = hwnd(window) else { return };
+    unsafe {
+        let _ = ReleaseCapture();
+        let _ = PostMessageW(Some(h), WM_SYSCOMMAND, WPARAM(SC_DRAGMOVE), LPARAM(0));
     }
 }
 

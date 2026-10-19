@@ -1,4 +1,4 @@
-pub use crate::sys::desktop::{bring_to_front, desktop_wallpaper, init_app, make_topmost, set_launch_at_login, single_instance};
+pub use crate::sys::desktop::{bring_to_front, desktop_wallpaper, init_app, make_topmost, set_launch_at_login, single_instance, start_window_move};
 
 pub fn copy_image(img: &image::RgbaImage) -> anyhow::Result<()> {
     let mut cb = arboard::Clipboard::new()?;
