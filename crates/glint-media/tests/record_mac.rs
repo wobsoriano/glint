@@ -18,6 +18,7 @@ fn records_two_seconds_of_display_0_with_input_and_system_audio() {
         camera: None,
         record_input: true,
         mic_tap: None,
+        ignored_keys: Vec::new(),
     })
     .unwrap();
     let sound = std::process::Command::new("afplay").arg("/System/Library/Sounds/Submarine.aiff").spawn();
@@ -68,6 +69,7 @@ fn records_a_window() {
         camera: None,
         record_input: true,
         mic_tap: None,
+        ignored_keys: Vec::new(),
     })
     .unwrap();
     std::thread::sleep(Duration::from_secs(1));
@@ -93,6 +95,7 @@ fn records_an_area_at_its_even_pixel_size_without_the_pause() {
         camera: None,
         record_input: false,
         mic_tap: None,
+        ignored_keys: Vec::new(),
     })
     .unwrap();
     std::thread::sleep(Duration::from_millis(500));

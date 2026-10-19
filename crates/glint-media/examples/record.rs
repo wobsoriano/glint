@@ -33,6 +33,7 @@ fn main() -> anyhow::Result<()> {
         camera: get("--camera").map(DeviceId),
         record_input: !has("--no-input"),
         mic_tap: None,
+        ignored_keys: Vec::new(),
     };
     println!("start {:?} -> {}", opts.source, session_dir.display());
     let started = Instant::now();

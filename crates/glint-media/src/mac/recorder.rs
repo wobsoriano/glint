@@ -49,7 +49,7 @@ impl Recorder {
 
         let input = if opts.record_input {
             start_optional(&mut warnings, "input", || {
-                InputTrack::start(resolved.pointer, resolved.size, resolved.scale, &opts.session_dir, clock.clone())
+                InputTrack::start(resolved.pointer, resolved.size, resolved.scale, &opts.session_dir, clock.clone(), opts.ignored_keys.clone())
             })
         } else {
             None
