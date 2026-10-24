@@ -1,0 +1,117 @@
+[
+  {
+    "name": "bg_none",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_solid",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_gradient_2stop",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_gradient_3stop_aspect",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_gradient_sky_square",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_gradient_4stop_alpha",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_blurred",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "bg_image",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "chrome_mac",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "chrome_win_dark",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "annotations_shapes",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "annotations_text",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "annotations_redact",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "border_watermark_grid",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "watermark_tiled",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "perspective",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "perspective_rotz_pan",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "blur_radial_bleed",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "blur_directional_clipped",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "crop_dpi",
+    "region": null,
+    "scale": 1.0
+  },
+  {
+    "name": "scale_half",
+    "region": null,
+    "scale": 0.5
+  },
+  {
+    "name": "region",
+    "region": [
+      57.0,
+      41.0,
+      250.0,
+      180.0
+    ],
+    "scale": 1.0
+  }
+]

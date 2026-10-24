@@ -1,0 +1,240 @@
+[
+  {
+    "name": "Beach",
+    "style": {
+      "background": {
+        "Image": "C:\\Users\\me\\Pictures\\beach.jpg"
+      },
+      "padding": 64.0,
+      "inset": 0.0,
+      "auto_balance": true,
+      "radius": 12.0,
+      "shadow": 40.0,
+      "shadow_opacity": 0.45,
+      "aspect": null,
+      "align": 4,
+      "chrome": "None",
+      "chrome_title": true
+    },
+    "effects": {
+      "border": {
+        "enabled": false,
+        "width": 6.0,
+        "color": 4294967295
+      },
+      "watermark": {
+        "enabled": true,
+        "text": "Draft",
+        "font": {
+          "family": "Segoe UI",
+          "weight": "semibold",
+          "align": "left"
+        },
+        "size": 22.0,
+        "opacity": 0.6,
+        "color": 4294967295,
+        "placement": "tiled",
+        "rotation": -30.0
+      },
+      "perspective": {
+        "rot_x": 0.0,
+        "rot_y": 0.0,
+        "rot_z": 0.0,
+        "zoom": 1.0,
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "fov": 24.0
+      },
+      "blur": {
+        "enabled": true,
+        "mode": "directional",
+        "edge": "clipped",
+        "strength": 30.0,
+        "start": 0.35,
+        "angle": 0.0
+      }
+    }
+  },
+  {
+    "name": "Default",
+    "style": {
+      "background": {
+        "Gradient": {
+          "stops": [
+            1667691007,
+            2824206335,
+            3964180991
+          ],
+          "angle": 135.0
+        }
+      },
+      "padding": 64.0,
+      "inset": 0.0,
+      "auto_balance": true,
+      "radius": 12.0,
+      "shadow": 40.0,
+      "shadow_opacity": 0.45,
+      "aspect": null,
+      "align": 4,
+      "chrome": "None",
+      "chrome_title": true
+    },
+    "effects": {
+      "border": {
+        "enabled": false,
+        "width": 6.0,
+        "color": 4294967295
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "",
+        "font": {
+          "family": "Segoe UI",
+          "weight": "semibold",
+          "align": "left"
+        },
+        "size": 22.0,
+        "opacity": 0.6,
+        "color": 4294967295,
+        "placement": {
+          "grid": 8
+        },
+        "rotation": -30.0
+      },
+      "perspective": {
+        "rot_x": 0.0,
+        "rot_y": 0.0,
+        "rot_z": 0.0,
+        "zoom": 1.0,
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "fov": 24.0
+      },
+      "blur": {
+        "enabled": false,
+        "mode": "radial",
+        "edge": "bleed",
+        "strength": 30.0,
+        "start": 0.35,
+        "angle": 0.0
+      }
+    }
+  },
+  {
+    "name": "Solid",
+    "style": {
+      "background": {
+        "Solid": 305419896
+      },
+      "padding": 64.0,
+      "inset": 0.0,
+      "auto_balance": true,
+      "radius": 12.0,
+      "shadow": 40.0,
+      "shadow_opacity": 0.45,
+      "aspect": null,
+      "align": 4,
+      "chrome": "WinLight",
+      "chrome_title": true
+    },
+    "effects": {
+      "border": {
+        "enabled": false,
+        "width": 6.0,
+        "color": 4294967295
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "",
+        "font": {
+          "family": "Segoe UI",
+          "weight": "semibold",
+          "align": "left"
+        },
+        "size": 22.0,
+        "opacity": 0.6,
+        "color": 4294967295,
+        "placement": {
+          "grid": 8
+        },
+        "rotation": -30.0
+      },
+      "perspective": {
+        "rot_x": 0.0,
+        "rot_y": 0.0,
+        "rot_z": 0.0,
+        "zoom": 1.0,
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "fov": 24.0
+      },
+      "blur": {
+        "enabled": false,
+        "mode": "radial",
+        "edge": "bleed",
+        "strength": 30.0,
+        "start": 0.35,
+        "angle": 0.0
+      }
+    }
+  },
+  {
+    "name": "Blurred",
+    "style": {
+      "background": "Blurred",
+      "padding": 64.0,
+      "inset": 0.0,
+      "auto_balance": true,
+      "radius": 12.0,
+      "shadow": 40.0,
+      "shadow_opacity": 0.45,
+      "aspect": {
+        "w": 4.0,
+        "h": 5.0
+      },
+      "align": 4,
+      "chrome": "None",
+      "chrome_title": true
+    },
+    "effects": {
+      "border": {
+        "enabled": false,
+        "width": 6.0,
+        "color": 4294967295
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "",
+        "font": {
+          "family": "Segoe UI",
+          "weight": "semibold",
+          "align": "left"
+        },
+        "size": 22.0,
+        "opacity": 0.6,
+        "color": 4294967295,
+        "placement": {
+          "grid": 8
+        },
+        "rotation": -30.0
+      },
+      "perspective": {
+        "rot_x": 0.0,
+        "rot_y": 0.0,
+        "rot_z": 0.0,
+        "zoom": 1.0,
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "fov": 24.0
+      },
+      "blur": {
+        "enabled": false,
+        "mode": "radial",
+        "edge": "bleed",
+        "strength": 30.0,
+        "start": 0.35,
+        "angle": 0.0
+      }
+    }
+  }
+]
