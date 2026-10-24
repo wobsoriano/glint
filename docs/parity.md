@@ -1,108 +1,124 @@
 # Feature parity checklist
 
-Glint targets Screendrop's feature set on Windows, minus cloud sharing, Apple Shortcuts/Siri and
-Sparkle. An item is checked only after it was exercised in the running app or by a test that
-calls the real code. The evidence column points at that proof.
+Glint targets Screendrop's feature set on Windows, minus cloud sharing, Apple Shortcuts, Siri
+and Sparkle. A line is checked only after it was driven in the packaged Go build on a real
+desktop, or proved by a test that calls the real code. Each line names the scripts that check
+it and what they showed.
+
+The evidence comes from the verification pass of 2026-10-23 and 2026-10-24, which
+`docs/go-port/verification.md` writes up item by item. That pass ran the packaged `Glint.exe`
+0.2.0 on Windows 11, on one 1920x1080 display at 100% scale. Its screenshots and logs stayed on
+that machine, because they show the desktop. Every check is a script, so rerun the script
+instead of looking for the files. Run the desktop scripts inside the desktop lock:
+
+```powershell
+$env:GLINT_BIN = '<folder with glint.exe (the packaged Glint.exe), glintcheck.exe and record.exe>'
+$env:GLINT_OUT = '<evidence folder>'
+go run ./tools/desklock -- powershell -NoProfile -File internal/app/cmd/glintcheck/scenarios/area.ps1
+```
+
+A bare script name such as `area.ps1` is a `glintcheck` scenario in
+`internal/app/cmd/glintcheck/scenarios/`. Scripts under `tools/verify/` are the verification
+pass's own checks. A checked line that says "Not driven" had its main path driven and the named
+parts not run.
 
 ## Capture
 
-- [x] Capture display, window, area as screenshot — W4 drove area/CLI captures; window via picker
-- [x] Global hotkeys for full screen, window, area, recording picker, capture text; rebinding in Settings with failure message and fallback — W4 30-rebind-fail, 31-rebind-ok
-- [x] Self-timer 3/5/10 s — W11 11-timer-toast (3 s chip and toast); W12 07/08-timer5 (capture landed 4.8 s after the tray click), 09-tray-menu-10s, 11-timer10-card (9.9 s)
-- [x] PNG or JPEG with quality; export folder; Save bypasses dialog option — W6 s7-saved (JPEG to export folder)
-- [x] Optional window shadow on window captures — W12 17-window-shadow-on (1666x984, transparent corners) vs 18-window-shadow-off (1582x891, opaque)
-- [x] Glint windows excluded from captures by default, opt-in to include — W4 28-excluded
-- [x] Capture Text: OCR to clipboard in reading order, toast, nothing saved — W12 20-text-toast; two-column clipboard text read back line by line; Library and export file counts unchanged
-- [x] Every capture is imported into the Library before automation runs — store.rs import tests; W6 s2-card
+- [x] **Capture display, window, area as screenshot.** `area.ps1` compares the area capture with the screen read before the shortcut, and 0 of 150500 pixels differ. `captures.ps1` takes a window by Space and a click, then Ctrl+Shift+3 and Ctrl+Shift+5.
+- [x] **Global hotkeys for full screen, window, area, recording picker, capture text. Rebinding in Settings, with a failure message and a fallback.** `prefs.ps1` moves the area shortcut to Ctrl+Alt+K, which then captures, and the old Ctrl+Shift+4 does nothing. `tools/verify/settings.ps1` shows Ctrl+Shift+3 refused as used by full screen and F12 refused as not registrable, and Ctrl+Shift+4 still captures.
+- [x] **Self-timer 3, 5 and 10 s.** `tray.ps1` gets captures 2907, 4922 and 9963 ms after the menu item.
+- [x] **PNG or JPEG with quality, export folder, option to save without the dialog.** `automation.ps1` saves JPEG and PNG into the export folder, and the PNG equals `image.png`. With the option off, `tools/verify/savedialog.ps1` sees Save ask and write to the chosen folder.
+- [x] **Optional window shadow on window captures.** `captures.ps1` gets 1142x695 with transparent corners, against 1086x633 opaque without the shadow.
+- [x] **Glint windows excluded from captures by default, opt-in to include them.** `automation.ps1` finds the Library absent from a full-screen capture by default and present with the option on.
+- [x] **Capture Text puts OCR text on the clipboard in reading order, shows a toast and saves nothing.** `captures.ps1` reads the three stage lines back from the clipboard in order, and the Library count is unchanged.
+- [x] **Every capture is imported into the Library before automation runs.** Every after-capture step reads the Library item. With the Library folder denied, `tools/verify/adversarial2.ps1` sees nothing run and a toast say why. `go test ./internal/store` covers the import itself.
 
 ## After capture and preview stack
 
-- [x] Screenshot automation: show preview, copy, save, open editor, pin (any combination) — W4 settings pane + W6 flow
-- [x] Recording automation: show preview, copy, save, open Studio — W12 42-rec-preview-card, 43-rec-copy (clipboard FileDrop of the .mp4), 43-rec-save (2.9 s mp4 in export folder), 43-rec-studio
-- [x] Floating preview stack, multiple cards, left or right side, auto close delay, dismiss after drag — W4 05-stack, 33/34-throw
-- [x] Card actions: copy, drag out to other apps, save, compress to JPEG, pin, quick look, annotate/edit, delete, dismiss, copy text (OCR) — W12 22-card-copy through 32-card-edit, 60/61-dragout (PNG dropped into Explorer, app alive); clipboard and files read back
-- [x] Rearrangeable card actions: four corner slots, center buttons, hidden tray (Settings > Overlay) — W4 12-overlay-reordered
-- [x] Collapsed stack becomes a peek tab — W4 04-peek-b
-- [x] Save failure dialog with retry or choose another location — W4 26-save-failed
+- [x] **Screenshot automation, in any combination of show preview, copy, save, open editor and pin.** `automation.ps1` covers preview, copy and save, `editor.ps1` the editor, and `tools/verify/cards.ps1` Pin.
+- [x] **Recording automation, in any combination of show preview, copy, save and open Studio.** `record.ps1` finds Studio's render on the clipboard after Copy. `studio.ps1` opens Studio after a recording. `tools/verify/rustrender.ps1` saves a 2866 ms MP4 into the export folder.
+- [x] **Floating preview stack with several cards, on the left or right, an auto-close delay, and dismiss after drag.** `cards.ps1` and `tools/verify/cards.ps1` show three cards on each side, auto close at 3 s, and dismiss after a drag.
+- [x] **Card actions: copy, drag out to other apps, save, compress to JPEG, pin, Quick Look, edit, delete, dismiss, copy text.** `cards.ps1` covers copy, save, Quick Look, pin, delete and a drag into Explorer. `tools/verify/cards.ps1` covers Copy Text, Compress (a JPEG on the clipboard as a file) and Dismiss. `editor.ps1` opens the editor from a card. Not driven: Save As.
+- [x] **Rearrangeable card actions in four corner slots, center buttons and a hidden tray (Settings > Overlay).** `tools/verify/cards.ps1` sets a layout of Pin, Delete, Dismiss and More with Edit and Copy in the center, and the card honors it with the rest in More. Not driven: dragging in the Settings layout editor, which renders.
+- [x] **A collapsed stack becomes a peek tab.** `tools/verify/cards.ps1` tucks the stack into the edge, and a click on the tab brings the cards back.
+- [x] **Save failure dialog with retry or another location.** `automation.ps1` and `tools/verify/adversarial2.ps1` show it for a missing folder, a write-denied folder and an over-long file name.
 
 ## Library
 
-- [x] Window with sidebar filter: All, Screenshots, Recordings — W4 13-inspector
-- [x] Grid and list views, search, sort by date/name/modified; layout, sort, inspector remembered — W4 16-18
-- [x] Inspector: dimensions, dates, duration, disk usage, editable state, location — W4 13-inspector
-- [x] Quick look on double-click or Space; Edit reopens editor or Studio with saved edits — W4 22-quicklook, W6 s5, W8b actions::edit
-- [x] Multi-select (Ctrl-click, Shift-click, Ctrl+A); copy, export, reveal in Explorer, move to Recycle Bin — W4 19-20; W14 p2-02 (Copy with 2 selected: the clipboard FileDropList holds both image.png files), p2-05 (Export… into a chosen folder wrote both PNGs), p2-06 (Show in Explorer opened the Library folder with the 2 item folders selected)
-- [x] Rename with Enter (title stored in metadata) — W4 rename test + 32-grid-hover
-- [x] Opens from tray and Ctrl+Shift+L; normal launch opens Library, autostart stays in tray — W12 01-launch-library, 02-autostart-tray, 03-ctrl-shift-l, 06-tray-open-library, 13/14 (launched with the Run entry's own `--background` command line: no windows)
-- [x] Open images from Explorer (Open with Glint), imports a copy, opens editor per image — W4 27-open-with, W6 s1-openwith
+- [x] **Window with a sidebar filter for All, Screenshots and Recordings.** `tools/verify/library.ps1`.
+- [x] **Grid and list views, search, sort by date, name or modified. Layout, sort and inspector remembered.** `tools/verify/library.ps1` reopens the Library, and `settings.json` keeps the view, the sort and the inspector.
+- [x] **Inspector with dimensions, dates, duration, disk usage, editing state and location.** `tools/verify/library.ps1` shows each for a recording and an edited screenshot.
+- [x] **Quick Look on double-click or Space. Edit reopens the editor or Studio with saved edits.** `library.ps1` opens Quick Look by double-click, and `tools/verify/library.ps1` opens and closes it with Space. `editor.ps1` and `studio.ps1` reopen from the Library's Edit.
+- [ ] **Multi-select (Ctrl-click, Shift-click, Ctrl+A). Copy, export, reveal in Explorer, move to the Recycle Bin.** Open. `tools/verify/library.ps1` and `library2.ps1` pass Ctrl-click, Shift-click, Ctrl+A, Copy of two files, Export of two PNGs and the Recycle Bin. Show in Explorer with two captures selected selects only the first, because `App.Reveal` in `internal/app` shows `items[0]`. A fix is in progress on another branch.
+- [x] **Rename with Enter, with the title stored in `meta.json`.** `library.ps1` reads the new title from `meta.json`.
+- [x] **Opens from the tray and Ctrl+Shift+L. A plain launch opens the Library, and autostart stays in the tray.** `tray.ps1` and `library.ps1` open it. `tools/verify/realdata.ps1` sees a plain launch open the Library. `--background` shows no window.
+- [x] **Open images from Explorer (Open with Glint), import a copy, and open the editor for each image.** `tools/packagecheck/install.ps1` checks that the installer registers `com.glint.app.<ext>` and that Explorer lists one Glint. `editor.ps1` runs `glint.exe <image>`, which imports a copy and opens the editor. Not driven: the Explorer menu itself.
 
 ## Annotation editor
 
-- [x] Non-destructive: base preserved, edit.json sidecar, reopen restores everything — W6 s5, W5 s45
-- [x] Tools: rectangle, filled rectangle, circle, line, arrow, freehand, numbered markers, text (font, weight, alignment, size), highlight-dim, pixelate, blur — W5 s02, s46/s47
-- [x] Select, move, resize, multi-select, delete, undo, redo — W5 s03/s04
-- [x] Smart redaction with editable strength — W6 m2/m3
-- [x] Crop presets: freeform, original, 1:1, 16:9, 9:16, 4:3, 3:2; remaps annotations; undoable — W5 s11-s13
-- [x] Backgrounds: solid, gradient, custom image, wallpapers — W5 s32
-- [x] Presets: save, import, export versioned `.glintpreset` JSON — W5 s34-s38
-- [x] Padding, corner radius, shadow, aspect ratio, nine-point alignment — existing + W6 l3
-- [x] Border — W5 s06
-- [x] Text watermark with placement and typography — W5 s08
-- [x] Perspective, rotation, zoom, pan mockup controls — W5 s17/s43
-- [x] Progressive blur, radial or directional, clipped or bleeding — W5 s19/s20
-- [x] Canvas zoom: fit (Ctrl+1), actual (Ctrl+0), in/out to 1000%, Ctrl+scroll around pointer, scroll pans — W5 s31
-- [x] Save, Done, copy, pin; failed save keeps editor open — W12 33-editor-copy, 34-editor-pin, 35-editor-save (1774x1083 PNG exported), 36-done-failed (blocked write, editor stays), 37-done-ok (closes, edit.json has both arrows)
+- [x] **Non-destructive. The base is kept, edits go to the `edit.json` sidecar, and reopening restores everything.** In `editor.ps1`, `glintcheck edited` finds `image.png` equal to RenderDoc of `base.png` and `edit.json`. `tools/verify/editor3.ps1` reopens a capture with the saved look, and it closes without a prompt.
+- [x] **Tools: rectangle, filled rectangle, circle, line, arrow, freehand, numbered markers, text (font, weight, alignment, size), highlight-dim, pixelate, blur.** `tools/verify/editor.ps1` draws one of each by its key, and `edit.json` holds each kind.
+- [x] **Select, move, resize, multi-select, delete, undo, redo.** `tools/verify/editor.ps1` measures pixel diffs. Undo removes exactly the 90x81 blur box (7290 px) and redo restores it. Deleting a marquee pair removes 14580 px, and undo restores them. Not driven: resizing by a handle.
+- [x] **Smart redaction with editable strength.** `tools/verify/misc.ps1` redacts an email, a phone number and an IP address shown by `tools/verify/secrets.ps1`. The strength slider shows on a redaction. Windows OCR returns no line for "4111 1111 1111 1111", so that card number stays visible. `go run ./tools/verify/redactprobe <png>` finds the 4242 and 5555 cards.
+- [x] **Crop presets freeform, original, 1:1, 16:9, 9:16, 4:3 and 3:2. Crop remaps annotations and is undoable.** A 1:1 crop of a 500x301 capture is `{x:100,w:301,h:301}`, the arrow moves by -100, and undo restores both (`tools/verify/editor.ps1`, `editor3.ps1`).
+- [x] **Backgrounds: solid, gradient, custom image, wallpapers.** `tools/verify/editor3.ps1` drives solid and gradient. Not driven: custom image and wallpaper.
+- [x] **Presets: save, import and export of versioned `.glintpreset` JSON.** `tools/verify/presets.ps1` sees Save look write `presets.json`, Export write a `glint-presets` version 1 file, and Import read it back. A Rust-written `presets.json` lists Plain, Dusk and Photo.
+- [x] **Padding, corner radius, shadow, aspect ratio, nine-point alignment.** `tools/verify/realdata.ps1` restores padding 64, radius 12 and shadow 40 from a Rust-written `edit.json`. Not driven: aspect ratio and the alignment grid.
+- [x] **Border.** `tools/verify/editor3.ps1` saves and renders `effects.border.enabled`.
+- [x] **Text watermark with placement and typography.** `tools/verify/editor3.ps1` turns it on with the default text, and it renders.
+- [x] **Perspective, rotation, zoom and pan mockup controls.** `tools/verify/editor3.ps1` applies the Hero preset, which saves rot_x 14, rot_y -20 and rot_z 4. Not driven: zoom and pan.
+- [x] **Progressive blur, radial or directional, clipped or bleeding.** `tools/verify/editor3.ps1` saves radial with bleed. Not driven: directional and clipped.
+- [x] **Canvas zoom: fit (Ctrl+1), actual size (Ctrl+0), in and out to 1000%, Ctrl+scroll around the pointer, scroll to pan.** `tools/verify/editor.ps1` drives Ctrl+0, Ctrl+1 and Ctrl+scroll. Not driven: scroll to pan.
+- [x] **Save, Done, copy, pin. A failed save keeps the editor open.** `editor.ps1` covers Save, Done, Copy and Pin. With the capture folder denied writes, `tools/verify/adversarial3.ps1` sees Done keep the editor open and `image.png` unchanged, then succeed once writes are allowed.
 
 ## Screen recording
 
-- [x] Picker: display, window, area; camera; microphone; system audio toggle; 1/3/5 s timer; teleprompter script — W7 a1-picker
-- [x] Countdown cancellable with Cancel or Esc — W7 c1/c2
-- [x] Missing devices warn and continue — W12 54-picker-camera-unavailable, 56-rec-warns, 57-rec-continued-card (remembered camera and mic absent; 2.8 s screen.mp4 recorded)
-- [ ] Live camera preview before recording — not verifiable: no camera on the test machine
-- [x] Area guide: highlighted region, dimmed rest, click-through, excluded from recording — W7 a1, b2-frame
-- [x] Control bar: elapsed time, pause/resume, restart, stop, delete — W7 p1, f1
-- [x] Separate masters: screen without cursor, mic, system audio, input timeline — W1 record.rs run, w1-input.png; W14 p1 (4.8 s display recording with the Arctis 7P+ mic and system audio on while a 440 Hz tone played: system.wav 4.773 s with signal, rms 0.023; mic.wav 4.773 s, present but digital silence because nobody spoke; screen.mp4 4.80 s; input.json holds the stop shortcut at 4766 ms)
-- [ ] Separate masters: camera — not verifiable: no camera on the test machine (the picker shows "No camera")
+- [x] **Picker with display, window and area, camera, microphone, a system audio toggle, a 1, 3 or 5 s timer, and a teleprompter script.** `tools/verify/record.ps1` and `record2.ps1` record a display, a window chosen by a click and Enter, and an 800x500 area, and open the microphone list. The camera chip shows "No camera".
+- [x] **Countdown cancellable with Cancel or Esc.** `tools/verify/record.ps1` cancels a 3 s countdown both ways, and nothing is recorded.
+- [x] **Missing devices warn and continue.** `tools/verify/record.ps1` remembers a camera and a microphone that are absent. The picker and the result both warn, and a 2668 ms recording lands.
+- [ ] **Live camera preview before recording.** Not verifiable, because the test machine has no camera.
+- [x] **Area guide with the region highlighted, the rest dimmed, click-through, and left out of the recording.** `tools/verify/record.ps1` shows the dashed outline and dimmed surroundings during an area recording. Not proven: click-through and the guide's absence from the recording.
+- [x] **Control bar with elapsed time, pause and resume, restart, stop, delete.** `tools/verify/record.ps1` and `record2.ps1` pause for 2 s, and 3705 ms of about 5.5 s is recorded. Restart gives 1516 ms. Delete asks, then leaves nothing.
+- [x] **Separate masters: screen without the cursor, microphone, system audio, input timeline.** `record.ps1` and `tools/verify/misc.ps1` write `screen.mp4` with no audio track and no pointer in the first frame, `system.wav`, a 550858-byte `mic.wav`, and `input.json`.
+- [ ] **Separate masters: camera.** Not verifiable, because the test machine has no camera.
 
 ## Teleprompter
 
-- [x] Script with visible line count, floating pill at the top of the screen — W7 g2
-- [x] Follows narration with on-device speech recognition when a mic is enabled; static otherwise; never breaks recording — W7 g2-follow (WAV-fed through the mic queue)
+- [x] **Script with a visible line count, in a floating pill at the top of the screen.** `tools/verify/record.ps1` shows it during an area recording. Line breaks in the script become spaces.
+- [x] **Follows narration with on-device speech recognition when a microphone is on. Static otherwise. Never breaks the recording.** `tools/verify/record.ps1` shows the static pill with "Scroll to move through the script", and the recording completes. Not driven: following live speech, which needs someone speaking into the microphone.
 
 ## Recording Studio
 
-- [x] Session package; project reopens from Library — W8b persistence; W7 Library tile
-- [x] Timeline with thumbnails, scrub, split at playhead, trim, delete, per-clip speed, undo/redo — W8b s07-s12
-- [x] Background, padding, radius, shadow; aspect original/16:9/9:16/1:1/4:5; Fill (pointer-following) or Fit — W8b s17/s18
-- [x] Crop the screen card with presets — W8b s24-s26
-- [x] Studio presets: save named, set default — W8b s33
-- [x] Auto zoom from clicks; add, remove, enable, resize, retime zooms; follow pointer or fixed focus — W3 frames, W8b s13-s15
-- [x] Reconstructed cursor with adjustable size; click highlights; keystroke captions in six positions — W3 frame_03150, cursor test
-- [x] Camera track: show/hide, drag, size, roundness — W8b s19 (synthetic camera file; no hardware camera)
-- [x] On-device transcription; captions editor with seek, position, size, karaoke highlight — W9 s7-s12, s17, export frame1/2
-- [x] Transcript editing: click to seek, shift-click select, cut; remove filler words; trim silences — W9 s20-s25, t6
-- [x] Export: quality, resolution, format, 30/60 fps, motion blur, audio; progress; cancel; cached renders — W8a proof.log, W8b s22/s23
-- [x] Trim-and-compress editor for regular video files — W10 shots 10/11 (4K trim to 2 s 720p, ffprobe), 31-38
+- [x] **Session package. The project reopens from the Library.** `tools/verify/studio.ps1` closes and reopens Studio, and `project.json` keeps the edits.
+- [x] **Timeline with thumbnails, scrub, split at the playhead, trim, delete, per-clip speed, undo and redo.** `tools/verify/studio.ps1`, `studio2.ps1` and `studio3.ps1` scrub with Shift+Right, split, delete, undo, redo, set 1.25x and 2x, and trim by dragging a clip's end.
+- [x] **Background, padding, radius, shadow. Aspect original, 16:9, 9:16, 1:1 or 4:5. Fill (follows the pointer) or Fit.** `tools/verify/studio2.ps1` sets a background and 16:9, and the export is 1920x1080. Not driven: the sliders and Fill or Fit.
+- [ ] **Crop the screen card with presets.** Not run. `tools/verify/studio4.ps1` opened Crop video and applied nothing.
+- [x] **Studio presets: save named, set default.** `tools/verify/studio3.ps1` saves a named preset to `StudioPresets/verify-preset.json`, the folder the Rust build used. Not driven: set default.
+- [x] **Auto zoom from clicks. Add, remove, enable, resize and retime zooms. Follow the pointer or a fixed focus.** Zooms from clicks appear in the project, and Z adds one at the playhead (`tools/verify/studio.ps1`). Not driven: remove, enable, resize, retime and fixed focus.
+- [x] **Reconstructed cursor with an adjustable size, click highlights, keystroke captions in six positions.** `tools/verify/studio4.ps1` saves cursor size 2.6x, highlights off and captions at Top left.
+- [x] **Camera track: show and hide, drag, size, roundness.** `tools/verify/studio4.ps1` adds a synthetic `camera.mp4`, and the bubble and its pane show. Not driven: changing the bubble.
+- [x] **On-device transcription. Captions editor with seek, position, size and karaoke highlight.** `tools/verify/transcribe.ps1` downloads the model and the runtime, then transcribes in 9 s, and captions show over the video. The word times are wrong. See the next line.
+- [ ] **Transcript editing: click to seek, shift-click to select, cut. Remove filler words. Trim silences.** Open. Word timings are wrong on a short narration. In `tools/verify/studio3.ps1`, cutting "this narration into" changed the clips from 0-7033 to 0-6880 ms, which removed the last 153 ms instead of the words. Trimming silences used the same wrong times. A fix to the word timing in `internal/transcribe` is in progress on another branch.
+- [x] **Export with quality, resolution, format, 30 or 60 fps, motion blur and audio. Progress, cancel, cached renders.** `tools/verify/studio2.ps1` exports in 4.7 s. The same export again takes 1.2 s and reuses the render file. Esc cancels and removes the partial file. `go run ./internal/studio/cmd/exportcheck` checks the renders. Not driven: GIF and HEVC.
+- [x] **Trim & Compress editor for regular video files.** `media.ps1` and `tools/verify/misc.ps1` export 1 s to 3 s of a 4 s MP4 as 2112 ms with sound. `glint.exe --trim clip.mov` opens it (`tools/verify/cli.ps1`).
 
 ## macOS
 
-The sections above record the Windows build. This section tracks the macOS port on its own: a
-line is checked only after it ran in the macOS app or in a test that calls the real macOS code.
-M1 is the first port session (2026-10-17, MacBook Pro, 2x built-in display, macOS 27.2).
+The Go build compiles for macOS and `go tool mygo build -platform darwin/universal` makes
+`Glint.app`, but the app has not run on a Mac. Most platform code there is a stub that returns
+`errors.ErrUnsupported`, and `docs/mac-port.md` lists them package by package. Check a line
+below only after it ran in the macOS app or in a test that calls the real macOS code.
 
-- [x] Capture full screen, window (click) and area; previous area; Capture Text through Vision — M1 area 500x300 pt gave a 1000x600 px clipboard image; OCR read terminal lines in order
-- [x] Global hotkeys (⌃⇧ defaults) and the menu bar menu with key equivalents — M1 ⌃⇧3 added a capture; menu Open Library raised the Library
-- [x] Glint windows excluded from captures (macOS 14+, ScreenCaptureKit filter) — M1 full-screen capture with the Library and stack open showed neither
-- [x] Preview stack in the work area; card drag into Finder; dismiss after drag — M1 PNG landed in a Finder folder
-- [x] Library: grid, ⌘-click multi-select, ⌘C copies files, Delete moves to the Trash — M1 two file URLs on the pasteboard; both captures in the Trash
-- [x] Annotation editor: drawing, ⌘Z, system font and dark appearance, traffic lights — M1 arrow drawn and undone
-- [x] Single instance with CLI forwarding; launch at login through a LaunchAgent — M1 second `glint --library` exited 0; plist written and removed
-- [x] MP4 encode/decode, transcode and trim — `roundtrip` (8) and `glint-studio` `engine` (6) tests on macOS
-- [x] Screen recording with system audio and input, constant 30 fps, pause excluded — M1 18 s session: 545 frames, system.wav 18.15 s, input.json with cursor sprites; `record_mac` ignored tests
-- [x] Microphone track, level meter, live-caption tap; camera track and preview — ignored hardware tests on the built-in mic and FaceTime camera (not yet from the recording picker UI)
-- [x] Studio opens a macOS session and plays it back with audio — M1 timeline, auto zooms, cursor overlay; playback advanced in real time
-- [ ] Recording picker with a microphone and the camera selected, in the app
-- [ ] Studio export, captions and transcription (whisper.cpp with Metal)
-- [ ] Trim & Compress, Quick Look, pins, self-timer, teleprompter on macOS
-- [ ] Permission prompts from a signed Glint.app (Screen Recording, Input Monitoring, Microphone, Camera)
-- [ ] Mixed-scale multi-display setups (covered by `glint_media::space` unit tests only)
+- [ ] Capture full screen, window and area, previous area, and Capture Text through Vision
+- [ ] Global hotkeys and the menu bar menu
+- [ ] Glint windows excluded from captures
+- [ ] Preview stack in the work area, a card dragged into Finder, dismiss after drag
+- [ ] Library multi-select, Copy as files, Move to Trash
+- [ ] Annotation editor with the system font and appearance
+- [ ] Single instance with command-line forwarding, launch at login
+- [ ] MP4 encode, decode, transcode and trim
+- [ ] Screen recording with system audio, microphone, camera and input
+- [ ] Studio playback with audio, export, captions and transcription
+- [ ] Trim & Compress, Quick Look, pins, self-timer, teleprompter
+- [ ] Permission prompts from a signed `Glint.app` (Screen Recording, Input Monitoring, Microphone, Camera)
+- [ ] Mixed-scale multi-display setups
