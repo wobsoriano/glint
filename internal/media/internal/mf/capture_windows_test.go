@@ -55,6 +55,51 @@ func TestCaptureIIDsMatchSDK(t *testing.T) {
 	}
 }
 
+// TestCameraGUIDsMatchSDK rereads the device-source GUIDs the camera track uses.
+func TestCameraGUIDsMatchSDK(t *testing.T) {
+	roots, _ := filepath.Glob(`C:\Program Files (x86)\Windows Kits\10\Include\10.*`)
+	if len(roots) == 0 {
+		t.Skip("Windows SDK headers are not installed")
+	}
+	b, err := os.ReadFile(filepath.Join(roots[len(roots)-1], `um\mfidl.h`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := string(b)
+	for name, got := range map[string]*GUID{
+		"MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE":                      &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+		"MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID":          &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+		"MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME":                    &MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+		"MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK": &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
+		"IMFMediaSource": &IID_IMFMediaSource,
+	} {
+		want, err := sdkGUID(h, name)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if *got != want {
+			t.Errorf("%s is %v here, %v in the SDK", name, *got, want)
+		}
+	}
+	var more strings.Builder
+	for _, f := range []string{`um\mfapi.h`, `shared\d3d9types.h`} {
+		b, err := os.ReadFile(filepath.Join(roots[len(roots)-1], f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		more.Write(b)
+	}
+	m := regexp.MustCompile(`DEFINE_MEDIATYPE_GUID\(\s*MFVideoFormat_RGB32\s*,\s*(\w+)`).FindStringSubmatch(more.String())
+	if m == nil {
+		t.Fatal("MFVideoFormat_RGB32 is not in mfapi.h")
+	}
+	code, err := sdkNumber(more.String(), m[1])
+	if err != nil || formatGUID(code) != MFVideoFormat_RGB32 {
+		t.Errorf("MFVideoFormat_RGB32 is %v here, %s = %d in the SDK (%v)", MFVideoFormat_RGB32, m[1], code, err)
+	}
+}
+
 // sdkInterfaceGUID finds name's IID in MIDL_INTERFACE, DECLARE_INTERFACE_IID_ or
 // __declspec(uuid) form.
 func sdkInterfaceGUID(h, name string) (GUID, error) {
