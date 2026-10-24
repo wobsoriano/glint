@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -21,29 +20,38 @@ type engine struct {
 	ctx          uintptr
 	multilingual bool
 	eot          int32
+	dtwLagMs     int64
 }
 
 type runOptions struct {
-	offsetMs uint64
-	// audioCtx is the encoder context in 20 ms frames; shortening it speeds up short windows.
-	// Zero keeps the model's.
-	audioCtx        int32
+	offsetMs        uint64
 	disfluentPrompt bool
 }
 
-// loadEngine loads modelPath with the whisper.cpp runtime that DownloadModel installs beside
-// it, using the context settings whisper-rs passes by default.
+// loadEngine loads modelPath, one of the models DownloadModel installs, with the whisper.cpp
+// runtime beside it. Words are timed by DTW over the model's alignment heads, because the
+// timestamp tokens that whisper.cpp's other token timing builds on are often missing or
+// seconds off.
 func loadEngine(modelPath string) (*engine, error) {
+	var info modelInfo
+	for _, m := range models {
+		if m.file == filepath.Base(modelPath) {
+			info = m
+		}
+	}
+	if info.aheads == 0 {
+		return nil, fmt.Errorf("%s is not a model Glint downloads", modelPath)
+	}
 	lib, err := loadWhisper(RuntimeDir(filepath.Dir(modelPath)))
 	if err != nil {
 		return nil, err
 	}
-	cp := &contextParams{dtwNTop: -1, dtwMemSize: 128 << 20}
+	cp := &contextParams{dtwTokenTimestamps: true, dtwAheadsPreset: info.aheads, dtwNTop: -1, dtwMemSize: 128 << 20}
 	ctx := lib.initFromFile(modelPath, cp)
 	if ctx == 0 {
 		return nil, fmt.Errorf("loading whisper model %s failed", modelPath)
 	}
-	return &engine{lib: lib, ctx: ctx, multilingual: lib.isMultilingual(ctx), eot: lib.tokenEOT(ctx)}, nil
+	return &engine{lib: lib, ctx: ctx, multilingual: lib.isMultilingual(ctx), eot: lib.tokenEOT(ctx), dtwLagMs: info.dtwLagMs}, nil
 }
 
 func (e *engine) close() { e.lib.free(e.ctx) }
@@ -60,7 +68,6 @@ func (e *engine) run(ctx context.Context, samples []float32, o runOptions, progr
 	p := e.lib.defaultParams(samplingGreedy)
 	p.greedyBestOf = 1
 	p.nThreads = int32(min(runtime.NumCPU(), 8))
-	p.tokenTimestamps = true
 	p.printProgress = false
 	p.printRealtime = false
 	p.printSpecial = false
@@ -73,9 +80,6 @@ func (e *engine) run(ctx context.Context, samples []float32, o runOptions, progr
 	p.language = cstr(lang)
 	if o.disfluentPrompt {
 		p.initialPrompt = cstr(disfluentPrompt)
-	}
-	if o.audioCtx != 0 {
-		p.audioCtx = o.audioCtx
 	}
 	hooks := &runHooks{ctx: ctx, progress: progress}
 	id := registerRun(hooks)
@@ -101,63 +105,28 @@ func (e *engine) run(ctx context.Context, samples []float32, o runOptions, progr
 	if language == "" {
 		language = "en"
 	}
-	var words []Word
-	var current *wordBuilder
-	flush := func() {
-		if current != nil {
-			if w, ok := current.finish(); ok {
-				words = append(words, w)
-			}
-			current = nil
-		}
-	}
+	var tokens []token
 	for seg := range e.lib.nSegments(st) {
-		flush()
+		segStart := len(tokens)
 		for tok := range e.lib.nTokens(st, seg) {
 			data := e.lib.tokenData(st, seg, tok)
 			if data.id >= e.eot {
 				continue
 			}
-			piece := strings.ToValidUTF8(string(e.lib.tokenText(e.ctx, st, seg, tok)), string(utf8.RuneError))
-			if r, _ := utf8.DecodeRuneInString(piece); unicode.IsSpace(r) || current == nil {
-				flush()
-				current = &wordBuilder{}
-			}
-			current.push(piece, data.t0, data.t1, data.p, o.offsetMs)
+			tokens = append(tokens, token{
+				text:       strings.ToValidUTF8(string(e.lib.tokenText(e.ctx, st, seg, tok)), string(utf8.RuneError)),
+				atMs:       data.tDtw*10 - e.dtwLagMs,
+				p:          data.p,
+				startsWord: len(tokens) == segStart,
+			})
 		}
 	}
-	flush()
+	words := placeWords(tokens, samples)
+	for i := range words {
+		words[i].StartMs += o.offsetMs
+		words[i].EndMs += o.offsetMs
+	}
 	return language, words, nil
-}
-
-type wordBuilder struct {
-	text     strings.Builder
-	startMs  uint64
-	started  bool
-	endMs    uint64
-	pSum     float32
-	pieceCnt uint32
-}
-
-// push adds a token; t0 and t1 arrive in whisper's 10 ms ticks.
-func (w *wordBuilder) push(piece string, t0, t1 int64, p float32, offsetMs uint64) {
-	w.text.WriteString(piece)
-	start := offsetMs + uint64(max(t0, 0))*10
-	end := offsetMs + uint64(max(t1, 0))*10
-	if !w.started {
-		w.startMs, w.started = start, true
-	}
-	w.endMs = max(w.endMs, end)
-	w.pSum += p
-	w.pieceCnt++
-}
-
-func (w *wordBuilder) finish() (Word, bool) {
-	text := strings.TrimSpace(w.text.String())
-	if !w.started || !strings.ContainsFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }) {
-		return Word{}, false
-	}
-	return Word{Text: text, StartMs: w.startMs, EndMs: max(w.endMs, w.startMs), Confidence: w.pSum / float32(w.pieceCnt)}, true
 }
 
 // Transcribe recognizes a whole recording with a model file from DownloadModel. It blocks, so

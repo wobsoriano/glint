@@ -6,6 +6,15 @@ package transcribe
 
 const samplingGreedy = 0
 
+// whisper_alignment_heads_preset values: the cross-attention heads that DTW aligns tokens to
+// the audio with, which differ per model.
+const (
+	aheadsTinyEn = 3
+	aheadsBaseEn = 5
+	aheadsBase   = 6
+	aheadsSmall  = 8
+)
+
 type contextParams struct {
 	useGPU             bool
 	flashAttn          bool

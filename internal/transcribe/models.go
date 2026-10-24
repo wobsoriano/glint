@@ -25,17 +25,21 @@ const (
 var AllModels = []Model{ModelTinyEn, ModelBaseEn, ModelBase, ModelSmall}
 
 type modelInfo struct {
-	file  string
-	size  uint64
-	label string
-	multi bool
+	file   string
+	size   uint64
+	label  string
+	multi  bool
+	aheads int32
+	// dtwLagMs is how far after the middle of a token's sound the model's DTW time for it
+	// lands, measured with cmd/wordtimecheck; small is not measured.
+	dtwLagMs int64
 }
 
 var models = map[Model]modelInfo{
-	ModelTinyEn: {"ggml-tiny.en.bin", 77_704_715, "Tiny (English)", false},
-	ModelBaseEn: {"ggml-base.en.bin", 147_964_211, "Base (English)", false},
-	ModelBase:   {"ggml-base.bin", 147_951_465, "Base (multilingual)", true},
-	ModelSmall:  {"ggml-small.bin", 487_601_967, "Small (multilingual)", true},
+	ModelTinyEn: {"ggml-tiny.en.bin", 77_704_715, "Tiny (English)", false, aheadsTinyEn, 200},
+	ModelBaseEn: {"ggml-base.en.bin", 147_964_211, "Base (English)", false, aheadsBaseEn, 0},
+	ModelBase:   {"ggml-base.bin", 147_951_465, "Base (multilingual)", true, aheadsBase, 60},
+	ModelSmall:  {"ggml-small.bin", 487_601_967, "Small (multilingual)", true, aheadsSmall, 0},
 }
 
 func (m Model) FileName() string { return models[m].file }
