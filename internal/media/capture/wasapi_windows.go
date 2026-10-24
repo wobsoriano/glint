@@ -34,14 +34,14 @@ const (
 
 // IAudioClient and IAudioCaptureClient vtable slots.
 const (
-	clientInitialize      = 3
-	clientGetMixFormat    = 8
-	clientStart           = 10
-	clientStop            = 11
-	clientGetService      = 14
-	captureGetBuffer      = 3
-	captureReleaseBuffer  = 4
-	captureGetNextPacket  = 5
+	clientInitialize     = 3
+	clientGetMixFormat   = 8
+	clientStart          = 10
+	clientStop           = 11
+	clientGetService     = 14
+	captureGetBuffer     = 3
+	captureReleaseBuffer = 4
+	captureGetNextPacket = 5
 )
 
 // waveFormat is WAVEFORMATEXTENSIBLE. A plain WAVEFORMATEX is its first 18 bytes, so the
