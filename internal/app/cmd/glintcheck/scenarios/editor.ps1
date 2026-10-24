@@ -1,8 +1,9 @@
 # The editor through the running app, from every place that opens it: after a capture, a
 # card's Edit, the Library's Edit, Quick Look's Edit, the tray's Edit Last Capture and
 # glint.exe <image>. One window opens per capture. An arrow and Done save edit.json,
-# image.png and thumb.png, which glintcheck edited checks against RenderDoc, and the card shows
-# the new thumbnail; Copy saves the edit too, then copies it. Coordinates are for the editor
+# image.png and thumb.png, which glintcheck edited checks against RenderDoc, and the card and an
+# open Quick Look show the new image; Copy saves the edit too, then copies it, and Save names
+# the file it wrote. Coordinates are for the editor
 # placed at 80,40 1360x880 and the Library at 80,60 1180x760, at 100%.
 param([int]$IconX = 1642, [int]$IconY = 955)
 . "$PSScriptRoot\common.ps1"
@@ -88,6 +89,7 @@ try {
     Keys 'Ctrl+S'
     Wait-Until { Test-Path "$dir\exports\*.jpg" } 5000 | Out-Null
     Start-Sleep -Milliseconds 400
+    Shot "$dir\04-saved-toast.png"
     $jpg = Get-ChildItem "$dir\exports\*.jpg" | Select-Object -First 1
     "exported: $($jpg.Name), $($jpg.Length) bytes"
     if ($jpg) { Check encoded -dir $item -file $jpg.FullName -quality 70 }
@@ -116,7 +118,30 @@ try {
     Click 1035 658 200
     Open-Editor $title
     Shot "$dir\05-from-library.png"
-    Close-Editor $title
+
+    Step 'Quick Look showing the capture shows the edit once Done saves it'
+    Front 'Glint Library'
+    DClick 410 185 300
+    Wait-Until { (Win $title) -ne [IntPtr]::Zero } | Out-Null
+    Start-Sleep -Milliseconds 900
+    $q = WinRect $title
+    $look = "$($q.X + 40),$($q.Y + 60),$($q.W - 80),$($q.H - 160)"
+    Glide 1500 1000 150
+    Check shot -out "$dir\05-quicklook-before.png" -rect $look | Out-Null
+    Front "$Ed$title"
+    Start-Sleep -Milliseconds 300
+    Arrow 240
+    Keys 'Ctrl+Enter'
+    Wait-Until { (Win "$Ed$title") -eq [IntPtr]::Zero } 4000 | Out-Null
+    Front $title
+    Glide 1500 1000 150
+    Start-Sleep -Milliseconds 1200
+    Check shot -out "$dir\05-quicklook-after.png" -rect $look | Out-Null
+    Shot "$dir\05-quicklook-after-edit.png"
+    Check cmp -a "$dir\05-quicklook-before.png" -b "$dir\05-quicklook-after.png" -differ
+    Front $title
+    Keys 'Esc'
+    Start-Sleep -Milliseconds 400
 
     Step "Quick Look's Edit opens it"
     Front 'Glint Library'

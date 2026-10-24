@@ -248,7 +248,7 @@ func (e *Editor) export(img *image.RGBA, ask bool) {
 		case err != nil:
 			e.toast("Not saved: " + err.Error())
 		default:
-			// The toast is one line wide; the folder is the one Settings names.
+			// The toast holds one line, which cuts a full path off.
 			e.toast("Saved to " + filepath.Base(path))
 		}
 	})
