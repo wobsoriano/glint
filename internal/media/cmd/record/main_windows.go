@@ -102,9 +102,11 @@ type stage struct {
 
 	mu    sync.Mutex
 	trace []sample
-	// soundAt and paintAt are the media times at which playback reached each burst and the
-	// stage first painted its flash, which split an A/V offset into its audio and video parts.
-	soundAt, paintAt []int64
+	// soundAt, paintAt and shownAt are the media times in ms at which playback reached each
+	// burst, the stage first painted its flash, and that flash reached the screen. soundAt
+	// and shownAt are when the burst and the flash really reached the user, so an A/V
+	// offset is checked against their difference, not against zero.
+	soundAt, paintAt, shownAt []float64
 	// loopback holds what a second loopback capture delivered, and loopbackEnd the media
 	// time at which each buffer's last sample arrived.
 	loopback    []float32
@@ -135,13 +137,16 @@ func (st *stage) mixedAt(f int) float64 {
 	return math.NaN()
 }
 
-func (st *stage) log(to *[]int64) {
+func (st *stage) log(to *[]float64) { st.logAt(to, 0) }
+
+// logAt notes the media time it will be in after.
+func (st *stage) logAt(to *[]float64, after time.Duration) {
 	rec := st.rec.Load()
 	if rec == nil || rec.IsPaused() {
 		return
 	}
 	st.mu.Lock()
-	*to = append(*to, rec.Elapsed().Milliseconds())
+	*to = append(*to, float64((rec.Elapsed()+after).Microseconds())/1000)
 	st.mu.Unlock()
 }
 
@@ -229,12 +234,21 @@ func run(c config) error {
 	place.Max = place.Min.Add(image.Pt(stageW, stageH))
 	place = clampInto(place, db.Inset(40))
 	st := &stage{}
-	lit := false
+	lit, showing := false, false
 	st.win, err = testwin.Open(place, testwin.Options{Title: "Glint record stage", Paint: func(cv *testwin.Canvas, frame int64) {
+		if showing {
+			// The window waits on DwmFlush after each frame, so the composition holding the
+			// flash has just been submitted. It reaches the screen at the next vertical blank.
+			if until, ok := untilVBlank(); ok {
+				st.logAt(&st.shownAt, until)
+			}
+			showing = false
+		}
 		on := st.flash.Load()
 		paintStage(cv, frame, on)
 		if on && !lit {
 			st.log(&st.paintAt)
+			showing = true
 		}
 		lit = on
 		st.painted.Store(frame)

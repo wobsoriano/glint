@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -109,7 +110,7 @@ func startScreen(src screenSource, fps FPS, path string, clock *capture.Clock) (
 		}
 		defer leave()
 		defer physicalPixels()()
-		c, err := openScreen(src, fps, path)
+		c, err := openScreen(src, fps, path, clock)
 		if err == nil {
 			err = c.waitFirstFrame(3 * time.Second)
 			if err != nil {
@@ -124,7 +125,7 @@ func startScreen(src screenSource, fps FPS, path string, clock *capture.Clock) (
 		}
 		t.warnings = c.warnings
 		ready <- opened{geometry: c.geometry}
-		t.closed, t.err = c.run(clock, &t.stop)
+		t.closed, t.err = c.run(&t.stop)
 		t.stats, t.hardware = c.stats, c.writer.Hardware()
 	}()
 	o := <-ready
@@ -162,10 +163,13 @@ type screenCapture struct {
 	geometry        screenGeometry
 	haveFrame       bool
 	// dirty is set when latest changed since nv12 was converted from it.
-	dirty    bool
-	nv12     []byte
-	writer   *VideoWriter
-	fps      FPS
+	dirty  bool
+	nv12   []byte
+	writer *VideoWriter
+	fps    FPS
+	clock  *capture.Clock
+	// next is the first frame slot not yet written.
+	next     int64
 	alive    func() bool
 	warnings []string
 	stats    ScreenStats
@@ -174,11 +178,11 @@ type screenCapture struct {
 	failAfter int64
 }
 
-func openScreen(src screenSource, fps FPS, path string) (c *screenCapture, err error) {
+func openScreen(src screenSource, fps FPS, path string, clock *capture.Clock) (c *screenCapture, err error) {
 	if err := mf.Startup(); err != nil {
 		return nil, err
 	}
-	c = &screenCapture{fps: fps, failAfter: -1}
+	c = &screenCapture{fps: fps, clock: clock, failAfter: -1}
 	defer func() {
 		if err != nil {
 			c.release()
@@ -304,6 +308,15 @@ func (c *screenCapture) drain() error {
 
 func (c *screenCapture) take(f mf.CaptureFrame) error {
 	defer f.Close()
+	shown, err := f.SystemRelativeTime()
+	if err != nil {
+		return err
+	}
+	at, _ := c.clock.At(capture.Instant(shown))
+	// Frames arrive in order, so every slot before this one's has seen its last frame.
+	if err := c.writeSlots(slotsBefore(at, c.fps)); err != nil {
+		return err
+	}
 	content, err := f.ContentSize()
 	if err != nil {
 		return err
@@ -350,11 +363,25 @@ func (c *screenCapture) convert() error {
 
 func frameIndex(at time.Duration, fps FPS) int64 { return int64(at) * int64(fps) / int64(time.Second) }
 
-// catchUp writes every frame slot up to media time now, each showing the newest frame.
-func (c *screenCapture) catchUp(now time.Duration, next *int64) error {
+// slotsBefore is how many frame slots come before the first that shows a frame shown at
+// media time at. A slot holds the newest frame shown by its own time plus half a period, so
+// every frame lands in the slot nearest to when it reached the screen.
+func slotsBefore(at time.Duration, fps FPS) int64 {
+	return max(int64(math.Ceil(at.Seconds()*float64(fps)-0.5)), 0)
+}
+
+// frameLag is how long after a slot's last moment a frame shown in it may still arrive.
+// A slot no frame arrives for repeats the one before, since Windows.Graphics.Capture sends
+// nothing while the screen is still.
+const frameLag = 50 * time.Millisecond
+
+// writeSlots writes every frame slot before end, each showing latest.
+func (c *screenCapture) writeSlots(end int64) error {
 	start := time.Now()
 	defer func() { c.stats.Busy += time.Since(start) }()
-	for target := frameIndex(now, c.fps); *next <= target; *next++ {
+	period := time.Second / time.Duration(c.fps)
+	now := c.clock.Now()
+	for ; c.next < end; c.next++ {
 		if c.dirty {
 			if err := c.convert(); err != nil {
 				return err
@@ -363,8 +390,8 @@ func (c *screenCapture) catchUp(now time.Duration, next *int64) error {
 		if c.failAfter >= 0 && c.writer.Frames() >= c.failAfter {
 			return fmt.Errorf("GLINT_FAIL_SCREEN_AFTER: injected failure after %d frames", c.writer.Frames())
 		}
-		at := frameTime(*next, int(c.fps))
-		if now-time.Duration(at*100) > time.Second/time.Duration(c.fps) {
+		at := frameTime(c.next, int(c.fps))
+		if now-time.Duration(at*100) > period/2+frameLag+period {
 			c.stats.Late++
 		}
 		if err := c.writer.writeNV12(c.nv12, at); err != nil {
@@ -376,9 +403,9 @@ func (c *screenCapture) catchUp(now time.Duration, next *int64) error {
 
 // run captures until stop or until the source goes away, then finalizes screen.mp4. When
 // it ends on its own it ends media time at its last frame, so every track stops there.
-func (c *screenCapture) run(clock *capture.Clock, stop *atomic.Bool) (closed bool, err error) {
+func (c *screenCapture) run(stop *atomic.Bool) (closed bool, err error) {
+	clock := c.clock
 	period := time.Second / time.Duration(c.fps)
-	var next int64
 	for !stop.Load() && err == nil {
 		if !c.alive() {
 			closed = true
@@ -391,16 +418,15 @@ func (c *screenCapture) run(clock *capture.Clock, stop *atomic.Bool) (closed boo
 			time.Sleep(4 * time.Millisecond)
 			continue
 		}
-		now := clock.Now()
-		if err = c.catchUp(now, &next); err != nil {
+		if err = c.writeSlots(slotsBefore(clock.Now()-frameLag, c.fps)); err != nil {
 			break
 		}
-		due := time.Duration(frameTime(next, int(c.fps)) * 100)
+		due := time.Duration(frameTime(c.next, int(c.fps))*100) + period/2 + frameLag
 		time.Sleep(min(max(due-clock.Now(), 500*time.Microsecond), period))
 	}
 	if err == nil && !closed {
 		if err = c.drain(); err == nil {
-			err = c.catchUp(clock.Now(), &next)
+			err = c.writeSlots(frameIndex(clock.Now(), c.fps) + 1)
 		}
 	}
 	c.release()

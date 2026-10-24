@@ -279,7 +279,7 @@ func audio(dir string, frames []frameInfo, sum media.RecordSummary, c config, p 
 	}
 	k.info("tone onsets %v ms; flash onsets %v ms", rounded(onsets), flashes)
 	st.mu.Lock()
-	k.info("playback reached the bursts at %v ms and the stage painted the flashes at %v ms of media time", st.soundAt, st.paintAt)
+	k.info("playback reached the bursts at %.1f ms, the stage painted the flashes at %.1f ms and they reached the screen at %.1f ms of media time", st.soundAt, st.paintAt, st.shownAt)
 	var mixed []int64
 	for _, ms := range toneOnsets(st.loopback, 2, 48000) {
 		mixed = append(mixed, int64(math.Round(st.mixedAt(int(ms*48)))))
@@ -294,9 +294,18 @@ func audio(dir string, frames []frameInfo, sum media.RecordSummary, c config, p 
 	}
 	k.ok(len(onsets) == want && len(flashes) == want, "%d tone bursts and %d flashes recorded, %d played outside the pause", len(onsets), len(flashes), want)
 	period := 1000 / float64(c.fps)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.soundAt) != len(onsets) || len(st.shownAt) != len(flashes) {
+		k.ok(false, "sync: %d bursts reached playback and %d flashes reached the screen while recording, for %d onsets and %d flashes", len(st.soundAt), len(st.shownAt), len(onsets), len(flashes))
+		return
+	}
 	for i := range min(len(onsets), len(flashes)) {
 		off := onsets[i] - float64(flashes[i])
-		k.ok(math.Abs(off) <= 2*period, "sync: burst %d sounds %+.1f ms after its flash shows (%.2f frames)", i, off, off/period)
+		desktop := st.soundAt[i] - st.shownAt[i]
+		audioErr, videoErr := onsets[i]-st.soundAt[i], float64(flashes[i])-st.shownAt[i]
+		k.ok(math.Abs(off-desktop) <= period, "sync: burst %d sounds %+.1f ms after its flash shows and did so %+.1f ms after it on the desktop: off by %+.1f ms (%+.2f frames; audio %+.1f ms, video %+.1f ms)",
+			i, off, desktop, off-desktop, (off-desktop)/period, audioErr, videoErr)
 	}
 }
 

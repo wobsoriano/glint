@@ -24,6 +24,7 @@ const (
 	streamFlagsAutoConvertPCM    = 0x80000000
 	streamFlagsSrcDefaultQuality = 0x08000000
 	bufferFlagsSilent            = 0x2
+	bufferFlagsTimestampError    = 0x4
 	shareModeShared              = 0
 	bufferDuration100ns          = 2_000_000
 
@@ -233,6 +234,9 @@ func (c *wasapiCapture) close() {
 
 func (c *wasapiCapture) run(sink *clockedWAV, r *runner, tap chan<- []float32) (Stats, error) {
 	var out []float32
+	// next is where the packet after this one starts, standing in for a timestamp the
+	// device marks as wrong.
+	next := Now()
 	err := func() error {
 		for !r.stop.Load() {
 			gotAny := false
@@ -247,9 +251,14 @@ func (c *wasapiCapture) run(sink *clockedWAV, r *runner, tap chan<- []float32) (
 				gotAny = true
 				var data *byte
 				var frames, flags uint32
-				if err := c.capture.call(captureGetBuffer, uintptr(unsafe.Pointer(&data)), uintptr(unsafe.Pointer(&frames)), uintptr(unsafe.Pointer(&flags)), 0, 0).err("GetBuffer"); err != nil {
+				var stamp Instant
+				if err := c.capture.call(captureGetBuffer, uintptr(unsafe.Pointer(&data)), uintptr(unsafe.Pointer(&frames)), uintptr(unsafe.Pointer(&flags)), 0, uintptr(unsafe.Pointer(&stamp))).err("GetBuffer"); err != nil {
 					return err
 				}
+				if flags&bufferFlagsTimestampError != 0 {
+					stamp = next
+				}
+				next = stamp + Instant(int64(frames)*1e7/int64(c.format.rate))
 				var raw []byte
 				if flags&bufferFlagsSilent == 0 && data != nil {
 					raw = unsafe.Slice(data, int(frames)*c.format.channels*c.format.bits/8)
@@ -266,7 +275,7 @@ func (c *wasapiCapture) run(sink *clockedWAV, r *runner, tap chan<- []float32) (
 					}
 				}
 				if sink != nil {
-					if err := sink.write(out); err != nil {
+					if err := sink.write(out, stamp); err != nil {
 						return err
 					}
 				}
