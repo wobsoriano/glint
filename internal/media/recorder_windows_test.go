@@ -224,6 +224,54 @@ func TestDesktopCancelDeletesTheSession(t *testing.T) {
 	}
 }
 
+// TestDesktopFailedScreenKeepsWhatItWrote injects an encoder failure after 10 frames: the
+// recording ends there, screen.mp4 keeps those frames, and media time stops at them.
+func TestDesktopFailedScreenKeepsWhatItWrote(t *testing.T) {
+	desktop(t)
+	t.Setenv("GLINT_FAIL_SCREEN_AFTER", "10")
+	ds, err := platform.Displays()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "session")
+	rec, err := StartRecorder(RecordOptions{Source: DisplaySource{Display: ds[0].ID}, SessionDir: dir, FPS: FPS30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	for rec.IsLive() {
+		if time.Since(start) > 3*time.Second {
+			t.Fatal("the recording is still live after its screen track failed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Logf("ended on its own %v after starting", time.Since(start))
+	sum := rec.Stop()
+	if !strings.Contains(strings.Join(sum.Warnings, "\n"), "the screen capture failed; the recording ends there: GLINT_FAIL_SCREEN_AFTER") {
+		t.Fatalf("warnings %q", sum.Warnings)
+	}
+	if sum.Screen.Frames != 10 || sum.DurationMS != 333 {
+		t.Fatalf("%d frames, %d ms; want 10 frames ending media time at 333 ms", sum.Screen.Frames, sum.DurationMS)
+	}
+	fr, err := OpenFrameReader(sum.Files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fr.Close()
+	n := 0
+	for {
+		f, err := fr.NextFrame()
+		if err != nil {
+			break
+		}
+		f.Release()
+		n++
+	}
+	if n != 10 {
+		t.Fatalf("screen.mp4 decodes to %d frames, want 10", n)
+	}
+}
+
 // TestDesktopClosedWindowEndsTheRecording closes the recorded window: the screen track
 // ends on its own, media time stops at its last frame, and Stop says why.
 func TestDesktopClosedWindowEndsTheRecording(t *testing.T) {

@@ -407,8 +407,8 @@ func (c *screenCapture) run(clock *capture.Clock, stop *atomic.Bool) (closed boo
 	if !stop.Load() {
 		clock.EndAt(time.Duration(frameTime(c.writer.Frames(), int(c.fps)) * 100))
 	}
-	sum, ferr := c.writer.Finish()
-	c.stats.Frames = sum.Frames
+	c.stats.Frames = c.writer.Frames()
+	_, ferr := c.writer.Finish()
 	if err == nil {
 		err = ferr
 	}
