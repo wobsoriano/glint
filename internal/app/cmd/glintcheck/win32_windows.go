@@ -23,6 +23,7 @@ var (
 	procGetClipboardFormatNameW  = user32.NewProc("GetClipboardFormatNameW")
 	procGetClipboardData         = user32.NewProc("GetClipboardData")
 	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
+	procGetClassNameW            = user32.NewProc("GetClassNameW")
 	procGetWindowRect            = user32.NewProc("GetWindowRect")
 	procGetWindowDisplayAffinity = user32.NewProc("GetWindowDisplayAffinity")
 	procGetWindowLongPtrW        = user32.NewProc("GetWindowLongPtrW")
@@ -173,6 +174,31 @@ func wins(args []string) error {
 		return 1
 	})
 	return windows.EnumWindows(cb, nil)
+}
+
+// menu succeeds when a popup menu of the process shows, so a driver presses keys only into
+// Glint's own menu.
+func menu(args []string) error {
+	fs := flag.NewFlagSet("menu", flag.ExitOnError)
+	pid := fs.Int("pid", 0, "process id")
+	fs.Parse(args)
+	found := false
+	cb := windows.NewCallback(func(h, _ uintptr) uintptr {
+		var p uint32
+		windows.GetWindowThreadProcessId(windows.HWND(h), &p)
+		buf := make([]uint16, 64)
+		procGetClassNameW.Call(h, uintptr(unsafe.Pointer(&buf[0])), 64)
+		if int(p) == *pid && windows.UTF16ToString(buf) == "#32768" && windows.IsWindowVisible(windows.HWND(h)) {
+			found = true
+		}
+		return 1
+	})
+	windows.EnumWindows(cb, nil)
+	fmt.Printf("menu of pid %d open: %v\n", *pid, found)
+	if !found {
+		return fmt.Errorf("no menu of pid %d shows", *pid)
+	}
+	return nil
 }
 
 func text(h uintptr) string {

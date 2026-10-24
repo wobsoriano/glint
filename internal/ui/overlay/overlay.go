@@ -59,9 +59,14 @@ type Overlay struct {
 	surfaces []*surface
 	opts     Options
 	open     bool
+	quitting bool
 }
 
-func New() *Overlay { return &Overlay{} }
+func New() *Overlay {
+	o := &Overlay{}
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { o.quitting = true })
+	return o
+}
 
 func (o *Overlay) IsOpen() bool { return o.open }
 
@@ -186,8 +191,12 @@ func newSurface(o *Overlay, d platform.Display) *surface {
 		DisableResize: true, DisableShadow: true, Panel: true,
 		Content: ui.View(s.view),
 	})
-	// A panel closes on an Escape nothing takes and on Alt+F4: both cancel the capture.
+	// A panel closes on an Escape nothing takes and on Alt+F4: both cancel the capture. The
+	// windows stay for the next capture, unless Glint is quitting.
 	s.win.OnClose(func(e *mygo.CloseEvent) {
+		if o.quitting {
+			return
+		}
 		e.PreventDefault()
 		s.o.decide(s, Result{Verdict: Cancel})
 	})

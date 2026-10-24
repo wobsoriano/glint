@@ -39,6 +39,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"stage": stage, "shot": shot, "cmp": compare, "dim": dim, "clip": clip, "library": library, "wins": wins,
+		"menu": menu, "mark": mark,
 	}
 	run, ok := cmds[os.Args[1]]
 	if !ok {
@@ -282,6 +283,33 @@ func dim(args []string) error {
 	fmt.Printf("dim: inside the selection %d of %d pixels differ from the frozen screen; outside %d of %d sampled pixels are not the frozen screen dimmed by 0x73 (max delta %d)\n", in, inTotal, off, offTotal, worst)
 	if in > 0 || off > offTotal/1000 {
 		return fmt.Errorf("the overlay does not show the frozen screen 1:1")
+	}
+	return nil
+}
+
+// mark succeeds when the Glint mark's warm streaks show within 12 pixels of a point, as they
+// do where its tray icon is.
+func mark(args []string) error {
+	fs := flag.NewFlagSet("mark", flag.ExitOnError)
+	at := fs.String("at", "", "x,y in physical pixels")
+	fs.Parse(args)
+	r, err := parseRect(*at + ",0,0")
+	if err != nil {
+		return err
+	}
+	img, err := platform.CaptureRect(platform.Rect{X: r.Min.X - 12, Y: r.Min.Y - 12, W: 24, H: 24})
+	if err != nil {
+		return err
+	}
+	warm := 0
+	for i := 0; i < len(img.Pix); i += 4 {
+		if p := img.Pix[i : i+3]; p[0] > 200 && p[1] > 90 && p[1] < 225 && p[2] < 150 {
+			warm++
+		}
+	}
+	fmt.Printf("mark at %s: %d warm pixels\n", *at, warm)
+	if warm < 8 {
+		return fmt.Errorf("no Glint mark at %s", *at)
 	}
 	return nil
 }
