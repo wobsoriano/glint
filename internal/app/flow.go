@@ -9,7 +9,6 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/wobsoriano/glint/internal/ocr"
 	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/redact"
 	"github.com/wobsoriano/glint/internal/render"
@@ -218,38 +217,22 @@ func (a *App) finish(s shot) {
 		if err != nil {
 			log.Printf("app: automatic redaction: %v", err)
 		}
-		findings := redact.Find(redactLines(lines), rules, pad)
+		findings := redact.Find(lines, rules, pad)
 		return func() { a.importShot(s, findings) }
 	})
 }
 
-func redactLines(lines []ocr.Line) []redact.Line {
-	out := make([]redact.Line, len(lines))
-	for i, l := range lines {
-		words := make([]redact.Word, len(l.Words))
-		for j, w := range l.Words {
-			words[j] = redact.Word{Text: w.Text, Rect: redact.Rect(w.Bounds)}
-		}
-		out[i] = redact.Line{Words: words, Rect: redact.Rect(l.Bounds)}
-	}
-	return out
-}
-
 // redactionDoc hides each finding under an editable redaction, with no frame around the
 // screenshot, as the Rust build's editor::redaction_doc.
-func redactionDoc(findings []redact.Finding, style settings.RedactStyle, dpi float32) render.EditDoc {
+func redactionDoc(findings []redact.Finding, kind render.RedactStyle, dpi float32) render.EditDoc {
 	st := render.DefaultStyle()
 	st.Background, st.Padding, st.Inset, st.Radius, st.Shadow = render.NoBackground{}, 0, 0, 0, 0
 	st.Chrome, st.Aspect = render.ChromeNone, nil
-	var kind render.RedactStyle
-	if err := kind.UnmarshalText([]byte(style)); err != nil {
-		kind = render.RedactBlur
-	}
 	doc := render.NewEditDoc(st, dpi, nil)
 	for i, f := range findings {
 		doc.Annotations = append(doc.Annotations, render.Annotation{
 			ID:    uint64(i + 1),
-			Shape: render.Redact{Rect: render.R{X: f.Rect.X, Y: f.Rect.Y, W: f.Rect.W, H: f.Rect.H}, Kind: kind, Strength: render.RedactStrength},
+			Shape: render.Redact{Rect: f.Rect, Kind: kind, Strength: render.RedactStrength},
 			Color: render.Black,
 		})
 	}
