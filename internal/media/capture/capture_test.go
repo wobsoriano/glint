@@ -191,37 +191,132 @@ func TestWAVTruncateCutsTheTailAndTheHeaderFollows(t *testing.T) {
 	}
 }
 
-func TestClockedWAVPadsToMediaTimeAndSkipsPauses(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "clocked.wav")
-	clock := NewClock()
-	wav, err := createClockedWAV(path, 1, clock)
-	must(t, err)
-	ones := make([]float32, 480)
-	for i := range ones {
-		ones[i] = 1
+// clockOf is a clock that ran over each [from, to) pair of offsets from base and is now
+// paused; a final open span runs on.
+func clockOf(base Instant, offsets ...time.Duration) *Clock {
+	c := NewClock()
+	var media time.Duration
+	for i := 0; i < len(offsets); i += 2 {
+		s := span{from: base + Instant(offsets[i]/100), to: forever, media: media}
+		if i+1 < len(offsets) {
+			s.to = base + Instant(offsets[i+1]/100)
+			media += offsets[i+1] - offsets[i]
+		} else {
+			c.running = true
+		}
+		c.spans = append(c.spans, s)
 	}
-	must(t, wav.write(ones))
-	clock.Resume()
-	time.Sleep(200 * time.Millisecond)
-	must(t, wav.write(ones))
-	clock.Pause()
-	media := clock.Now()
-	stats, err := wav.finish()
-	must(t, err)
-	if want := uint64(math.Round(media.Seconds() * SampleRate)); stats.Frames != want {
-		t.Fatalf("the file ends at media time: %d frames, want %d", stats.Frames, want)
+	return c
+}
+
+func at(base Instant, d time.Duration) Instant { return base + Instant(d/100) }
+
+func TestClockMapsInstantsAcrossPausesAndTheEnd(t *testing.T) {
+	base := Now()
+	c := clockOf(base, time.Second, 2*time.Second, 3*time.Second)
+	cases := []struct {
+		q    time.Duration
+		want time.Duration
+		ok   bool
+	}{
+		{500 * time.Millisecond, 0, false},
+		{1500 * time.Millisecond, 500 * time.Millisecond, true},
+		{2500 * time.Millisecond, time.Second, false},
+		{3250 * time.Millisecond, 1250 * time.Millisecond, true},
 	}
-	got := readFloatWAV(t, path)
-	for _, s := range got.samples[:480] {
-		if s != 0 {
-			t.Fatal("the paused write was skipped and the gap is silence")
+	for _, tc := range cases {
+		if got, ok := c.At(at(base, tc.q)); got != tc.want || ok != tc.ok {
+			t.Errorf("At(+%v) = %v %v, want %v %v", tc.q, got, ok, tc.want, tc.ok)
 		}
 	}
-	if !slices.Contains(got.samples, 1) {
-		t.Fatal("the running write is in the file")
+	c.EndAt(1100 * time.Millisecond)
+	if got, ok := c.At(at(base, 3050*time.Millisecond)); got != 1050*time.Millisecond || !ok {
+		t.Errorf("before the end: %v %v", got, ok)
+	}
+	if got, ok := c.At(at(base, 3250*time.Millisecond)); got != 1100*time.Millisecond || ok {
+		t.Errorf("after the end: %v %v", got, ok)
+	}
+	if c.Now() != 1100*time.Millisecond {
+		t.Errorf("an ended clock reads its end: %v", c.Now())
 	}
 }
 
+func filled(n int, v float32) []float32 {
+	s := make([]float32, n)
+	for i := range s {
+		s[i] = v
+	}
+	return s
+}
+
+func clockedFile(t *testing.T, clock *Clock, writes func(w *clockedWAV)) []float32 {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "clocked.wav")
+	w, err := createClockedWAV(path, 1, clock)
+	must(t, err)
+	writes(w)
+	stats, err := w.finish()
+	must(t, err)
+	got := readFloatWAV(t, path).samples
+	if uint64(len(got)) != stats.Frames || int64(len(got)) != framesAt(clock.Now()) {
+		t.Fatalf("%d frames, stats %d, media time %v", len(got), stats.Frames, clock.Now())
+	}
+	return got
+}
+
+func TestClockedWAVPlacesBuffersByTheirTimestamps(t *testing.T) {
+	base := Now()
+	got := clockedFile(t, clockOf(base, 0, time.Second), func(w *clockedWAV) {
+		must(t, w.write(filled(480, 0.5), at(base, -5*time.Millisecond)))
+		must(t, w.write(filled(480, 1), at(base, 100*time.Millisecond)))
+		must(t, w.write(filled(480, 0.25), at(base, 111*time.Millisecond)))
+	})
+	if len(got) != 48_000 {
+		t.Fatalf("the file ends at media time: %d frames", len(got))
+	}
+	if !slices.Equal(got[:240], filled(240, 0.5)) || got[240] != 0 {
+		t.Error("the half buffer stamped before the start is left out and the rest starts the file")
+	}
+	if !slices.Equal(got[4800:5280], filled(480, 1)) || got[4799] != 0 {
+		t.Error("a buffer stamped 100 ms in lands at frame 4800 after silence")
+	}
+	if !slices.Equal(got[5280:5760], filled(480, 0.25)) {
+		t.Error("a buffer stamped 1 ms late follows its predecessor without a gap")
+	}
+}
+
+func TestClockedWAVLeavesOutWhatWasCapturedWhilePaused(t *testing.T) {
+	base := Now()
+	got := clockedFile(t, clockOf(base, 0, time.Second, 2*time.Second, 3*time.Second), func(w *clockedWAV) {
+		must(t, w.write(filled(960, 1), at(base, 990*time.Millisecond)))
+		must(t, w.write(filled(960, 0.5), at(base, 1990*time.Millisecond)))
+	})
+	if len(got) != 96_000 {
+		t.Fatalf("two seconds of media time: %d frames", len(got))
+	}
+	if !slices.Equal(got[47_520:48_000], filled(480, 1)) {
+		t.Error("the 10 ms captured before the pause end the first span")
+	}
+	if !slices.Equal(got[48_000:48_480], filled(480, 0.5)) || got[48_480] != 0 {
+		t.Error("the 10 ms captured after resuming start the second span, and the 10 ms in the pause are gone")
+	}
+}
+
+func TestClockedWAVPullsADriftingDeviceBack(t *testing.T) {
+	base := Now()
+	stamp := func(i int) time.Duration { return time.Duration(i) * 10_050 * time.Microsecond }
+	got := clockedFile(t, clockOf(base, 0, 2*time.Second), func(w *clockedWAV) {
+		for i := range 150 {
+			must(t, w.write(filled(480, float32(i+1)), at(base, stamp(i))))
+		}
+	})
+	for i := range 150 {
+		landed := slices.Index(got, float32(i+1))
+		if want := framesAt(stamp(i)); landed < 0 || math.Abs(float64(int64(landed)-want)) > placementSlack {
+			t.Fatalf("buffer %d landed at frame %d, its stamp says %d", i, landed, want)
+		}
+	}
+}
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {

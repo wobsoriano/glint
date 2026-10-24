@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"time"
 )
 
 // wavHeaderSize is the 46-byte header the Rust writer emits: a WAVE_FORMAT_IEEE_FLOAT fmt
@@ -112,15 +113,20 @@ func (w *wavWriter) finish() (uint64, error) {
 	return dataLen + wavHeaderSize, nil
 }
 
-// clockedWAV is a WAV track at SampleRate that follows the media clock. Nothing is written
-// while the clock is paused. When the device runs ahead of or behind media time by more
-// than 60 ms, samples are dropped or silence is written, and finish pads or cuts the file to
-// media time. Loopback delivers no packets while nothing plays, so that padding is what
-// keeps system.wav in step through silence.
+// clockedWAV is a WAV track at SampleRate that follows the media clock. Each buffer lands at
+// the media time of the instant the device stamped on its first frame, so the file lines up
+// with every other track whatever the capture latency. Frames stamped in a pause are left
+// out. A gap, such as loopback delivering nothing while nothing plays, becomes silence; a
+// device clock drifting from the performance counter is pulled back once it is more than
+// placementSlack off. finish pads or cuts the file to media time.
 type clockedWAV struct {
 	w     *wavWriter
 	clock *Clock
 }
+
+// placementSlack is how far a buffer may land from where its timestamp puts it before it is
+// moved: jitter below this never cuts or pads, and drift is corrected well within a frame.
+const placementSlack = SampleRate * 2 / 1000
 
 func createClockedWAV(path string, channels int, clock *Clock) (*clockedWAV, error) {
 	w, err := createWAV(path, SampleRate, channels)
@@ -130,29 +136,43 @@ func createClockedWAV(path string, channels int, clock *Clock) (*clockedWAV, err
 	return &clockedWAV{w: w, clock: clock}, nil
 }
 
-func mediaFrames(c *Clock) float64 { return c.Now().Seconds() * SampleRate }
+func framesAt(d time.Duration) int64 { return int64(math.Round(d.Seconds() * SampleRate)) }
 
-// write takes 48 kHz interleaved samples that arrived now.
-func (c *clockedWAV) write(samples []float32) error {
-	if c.clock.IsPaused() {
-		return nil
+// write takes 48 kHz interleaved samples whose first frame the device stamped with at.
+func (c *clockedWAV) write(samples []float32, at Instant) error {
+	ch := c.w.channels
+	for len(samples) > 0 {
+		media, ok, next := c.clock.locate(at)
+		n := len(samples) / ch
+		if next != forever {
+			n = min(n, max(int(math.Ceil(next.sub(at).Seconds()*SampleRate)), 1))
+		}
+		if ok {
+			if err := c.place(samples[:n*ch], framesAt(media)); err != nil {
+				return err
+			}
+		}
+		samples = samples[n*ch:]
+		at += Instant(int64(n) * 1e7 / SampleRate)
 	}
-	const tolerance = SampleRate * 60 / 1000
-	behind := int64(mediaFrames(c.clock)) - int64(c.w.frames)
-	switch {
-	case behind > tolerance:
-		if err := c.w.writeSilence(uint64(behind - tolerance/2)); err != nil {
+	return nil
+}
+
+// place writes samples so their first frame is frame pos of the file.
+func (c *clockedWAV) place(samples []float32, pos int64) error {
+	switch gap := pos - int64(c.w.frames); {
+	case gap > placementSlack:
+		if err := c.w.writeSilence(uint64(gap)); err != nil {
 			return err
 		}
-	case behind < -tolerance:
-		drop := min(int(-behind-tolerance/2)*c.w.channels, len(samples))
-		samples = samples[drop:]
+	case gap < -placementSlack:
+		samples = samples[min(int(-gap)*c.w.channels, len(samples)):]
 	}
 	return c.w.write(samples)
 }
 
 func (c *clockedWAV) finish() (Stats, error) {
-	target := uint64(math.Round(mediaFrames(c.clock)))
+	target := uint64(framesAt(c.clock.Now()))
 	var err error
 	if have := c.w.frames; target > have {
 		err = c.w.writeSilence(target - have)

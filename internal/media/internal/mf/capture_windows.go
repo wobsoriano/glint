@@ -38,8 +38,9 @@ const (
 
 	slotPoolStaticsCreateFreeThreaded = 6
 
-	slotFrameSurface     = 6
-	slotFrameContentSize = 8
+	slotFrameSurface            = 6
+	slotFrameSystemRelativeTime = 7
+	slotFrameContentSize        = 8
 
 	slotSessionStartCapture         = 6
 	slotSessionPutCursorCapture     = 7
@@ -208,6 +209,14 @@ func (f CaptureFrame) ContentSize() (Size, error) {
 	var s Size
 	r, _, _ := syscall.SyscallN(f.fn(slotFrameContentSize), f.this(), uintptr(unsafe.Pointer(&s)))
 	return s, check("IDirect3D11CaptureFrame::get_ContentSize", r)
+}
+
+// SystemRelativeTime is when the frame is shown, the vertical blank it reaches the screen
+// at, on the performance counter in 100 ns units. Frames usually arrive before it.
+func (f CaptureFrame) SystemRelativeTime() (int64, error) {
+	var t int64
+	r, _, _ := syscall.SyscallN(f.fn(slotFrameSystemRelativeTime), f.this(), uintptr(unsafe.Pointer(&t)))
+	return t, check("IDirect3D11CaptureFrame::get_SystemRelativeTime", r)
 }
 
 // Texture is the frame's surface; release it before closing the frame.
