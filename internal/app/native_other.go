@@ -13,3 +13,6 @@ func AllowForeground() {}
 
 // excludeOwnWindows is not implemented outside Windows yet.
 func excludeOwnWindows(include bool) {}
+
+// forgetRustOpenWith has nothing to do outside Windows: the Rust build registered no file types there.
+func forgetRustOpenWith() {}

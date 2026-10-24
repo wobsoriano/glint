@@ -126,6 +126,9 @@ func (a *App) Run() error {
 }
 
 func (a *App) ready() {
+	if mygo.App.IsPackaged() {
+		forgetRustOpenWith()
+	}
 	excludeOwnWindows(a.settings.IncludeOwnWindows)
 	a.registerHotkeys()
 	a.buildTray()
