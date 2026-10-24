@@ -174,6 +174,7 @@ func compare(args []string) error {
 	pa, pb := fs.String("a", "", "first PNG"), fs.String("b", "", "second PNG")
 	ra, rb := fs.String("arect", "", "x,y,w,h of a"), fs.String("brect", "", "x,y,w,h of b")
 	tol := fs.Int("tol", 0, "largest channel difference that counts as equal")
+	maxMean := fs.Float64("maxmean", -1, "pass when the mean channel difference is at most this, for lossy files")
 	fs.Parse(args)
 	a, err := readImage(*pa)
 	if err != nil {
@@ -199,11 +200,12 @@ func compare(args []string) error {
 	if areaA.Size() != areaB.Size() {
 		return fmt.Errorf("sizes differ: %v against %v", areaA.Size(), areaB.Size())
 	}
-	n, worst, first := 0, 0, image.Point{-1, -1}
+	n, worst, first, sum := 0, 0, image.Point{-1, -1}, 0
 	for y := range areaA.Dy() {
 		for x := range areaA.Dx() {
 			ca, cb := rgba(a, areaA.Min.X+x, areaA.Min.Y+y), rgba(b, areaB.Min.X+x, areaB.Min.Y+y)
 			d := max(absDiff(ca.R, cb.R), absDiff(ca.G, cb.G), absDiff(ca.B, cb.B), absDiff(ca.A, cb.A))
+			sum += absDiff(ca.R, cb.R) + absDiff(ca.G, cb.G) + absDiff(ca.B, cb.B)
 			worst = max(worst, d)
 			if d > *tol {
 				if n == 0 {
@@ -214,7 +216,14 @@ func compare(args []string) error {
 		}
 	}
 	total := areaA.Dx() * areaA.Dy()
-	fmt.Printf("cmp %s%v vs %s%v: %d of %d pixels differ (tol %d, max delta %d, first at %v)\n", filepath.Base(*pa), areaA, filepath.Base(*pb), areaB, n, total, *tol, worst, first)
+	mean := float64(sum) / float64(3*total)
+	fmt.Printf("cmp %s%v vs %s%v: %d of %d pixels differ (tol %d, max delta %d, mean delta %.2f, first at %v)\n", filepath.Base(*pa), areaA, filepath.Base(*pb), areaB, n, total, *tol, worst, mean, first)
+	if *maxMean >= 0 {
+		if mean > *maxMean {
+			return fmt.Errorf("mean delta %.2f is over %.2f", mean, *maxMean)
+		}
+		return nil
+	}
 	if n > 0 {
 		return fmt.Errorf("%d pixels differ", n)
 	}
