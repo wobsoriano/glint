@@ -131,7 +131,7 @@ func runAnimate() {
 		clicks := 0
 		start := time.Now()
 		var win *mygo.Window
-		win = mygo.NewWindow(mygo.WindowOptions{Title: animTitle + " 0", X: 100, Y: 60, Width: 1720, Height: 960, Content: ui.View(func(c *ui.Context) {
+		win = mygo.NewWindow(mygo.WindowOptions{Title: animTitle + " 0", X: 100, Y: 60, Width: 1720, Height: 960, AlwaysOnTop: true, Content: ui.View(func(c *ui.Context) {
 			box := ui.Box(c).Fill().Background(animGreen)
 			if box.Clicked() {
 				clicks++

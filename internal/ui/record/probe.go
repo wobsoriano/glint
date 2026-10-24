@@ -25,12 +25,16 @@ type control struct {
 	name    string
 }
 
-// probe remembers where a control was in the last frame, for Point.
+// probe remembers where a control was last painted, for Point. Painting, unlike Bounds,
+// needs no second build of a view that builds once.
 func (c *Controller) probe(s Surface, name string, e ui.Element) {
-	if c.controls == nil {
-		c.controls = map[control]ui.Rect{}
-	}
-	c.controls[control{s, name}] = e.Bounds()
+	key := control{s, name}
+	e.DrawOver(func(_ *ui.Painter, r ui.Rect) {
+		if c.controls == nil {
+			c.controls = map[control]ui.Rect{}
+		}
+		c.controls[key] = r
+	})
 }
 
 func (c *Controller) window(s Surface) *mygo.Window {
@@ -77,4 +81,13 @@ func (c *Controller) Point(s Surface, name string, origin platform.Rect, scale f
 		ok = true
 	})
 	return x, y, ok
+}
+
+// forget drops what probe remembered of a surface whose window is going.
+func (c *Controller) forget(s Surface) {
+	for k := range c.controls {
+		if k.surface == s {
+			delete(c.controls, k)
+		}
+	}
 }

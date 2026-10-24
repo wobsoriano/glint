@@ -59,6 +59,7 @@ func (c *Controller) showPicker() {
 	if !ok {
 		return
 	}
+	c.forget(SurfacePicker)
 	pk := &picker{display: d, script: c.prefs().Script}
 	r := bottomCentre(d, pickerW, pickerH, pickerMargin)
 	pk.win = mygo.NewWindow(mygo.WindowOptions{
@@ -123,6 +124,7 @@ func panelHeight(p panel, mics, cameras int) int {
 func (c *Controller) togglePanel(pk *picker, p panel) {
 	open := pk.panel
 	pk.closePanel()
+	c.forget(SurfacePanel)
 	if open == p {
 		return
 	}
@@ -378,7 +380,7 @@ func (c *Controller) panelView(ctx *ui.Context, pk *picker, which panel) {
 }
 
 func (c *Controller) panelRow(ctx *ui.Context, p theme.Palette, key, label string, selected bool) bool {
-	row := ui.ButtonBase(ctx.Key(key)).Height(rowH).PaddingX(8).Gap(8).AlignItems(ui.Center).Radius(theme.RadiusControl).Cursor(ui.CursorPointer)
+	row := ui.ButtonBase(ctx.Key(key)).Height(rowH).PaddingX(8).Gap(8).AlignItems(ui.Center).Justify(ui.Start).Radius(theme.RadiusControl).Cursor(ui.CursorPointer)
 	if row.Hovered() {
 		row.Background(p.ControlHover)
 	}

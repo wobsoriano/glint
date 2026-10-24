@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"golang.org/x/sys/windows"
 
 	"github.com/wobsoriano/glint/internal/media"
 	"github.com/wobsoriano/glint/internal/media/capture"
@@ -40,6 +41,10 @@ type driver struct {
 func run(h *host, ctl *record.Controller) {
 	l := drive.NewLog(*outDir)
 	defer l.Finish()
+	time.AfterFunc(3*time.Minute, func() {
+		l.Printf("FAIL the drive took over 3 minutes")
+		os.Exit(2)
+	})
 	d := &driver{l: l, h: h, ctl: ctl}
 	displays, err := platform.Displays()
 	if !l.Check(err == nil, "read the displays: %v", err) {
@@ -57,9 +62,10 @@ func run(h *host, ctl *record.Controller) {
 	if !l.Check(d.anim != 0, "the animated app shows") {
 		return
 	}
+	demote(d.anim)
 	time.Sleep(500 * time.Millisecond)
 
-	steps := []func() bool{d.picker, d.countdownCancels, d.recordDisplay, d.recordArea, d.deleteFromBar}
+	steps := []func() bool{d.picker, d.countdownCancels, d.recordDisplay, d.recordArea, d.deleteFromBar, d.recordWindow}
 	for _, step := range steps {
 		if !step() {
 			break
@@ -366,6 +372,14 @@ func (d *driver) recordArea() bool {
 	time.Sleep(1500 * time.Millisecond)
 	b := l.Shot("12-bar-b.png", bar)
 	l.Check(drive.Diff(a, b, 30) > 20, "the bar's clock ticks (%d px changed)", drive.Diff(a, b, 30))
+	if !d.click(record.SurfaceBar, "pause") {
+		return false
+	}
+	time.Sleep(400 * time.Millisecond)
+	l.Shot("12-bar-paused.png", bar)
+	if !d.click(record.SurfaceBar, "pause") {
+		return false
+	}
 
 	cx, cy := x0+400, y0+200
 	l.Check(drive.RootAt(cx, cy) == d.anim, "the window under the area is the app, not the guide (%q)", drive.WindowText(drive.RootAt(cx, cy)))
@@ -519,4 +533,52 @@ func savePNG(path string, img image.Image) {
 		png.Encode(f, img)
 		f.Close()
 	}
+}
+
+var pSetWindowPos = windows.NewLazySystemDLL("user32.dll").NewProc("SetWindowPos")
+
+// demote takes the animated app out of the topmost band while keeping it above other apps,
+// so Glint's floating bar stays above it after it is clicked, as above any ordinary app.
+func demote(h uintptr) {
+	const notTopmost = ^uintptr(1)
+	const noSize, noMove, noActivate = 0x1, 0x2, 0x10
+	pSetWindowPos.Call(h, notTopmost, 0, 0, 0, 0, noSize|noMove|noActivate)
+}
+
+// recordWindow picks the animated app's window, records it for a moment and stops with the
+// hotkey: the video is the window's size.
+func (d *driver) recordWindow() bool {
+	l := d.l
+	pressHotkey()
+	if !l.Check(d.waitSurface(record.SurfacePicker, true, 3*time.Second), "the hotkey opens the picker") {
+		return false
+	}
+	if !d.click(record.SurfacePicker, "src-Window") || !l.Check(d.waitSurface(record.SurfacePicker, false, 2*time.Second), "Window hides the picker for the selection") {
+		return false
+	}
+	time.Sleep(600 * time.Millisecond)
+	cx, cy := d.display.Bounds.X+d.display.Bounds.W/2, d.display.Bounds.Y+d.display.Bounds.H/2
+	drive.MoveTo(cx-20, cy)
+	time.Sleep(100 * time.Millisecond)
+	drive.Click(cx, cy)
+	if !l.Check(d.waitSurface(record.SurfacePicker, true, 3*time.Second), "the picker comes back after the click") {
+		return false
+	}
+	l.Check(d.savedPrefs().Target == settings.RecordWindow, "settings.json holds the Window target")
+	l.Check(d.waitSurface(record.SurfaceGuide, true, 2*time.Second), "the guide outlines the window")
+	before := d.h.finishedCount()
+	if !d.click(record.SurfacePicker, "record") || !l.Check(drive.Until(5*time.Second, d.ctl.Live), "the window recording starts") {
+		return false
+	}
+	time.Sleep(1500 * time.Millisecond)
+	pressHotkey()
+	if !l.Check(drive.Until(10*time.Second, func() bool { return d.h.finishedCount() > before }), "the hotkey stops it into the Library") {
+		return false
+	}
+	item := d.h.lastFinished()
+	frame := drive.WindowRect(d.anim)
+	l.Printf("window rect %v, recording %dx%d from %q", frame, item.Meta.Width, item.Meta.Height, deref(item.Meta.Source))
+	l.Check(abs(int(item.Meta.Width)-frame.W) <= 16 && abs(int(item.Meta.Height)-frame.H) <= 16, "the video is the window's size")
+	l.Check(strings.HasPrefix(deref(item.Meta.Source), animTitle), "its source is the window's title")
+	return true
 }

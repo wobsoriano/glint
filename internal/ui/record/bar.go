@@ -25,6 +25,7 @@ type bar struct {
 
 // showBar shows the controls of a running recording near the bottom of its display.
 func (c *Controller) showBar(t Target) {
+	c.forget(SurfaceBar)
 	c.barView = &bar{born: time.Now()}
 	c.bar = c.openChrome(duringRecording, bottomCentre(t.Display, barW, barH, barMargin), t.Display.Scale, c.barUI)
 }
