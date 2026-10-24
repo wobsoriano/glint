@@ -81,6 +81,7 @@ func New(l Launch) *App {
 		failures: map[settings.HotkeyAction]error{},
 	}
 	a.Actions = actions.New(func() settings.Settings { return a.settings }, a.toast)
+	a.Actions.RecordingFile = studioDeliverable
 	a.acts = a.Actions
 	a.wire()
 	return a
@@ -89,6 +90,7 @@ func New(l Launch) *App {
 // automation is what the capture flow asks of the actions.
 type automation interface {
 	CopyImage(img image.Image, done func(error))
+	Copy(item store.Item)
 	Save(item store.Item, ask bool, done func(string, error))
 	ReportSave(path string, err error)
 	CopyTextOf(img *image.RGBA)
@@ -192,7 +194,7 @@ func (a *App) Do(cmd Command) {
 	case CmdOpenLast:
 		a.openLast()
 	case CmdQuit:
-		mygo.App.Quit()
+		a.quit(mygo.App.Quit)
 	}
 }
 

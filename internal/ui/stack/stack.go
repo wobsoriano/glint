@@ -79,6 +79,10 @@ type card struct {
 	deadline    time.Time
 	status      string
 	statusUntil time.Time
+	// hushed keeps the action tips hidden from a click until the pointer leaves the card.
+	// The status a click flashes takes the buttons away, and MyGo shows a tip again for a
+	// button that comes back under the resting pointer.
+	hushed bool
 }
 
 func (c *card) recording() bool { return c.item.Kind() == store.Recording }
@@ -265,6 +269,7 @@ func (s *Stack) run(id int, a settings.CardAction) {
 	if !ok {
 		return
 	}
+	c.hushed = true
 	item := c.item
 	go func() {
 		err := e.run(s.host, item)

@@ -334,6 +334,12 @@ func (h *host) Pin(img *image.RGBA, dpi float32) error {
 	return nil
 }
 
+func (h *host) SaveStyle(style render.Style) error {
+	s := settings.Load()
+	s.Style = style
+	return s.Save()
+}
+
 func (h *host) Closed() {
 	fmt.Println("editor closed")
 	mygo.App.Quit()

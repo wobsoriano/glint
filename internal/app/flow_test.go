@@ -98,9 +98,12 @@ func (p *fakePicker) pick(r image.Rectangle, w *platform.Window) {
 
 type fakeActs struct {
 	copied []image.Image
+	items  []store.Item
 	texts  []*image.RGBA
 	saved  []store.Item
 }
+
+func (f *fakeActs) Copy(item store.Item) { f.items = append(f.items, item) }
 
 func (f *fakeActs) CopyImage(img image.Image, done func(error)) {
 	f.copied = append(f.copied, img)
