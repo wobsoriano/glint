@@ -14,9 +14,15 @@ Read `docs/go-port/plan.md` first. These orders hold for every unit of the rewri
    The source is beside them. Read it when the docs are silent. Do not guess at an API.
 5. The Rust code under `src/` and `crates/` is the spec. Match its behavior and its on-disk
    formats: JSON field names, enum spellings, defaults, file names.
-6. Do not move the mouse or type on the desktop unless your brief allows it. Other workers
-   share this machine. Reading the screen is fine. Never write to `%APPDATA%\Glint`, which
-   holds the user's real Library. Use `GLINT_DATA_DIR` or a temp dir.
+6. Never write to `%APPDATA%\Glint`, which holds the user's real Library. Run the app with
+   `GLINT_DATA_DIR` pointing at a temp dir. Reading the screen is always fine. Moving the mouse,
+   typing or bringing windows to the front is allowed only when your brief says so, and only
+   inside the desktop lock, because other workers share this machine:
+   `go run ./tools/desklock -- powershell -NoProfile -File drive.ps1`. Hold it for short
+   bursts (a minute or two), and leave the desktop as you found it. PowerShell driver helpers
+   (Glide, Click, DClick, Drag, Keys, TypeText, Shot) are in
+   `C:\Users\wobsoriano\Documents\dev\glint\promo\real\lib.ps1`. Dot-source that file and use
+   only those functions; its other functions drive an old stage.
 7. Before you report done, run `gofmt -l`, `go vet ./...`, `go build ./...`,
    `GOOS=darwin GOARCH=arm64 go build ./...` and `go test` for your packages. All must be clean.
 8. Prove behavior on the real thing: compare pixels, decode the files you wrote, run the OS API.
