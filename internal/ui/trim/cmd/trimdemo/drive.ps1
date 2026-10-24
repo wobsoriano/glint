@@ -1,6 +1,7 @@
 # Drives the Trim & Compress window on the real desktop: scrub, play 10 s with sound, trim to
-# 2-5 s at 720p Small, export, then start a full-size export and cancel it. Controls are found
-# by name through UI Automation. Run it inside the desktop lock; verify.ps1 checks the results.
+# 2-5 s at 720p Small, export, start a full-size export and cancel it, then Save As the whole
+# clip at 480p in HEVC without audio through the system dialog. Controls are found by name
+# through UI Automation. Run it inside the desktop lock; verify.ps1 checks the results.
 #
 #   go run ./tools/desklock -- powershell -NoProfile -File drive.ps1 -Demo trimdemo.exe -Clip clip.mp4 -Out out
 param([string]$Demo, [string]$Clip, [string]$Out)
@@ -13,8 +14,12 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $A = [System.Windows.Automation.AutomationElement]
 $Scope = [System.Windows.Automation.TreeScope]
 
-New-Item -ItemType Directory -Force "$Out\exports" | Out-Null
-Get-ChildItem "$Out\exports" | Remove-Item
+foreach ($d in 'exports', 'saved') {
+    New-Item -ItemType Directory -Force "$Out\$d" | Out-Null
+    Get-ChildItem "$Out\$d" | Remove-Item
+}
+# demo.err then lists every frame MyGo took over 8 ms to build and present.
+$env:MYGO_FRAME_STATS = '1'
 $proc = Start-Process -FilePath $Demo -ArgumentList @('-open', $Clip, '-savedir', "$Out\exports", '-loopback') -PassThru -RedirectStandardOutput "$Out\demo.log" -RedirectStandardError "$Out\demo.err"
 
 function Note([string]$s) { "{0} {1}" -f (Get-Date -Format 'HH:mm:ss.fff'), $s | Tee-Object -FilePath "$Out\drive.log" -Append }
@@ -107,6 +112,7 @@ try {
         if ($e -and $seen[-1] -ne $e.Current.Name) { $seen += $e.Current.Name }
         if ($e -and -not $shot) { WindowShot '5-exporting'; $shot = $true }
         if ($sw.ElapsedMilliseconds -gt 60000) { throw 'export did not finish' }
+        Start-Sleep -m 20
     }
     Note ("progress seen: " + ($seen -join ', '))
     Start-Sleep -m 300
@@ -131,6 +137,20 @@ try {
     Start-Sleep -m 300
     WindowShot '8-cancelled'
     Note ("exports folder: " + ((Get-ChildItem "$Out\exports" | ForEach-Object Name) -join ', '))
+
+    Press-Named '480p'
+    Press-Named 'HEVC'
+    Press-Named 'Remove'
+    WindowShot '9-save-as-settings'
+    Press-Named 'Save As*'
+    Start-Sleep -m 1500
+    Keys 'Ctrl+A'
+    TypeText "$Out\saved\saved as.mp4" 10
+    Keys 'Enter'
+    Note 'typed the Save As path'
+    Wait-For 'Saved saved as.mp4*' 60000 | Out-Null
+    Start-Sleep -m 300
+    WindowShot '10-saved-as'
 }
 catch {
     Note "FAILED: $_"

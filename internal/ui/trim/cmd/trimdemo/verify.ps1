@@ -59,6 +59,14 @@ $first, $last = [int]$m.Groups[1].Value, [int]$m.Groups[2].Value
 Check ([math]::Abs($first - 60) -le 2) "the export starts on source frame $first (2 s is frame 60)"
 Check ([math]::Abs($last - 149) -le 2) "the export ends on source frame $last (5 s is frame 150)"
 
-foreach ($p in 1..8) { Check (@(Get-ChildItem "$Out\$p-*.png").Count -eq 1) "screenshot $p" }
+$saved = "$Out\saved\saved as.mp4"
+$probe = ffprobe -v error -show_entries 'stream=codec_type,codec_name,width,height:format=duration' -of json $saved | ConvertFrom-Json
+$v = @($probe.streams | Where-Object codec_type -eq 'video')
+$a = @($probe.streams | Where-Object codec_type -eq 'audio')
+Check ($v.Count -eq 1 -and $v[0].codec_name -eq 'hevc' -and $v[0].width -eq 852 -and $v[0].height -eq 480) "ffprobe: Save As wrote video $($v[0].codec_name) $($v[0].width)x$($v[0].height)"
+Check ($a.Count -eq 0) "ffprobe: Save As with audio removed has $($a.Count) audio streams"
+Check ([math]::Abs([double]$probe.format.duration - 20) -lt 0.1) "ffprobe: Save As kept the whole $($probe.format.duration) s"
+
+foreach ($p in 1..10) { Check (@(Get-ChildItem "$Out\$p-*.png").Count -eq 1) "screenshot $p" }
 "$failed check(s) failed"
 exit $failed
