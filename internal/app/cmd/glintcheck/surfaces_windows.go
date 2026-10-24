@@ -107,7 +107,8 @@ func video(args []string) error {
 func loopback(args []string) error {
 	fs := flag.NewFlagSet("loopback", flag.ExitOnError)
 	secs := fs.Float64("seconds", 3, "how long to listen")
-	min := fs.Float64("min", 0.01, "least RMS that counts as sound")
+	least := fs.Float64("peak", 0.05, "least peak that counts as sound")
+	silent := fs.Bool("silent", false, "pass when no sound plays, for a control")
 	fs.Parse(args)
 	dir, err := os.MkdirTemp("", "glintcheck-loopback")
 	if err != nil {
@@ -136,8 +137,11 @@ func loopback(args []string) error {
 	}
 	rms := math.Sqrt(sum / float64(max(n, 1)))
 	fmt.Printf("loopback %.1f s: %d samples, rms %.4f, peak %.4f\n", *secs, n, rms, peak)
-	if rms < *min {
-		return fmt.Errorf("the output device played no sound (rms %.4f under %.4f)", rms, *min)
+	switch heard := peak >= *least; {
+	case *silent && heard:
+		return fmt.Errorf("the output device played sound (peak %.4f) where it should be quiet", peak)
+	case !*silent && !heard:
+		return fmt.Errorf("the output device played no sound (peak %.4f under %.4f)", peak, *least)
 	}
 	return nil
 }

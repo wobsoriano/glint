@@ -36,6 +36,36 @@ function Start-Stage {
     $p
 }
 
+# The tray helpers read $IconX and $IconY, where this machine shows the icon in the taskbar's
+# overflow, and $g, the Glint process, from the scenario.
+function Show-Overflow {
+    & $Check mark -at "$IconX,$IconY" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Click 1722 1056 300
+        Start-Sleep -Milliseconds 700
+        & $Check mark -at "$IconX,$IconY" | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'the tray icon is not showing' }
+}
+
+function Open-Menu {
+    Show-Overflow
+    Glide $IconX $IconY 250
+    Start-Sleep -Milliseconds 100
+    RDown; Start-Sleep -Milliseconds 60; RUp
+    Start-Sleep -Milliseconds 600
+    & $Check menu -pid $g.Id | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'the tray menu did not open' }
+}
+
+# Choose picks the nth item of the tray menu with the keyboard, as a user could.
+function Choose([int]$n, [string]$shot = '') {
+    Open-Menu
+    for ($i = 0; $i -lt $n; $i++) { Keys 'Down' }
+    if ($shot) { Shot $shot }
+    Keys 'Enter'
+}
+
 # The stage stays on top of normal windows; minimize it to see one, such as Quick Look.
 function Hide-Stage { [Promo.In]::ShowWindow((Win 'Glint stage'), 6) | Out-Null; Start-Sleep -Milliseconds 300 }
 function Show-Stage { [Promo.In]::ShowWindow((Win 'Glint stage'), 9) | Out-Null; Start-Sleep -Milliseconds 300 }
@@ -113,6 +143,15 @@ function MenuRow($card, [string]$action) {
     Press $card $card.More
     Start-Sleep -Milliseconds 300
     Click $card.CX $card.Menu[$action] 200
+}
+
+if (-not ("GlintCheck.Msg" -as [type])) {
+    Add-Type -Namespace GlintCheck -Name Msg -MemberDefinition '[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);'
+}
+# Close-Win asks the window to close, as its close button does.
+function Close-Win([string]$title) {
+    $h = Win $title
+    if ($h -ne [IntPtr]::Zero) { [GlintCheck.Msg]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
 }
 
 function WinRect([string]$title) {

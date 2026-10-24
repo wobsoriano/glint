@@ -20,6 +20,7 @@ func main() {
 	}
 	mygo.App.SetName(app.InstanceName())
 	// A second Glint hands its command line to the first and exits.
+	app.AllowForeground()
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}

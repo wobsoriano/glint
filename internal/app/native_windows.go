@@ -16,9 +16,20 @@ var (
 	procSetWinEventHook    = user32.NewProc("SetWinEventHook")
 	procGetAncestor        = user32.NewProc("GetAncestor")
 	procGetDoubleClickTime = user32.NewProc("GetDoubleClickTime")
+
+	procAllowSetForegroundWindow = user32.NewProc("AllowSetForegroundWindow")
 )
 
 func foregroundWindow() int64 { return int64(windows.GetForegroundWindow()) }
+
+// AllowForeground lets the Glint already running bring a window to the front for this
+// process's command line. Windows grants that right to the process the user just started,
+// not to the one it forwards to, so without it Trim & Compress or the Library would open
+// behind the app the user opened a file from.
+func AllowForeground() {
+	const asfwAny = ^uintptr(0)
+	procAllowSetForegroundWindow.Call(asfwAny)
+}
 
 func doubleClickTime() time.Duration {
 	ms, _, _ := procGetDoubleClickTime.Call()
