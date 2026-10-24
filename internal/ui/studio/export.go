@@ -199,10 +199,12 @@ func (e *editor) exportOverlay(c *ui.Context, pal theme.Palette) {
 	if _, closed := e.export.(exportClosed); closed {
 		return
 	}
-	scrim := ui.Column(c.Key("export-scrim")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().Background(ui.RGBA(0, 0, 0, 0.5))
-	scrim.HandleInput(func(ev ui.InputEvent) bool { return ev.Kind == ui.InputPointerDown })
-	scrim.Children(func() {
-		ui.Column(c).Width(440).Padding(20).Gap(12).Radius(theme.RadiusWindow).Background(pal.Flyout).Border(1, pal.Border).
+	// The scrim takes presses so nothing behind the card reacts; the card is its sibling, not
+	// its child, or the scrim would take the card's presses too.
+	ui.Box(c.Key("export-overlay")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
+		ui.Box(c.Key("export-scrim")).Fill().Background(ui.RGBA(0, 0, 0, 0.5)).
+			HandleInput(func(ev ui.InputEvent) bool { return ev.Kind == ui.InputPointerDown })
+		ui.Column(c.Key("export-card")).Attach(ui.AnchorCenter, ui.AnchorCenter).Width(440).Padding(20).Gap(12).Radius(theme.RadiusWindow).Background(pal.Flyout).Border(1, pal.Border).
 			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Children(func() {
 			switch s := e.export.(type) {
 			case *exportDialog:

@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/wobsoriano/glint/internal/media"
+	"github.com/wobsoriano/glint/internal/render"
 	core "github.com/wobsoriano/glint/internal/studio"
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
@@ -224,6 +225,71 @@ func TestExportCancelLeavesNoFileThenExportsTheTimeline(t *testing.T) {
 	}
 	if e.project().Export.Resolution != core.Res720 {
 		t.Error("the dialog's options were not remembered in the project")
+	}
+}
+
+func TestCursorAudioBackgroundAndExportChoices(t *testing.T) {
+	e, _, _, tt, _ := testStudio(t)
+	click(t, tt, "Cursor")
+	click(t, tt, "Click highlights")
+	if e.project().ClickHighlights == core.DefaultProject().ClickHighlights {
+		t.Error("Click highlights did not change")
+	}
+	click(t, tt, "Audio")
+	enabled := e.project().Audio.System.Enabled
+	click(t, tt, "Include")
+	if e.project().Audio.System.Enabled == enabled {
+		t.Error("Include did not change system audio")
+	}
+	click(t, tt, "Background")
+	click(t, tt, "Image")
+	if e.wallpaper != "" {
+		if bg, ok := e.project().Design.Background.(render.ImageBackground); !ok || bg.Path != e.wallpaper {
+			t.Errorf("Image chose %#v, want the wallpaper %s", e.project().Design.Background, e.wallpaper)
+		}
+	}
+	e.openExport()
+	tt.Frame()
+	click(t, tt, "GIF")
+	if d := e.export.(*exportDialog); d.opts.Format != core.FormatGif || tt.HasText("Frame rate") || tt.HasText("Codec") {
+		t.Errorf("GIF chosen: format %v, frame rate shown %v, codec shown %v", d.opts.Format, tt.HasText("Frame rate"), tt.HasText("Codec"))
+	}
+	tt.Key(0, ui.KeyEscape)
+	if _, closed := e.export.(exportClosed); !closed {
+		t.Error("Escape left the export dialog open")
+	}
+}
+
+func TestEscapeRestoresTheCropAndCloseSavesOrReportsTheError(t *testing.T) {
+	e, _, _, tt, dir := testStudio(t)
+	e.enterCrop()
+	tt.Frame()
+	click(t, tt, "1:1")
+	if e.project().Crop == core.FullCrop {
+		t.Fatal("1:1 did not crop")
+	}
+	tt.Key(0, ui.KeyEscape)
+	if _, ok := e.mode.(normalMode); !ok || e.project().Crop != core.FullCrop {
+		t.Errorf("after Escape: mode %T, crop %+v", e.mode, e.project().Crop)
+	}
+
+	e.edit("", func(p *core.Project) { p.Design.Shadow = 0.9 })
+	if !e.closeRequested() || savedProject(t, dir).Design.Shadow != 0.9 {
+		t.Error("closing did not save the last edit")
+	}
+
+	path := filepath.Join(dir, core.ProjectFile)
+	os.Remove(path)
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.edit("", func(p *core.Project) { p.Design.Shadow = 0.1 })
+	if e.closeRequested() {
+		t.Fatal("the window closed although project.json could not be written")
+	}
+	tt.Frame()
+	if !tt.HasText("Close without saving") {
+		t.Fatalf("no save error shown: %q", tt.Texts())
 	}
 }
 
