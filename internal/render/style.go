@@ -208,7 +208,7 @@ func (s Style) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(styleJSON{bg, s.Padding, s.Inset, s.AutoBalance, s.Radius, s.Shadow, s.ShadowOpacity, s.Aspect, s.Align, s.Chrome, s.ChromeTitle})
+	return marshalSerde(styleJSON{bg, s.Padding, s.Inset, s.AutoBalance, s.Radius, s.Shadow, s.ShadowOpacity, s.Aspect, s.Align, s.Chrome, s.ChromeTitle})
 }
 
 func (s *Style) UnmarshalJSON(data []byte) error {
