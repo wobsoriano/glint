@@ -227,6 +227,8 @@ func (a *App) SetLaunchAtLogin(on bool) error {
 // Capture starts a capture as the action's global shortcut does.
 func (a *App) Capture(action settings.HotkeyAction) { a.Do(hotkeyCommands[action]) }
 
+func (a *App) OpenSettings() { a.Do(CmdSettings) }
+
 // OpenFiles opens images in the editor and videos in Trim & Compress.
 func (a *App) OpenFiles(paths []string) {
 	var images []string
