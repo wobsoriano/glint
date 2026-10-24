@@ -402,6 +402,64 @@ Nothing blocks a feature outright. These gaps need the workaround named:
 Run every raw call on the main thread (`mygo.RunOnMain`), as MyGo's docs require. The spike calls
 some from goroutines, which worked here.
 
+## 10. Handles over Library open and close cycles
+
+**Answer: neither Glint nor MyGo leaks per window. The handle count grows with the threads the
+process has used, and stops growing once no new thread joins in.**
+
+The verification measured handles from 1295 to 1341 and USER objects from 28 to 34 over 25
+Library cycles started with `glint.exe --library` (`tools/verify/perf.ps1`), and read it as about
+one handle per cycle. `internal/app/cmd/glintcheck/scenarios/libleak.ps1` runs 5 warm-up cycles,
+then N more, and diffs `glintcheck handles` (every kernel handle by type and name, thread handles
+by owner, state and start address, and every window by class) between the two points:
+
+| Opened by | Cycles after warm-up | Handles | USER objects | Left behind |
+|---|---|---|---|---|
+| Ctrl+Shift+L | 45 | 1272 to 1269 | 30, then 31 from the fifth on | +1 thread handle, +1 I/O completion, -1 event, -1 timer, -3 ALPC ports |
+| `glint.exe --library` | 45 | 1300, 1319 at cycle 10, 1311 at the end | 31, then 32 from the tenth on | +8 thread handles, +6 events, +1 I/O completion, -1 timer, -3 ALPC ports |
+| `glint.exe --library` | 20 | 1317 to 1334 | 32 to 33 | +9 thread handles, +10 events |
+
+No window class gained a window in any run. Opening and closing the Library leaves nothing.
+The growth comes with second-instance launches. The 9 new thread handles of the last run each
+point to a running Go thread (start address `glint.exe+0x8bce0`) that already had one handle,
+so each such thread ended with two. No thread had a third.
+
+`glintcheck sockserve` has no MyGo in it and accepts AF_UNIX connections the way
+`RequestSingleInstanceLock` does. `scenarios/sockhandles.ps1` dials it 60 times from other
+processes (`glintcheck sockdial`). It shows the same: 8 thread handles and 34 events while
+serving, 10 and 36 after the second dial, then no change through the sixtieth, and four of its Go
+threads end with two handles each. The server is this:
+
+```go
+ln, _ := net.Listen("unix", sock)
+for {
+	conn, _ := ln.Accept()
+	go func() {
+		defer conn.Close()
+		conn.SetDeadline(time.Now().Add(2 * time.Second))
+		io.ReadAll(io.LimitReader(conn, 1<<20))
+	}()
+}
+```
+
+So a Go thread that serves a socket for the first time keeps one more thread handle and one more
+event until it exits, and Go threads do not exit. Which DLL holds them was not found: Windows
+handle tracing (`ProcessHandleTracing`) returned the opening thread of each handle but no stack.
+Glint has about 40 threads, so the count rises over the first 10 to 15 launches and then stays.
+A new Go thread brings its own handles as well: the runtime's `minit` keeps the thread handle,
+two waitable timers and a wait completion packet, and the thread later makes its events. A
+rerun of `perf.ps1` on the fixed build showed +6 handles at the one cycle where the thread count
+rose from 35 to 36, and 1273 to 1333 handles over 25 cycles with USER objects flat at 32 from
+the fourth cycle on.
+
+Nothing in Glint or MyGo needs a change. To check again:
+
+```powershell
+$env:GLINT_BIN = '<dir with glint.exe and glintcheck.exe>'; $env:GLINT_OUT = '<evidence dir>'
+go run ./tools/desklock -- powershell -NoProfile -File internal/app/cmd/glintcheck/scenarios/libleak.ps1 -Seed <Library folder> -Open cli -N 45
+powershell -NoProfile -File internal/app/cmd/glintcheck/scenarios/sockhandles.ps1
+```
+
 ## Not verified
 
 - Any display scale other than 100% on the GPU, more than one display, mixed DPI, and displays
