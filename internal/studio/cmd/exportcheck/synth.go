@@ -132,6 +132,35 @@ func writeScreen(path string) error {
 	return err
 }
 
+// writeCamera is the Rust studio example's fake camera: a teal frame with a white bar
+// sweeping across it, at 30 fps for the whole recording.
+func writeCamera(path string) error {
+	w, err := media.CreateVideoWriter(path, media.VideoParams{Width: 640, Height: 480, FPS: 30, Bitrate: 2_000_000}, nil)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	img := image.NewRGBA(image.Rect(0, 0, 640, 480))
+	for i := range srcMs * 30 / 1000 {
+		t := float64(i) / 30
+		x0 := int(t * 60)
+		for y := range 480 {
+			for x := range 640 {
+				c := color.RGBA{30, uint8(60 + t*20), 90, 255}
+				if x >= x0 && x < x0+24 {
+					c = color.RGBA{255, 255, 255, 255}
+				}
+				img.SetRGBA(x, y, c)
+			}
+		}
+		if err := w.WriteFrame(img); err != nil {
+			return err
+		}
+	}
+	_, err = w.Finish()
+	return err
+}
+
 func writeTones(path string) error {
 	w, err := media.CreateWAV(path, studio.SampleRate, 2)
 	if err != nil {

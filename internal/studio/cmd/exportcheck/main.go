@@ -4,9 +4,10 @@
 // It also exports copies of Library sessions and times them. Never point -real at the
 // Library itself; copy it first.
 //
-//	cargo build --release -p glint-studio --example go_export
+//	cargo build --release -p glint-studio --example go_export --example studio
 //	go run ./internal/studio/cmd/exportcheck -work <tmp> -rust <target>/release/examples/go_export.exe
-//	go run ./internal/studio/cmd/exportcheck -work <tmp> -real <copies> -rust ...
+//	go run ./internal/studio/cmd/exportcheck -work <tmp> -real <copies> [-blur=false] -rust ...
+//	go run ./internal/studio/cmd/exportcheck -work <tmp> -stages <copies>/<id>.glintrec -runs 5 -rust ...
 package main
 
 import (
@@ -27,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/pprof"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -42,14 +44,18 @@ type variant struct {
 	captions   bool
 	resolution studio.Resolution
 	format     studio.Format
+	codec      studio.Codec
+	quality    studio.Quality
+	camera     bool
 }
 
 var variants = []variant{
-	{"60-blur-captions-1080", studio.Fps60, true, true, studio.Res1080, studio.FormatMp4},
-	{"30-noblur-720", studio.Fps30, false, false, studio.Res720, studio.FormatMp4},
-	{"30-blur-captions-720", studio.Fps30, true, true, studio.Res720, studio.FormatMp4},
-	{"60-noblur-720", studio.Fps60, false, false, studio.Res720, studio.FormatMp4},
-	{"gif-blur-captions", studio.Fps60, true, true, studio.Res1080, studio.FormatGif},
+	{"60-blur-captions-1080", studio.Fps60, true, true, studio.Res1080, studio.FormatMp4, studio.CodecH264, studio.QualityHigh, false},
+	{"30-noblur-720", studio.Fps30, false, false, studio.Res720, studio.FormatMp4, studio.CodecH264, studio.QualityHigh, false},
+	{"30-blur-captions-720", studio.Fps30, true, true, studio.Res720, studio.FormatMp4, studio.CodecH264, studio.QualityHigh, false},
+	{"60-noblur-720", studio.Fps60, false, false, studio.Res720, studio.FormatMp4, studio.CodecH264, studio.QualityHigh, false},
+	{"gif-blur-captions", studio.Fps60, true, true, studio.Res1080, studio.FormatGif, studio.CodecH264, studio.QualityHigh, false},
+	{"60-camera-hevc-medium-720", studio.Fps60, true, true, studio.Res720, studio.FormatMp4, studio.CodecHevc, studio.QualityMedium, true},
 }
 
 var failures int
@@ -69,6 +75,7 @@ func main() {
 	real := flag.String("real", "", "directory of copied *.glintrec sessions to export at 1080p60")
 	only := flag.String("only", "", "run only the variant with this name")
 	profile := flag.String("cpuprofile", "", "write a CPU profile of the real-session exports")
+	blur := flag.Bool("blur", true, "motion blur for -real exports")
 	stagesOf := flag.String("stages", "", "time each stage of a 1080p60 export of this session copy")
 	runs := flag.Int("runs", 5, "runs per stage for -stages")
 	flag.Parse()
@@ -80,7 +87,7 @@ func main() {
 			log.Fatal(err)
 		}
 	} else if *real != "" {
-		if err := realSessions(*work, *real, *rust, *profile); err != nil {
+		if err := realSessions(*work, *real, *rust, *profile, *blur); err != nil {
 			log.Fatal(err)
 		}
 	} else if err := synthetic(*work, *rust, *only); err != nil {
@@ -245,6 +252,11 @@ func prepare(session, dir string, v variant) (*studio.Session, error) {
 	if err := copyDir(session, dir); err != nil {
 		return nil, err
 	}
+	if v.camera {
+		if err := writeCamera(filepath.Join(dir, "camera.mp4")); err != nil {
+			return nil, err
+		}
+	}
 	s, err := studio.LoadSession(dir)
 	if err != nil {
 		return nil, err
@@ -252,7 +264,7 @@ func prepare(session, dir string, v variant) (*studio.Session, error) {
 	p := baseProject(studio.CaptionCues(*s.Transcript))
 	p.Captions.Enabled = v.captions
 	p.Captions.Karaoke = v.captions
-	p.Export = studio.ExportOptions{Fps: v.fps, MotionBlur: v.blur, Resolution: v.resolution, Quality: studio.QualityHigh, Codec: studio.CodecH264, Format: v.format}
+	p.Export = studio.ExportOptions{Fps: v.fps, MotionBlur: v.blur, Resolution: v.resolution, Quality: v.quality, Codec: v.codec, Format: v.format}
 	if err := p.Save(dir); err != nil {
 		return nil, err
 	}
@@ -263,11 +275,19 @@ type progressLog struct {
 	last      float64
 	monotonic bool
 	calls     int
+	// first and full are when the first frame and the last frame were written.
+	first, full time.Time
 }
 
 func (l *progressLog) record(p float64) {
 	if p < l.last {
 		l.monotonic = false
+	}
+	if l.calls == 0 {
+		l.first = time.Now()
+	}
+	if p == 1 && l.full.IsZero() {
+		l.full = time.Now()
 	}
 	l.last = p
 	l.calls++
@@ -319,11 +339,20 @@ func runVariant(work, session, rust string, v variant) error {
 		dur := pr.duration()
 		check(math.Abs(dur-p.DurationMs()/1000) < 1.5/float64(fps)+0.03, "duration %.3f s, want %.3f s", dur, p.DurationMs()/1000)
 		check(pr.stream("audio") != nil, "audio track present (%s)", pr.streamCodec("audio"))
-		if err := compareWithCompose(s, out, frames, fps); err != nil {
+		wantCodec := "h264"
+		if v.codec == studio.CodecHevc && slices.Contains(media.AvailableCodecs(), media.HEVC) {
+			wantCodec = "hevc"
+		}
+		check(vs.CodecName == wantCodec, "video codec %s, want %s", vs.CodecName, wantCodec)
+		if err := compareWithCompose(s, out, pr, frames, fps); err != nil {
 			return err
 		}
-		if err := checkOnsets(s, out, fps); err != nil {
-			return err
+		if mfDecodes(pr) {
+			if err := checkOnsets(s, out, fps); err != nil {
+				return err
+			}
+		} else {
+			fmt.Println("  skip onsets: this machine has no Media Foundation decoder for", vs.CodecName)
 		}
 	}
 	if rust == "" {
@@ -346,32 +375,44 @@ func runVariant(work, session, rust string, v variant) error {
 
 // compareWithCompose decodes output frames and composes the same output times from the
 // source; the only difference left is the export's own encode.
-func compareWithCompose(s *studio.Session, out string, frames int, fps uint32) error {
+func compareWithCompose(s *studio.Session, out string, pr *probe, frames int, fps uint32) error {
 	feed, err := studio.OpenFeed(s.Tracks.Screen)
 	if err != nil {
 		return err
 	}
 	defer feed.Close()
-	r, err := media.OpenVideoReader(out)
+	var camera *studio.Feed
+	if s.Tracks.Camera != "" {
+		if camera, err = studio.OpenFeed(s.Tracks.Camera); err != nil {
+			return err
+		}
+		defer camera.Close()
+	}
+	indices := sampleIndices(frames)
+	decoded, err := outputFrames(out, pr, indices, fps)
 	if err != nil {
 		return err
 	}
-	defer r.Close()
 	p := s.Project
 	w, h := p.OutputSize(s.SourceW, s.SourceH)
 	var worst float64 = math.Inf(1)
 	var report []string
-	for _, i := range sampleIndices(frames) {
+	for k, i := range indices {
 		outMs := float64(i) * 1000 / float64(fps)
-		got, err := frameAt(r, outMs)
-		if err != nil {
-			return err
-		}
+		got := decoded[k]
 		src, err := feed.FrameAt(p.SourceTime(outMs))
 		if err != nil {
 			return err
 		}
-		want := studio.ComposeFrameMotionBlur(&p, s.Assets, studio.FrameInputs{Screen: src.RGBA(), OutputMs: outMs}, w, h)
+		in := studio.FrameInputs{Screen: src.RGBA(), OutputMs: outMs}
+		if camera != nil {
+			cam, err := camera.FrameAt(p.SourceTime(outMs))
+			if err != nil {
+				return err
+			}
+			in.Camera = cam.RGBA()
+		}
+		want := studio.ComposeFrameMotionBlur(&p, s.Assets, in, w, h)
 		db := psnr(got.Pix, want.Pix)
 		worst = min(worst, db)
 		report = append(report, fmt.Sprintf("%d:%.1f", i, db))
@@ -390,6 +431,53 @@ func sampleIndices(frames int) []int {
 		out = append(out, min(int(f*float64(frames)), frames-1))
 	}
 	return out
+}
+
+func mfDecodes(pr *probe) bool {
+	return pr.streamCodec("video") != "hevc" || slices.Contains(media.DecodableCodecs(), media.HEVC)
+}
+
+// outputFrames decodes the frames at indices with Media Foundation, the decoder the app
+// uses, or with ffmpeg when this machine has none for the codec.
+func outputFrames(path string, pr *probe, indices []int, fps uint32) ([]*image.RGBA, error) {
+	if !mfDecodes(pr) {
+		return ffmpegFrames(path, pr.stream("video"), indices)
+	}
+	r, err := media.OpenVideoReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	var out []*image.RGBA
+	for _, i := range indices {
+		f, err := frameAt(r, float64(i)*1000/float64(fps))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+func ffmpegFrames(path string, vs *probeStream, indices []int) ([]*image.RGBA, error) {
+	var terms []string
+	for _, i := range indices {
+		terms = append(terms, fmt.Sprintf("eq(n\\,%d)", i))
+	}
+	raw, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-vf", "select="+strings.Join(terms, "+"),
+		"-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgba", "-").Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg decoding %s: %w", path, err)
+	}
+	n := vs.Width * vs.Height * 4
+	if len(raw) != n*len(indices) {
+		return nil, fmt.Errorf("ffmpeg gave %d bytes for %d frames of %dx%d", len(raw), len(indices), vs.Width, vs.Height)
+	}
+	out := make([]*image.RGBA, len(indices))
+	for k := range out {
+		out[k] = &image.RGBA{Pix: raw[k*n : (k+1)*n], Stride: vs.Width * 4, Rect: image.Rect(0, 0, vs.Width, vs.Height)}
+	}
+	return out, nil
 }
 
 // frameAt decodes the output frame shown at ms.
@@ -542,29 +630,19 @@ func compareMP4s(goOut, rustOut string, fps uint32) error {
 	check(gv.frames() == rv.frames() && gv.Width == rv.Width && gv.Height == rv.Height,
 		"parity: go %d frames %dx%d, rust %d frames %dx%d", gv.frames(), gv.Width, gv.Height, rv.frames(), rv.Width, rv.Height)
 	check(math.Abs(gp.duration()-rp.duration()) < 0.001, "parity: duration go %.3f s, rust %.3f s", gp.duration(), rp.duration())
-	gr, err := media.OpenVideoReader(goOut)
+	indices := sampleIndices(gv.frames())
+	gf, err := outputFrames(goOut, gp, indices, fps)
 	if err != nil {
 		return err
 	}
-	defer gr.Close()
-	rr, err := media.OpenVideoReader(rustOut)
+	rf, err := outputFrames(rustOut, rp, indices, fps)
 	if err != nil {
 		return err
 	}
-	defer rr.Close()
 	worst := math.Inf(1)
 	var report []string
-	for _, i := range sampleIndices(gv.frames()) {
-		ms := float64(i) * 1000 / float64(fps)
-		a, err := frameAt(gr, ms)
-		if err != nil {
-			return err
-		}
-		b, err := frameAt(rr, ms)
-		if err != nil {
-			return err
-		}
-		db := psnr(a.Pix, b.Pix)
+	for k, i := range indices {
+		db := psnr(gf[k].Pix, rf[k].Pix)
 		worst = min(worst, db)
 		report = append(report, fmt.Sprintf("%d:%.1f", i, db))
 	}
@@ -685,7 +763,7 @@ func checkCancel(work, session string) error {
 	return nil
 }
 
-func realSessions(work, copies, rust, profile string) error {
+func realSessions(work, copies, rust, profile string, blur bool) error {
 	dirs, err := filepath.Glob(filepath.Join(copies, "*.glintrec"))
 	if err != nil || len(dirs) == 0 {
 		return fmt.Errorf("no *.glintrec in %s: %v", copies, err)
@@ -716,6 +794,7 @@ func realSessions(work, copies, rust, profile string) error {
 			return err
 		}
 		opts := studio.DefaultExportOptions()
+		opts.MotionBlur = blur
 		w, h := s.Project.OutputSize(s.SourceW, s.SourceH)
 		frames := int(math.Round(s.Project.DurationMs() * 60 / 1000))
 		prog := &progressLog{monotonic: true}
@@ -726,7 +805,10 @@ func realSessions(work, copies, rust, profile string) error {
 		if err != nil {
 			continue
 		}
-		fmt.Printf("  go: %d frames in %.2f s = %.1f frames/s\n", frames, wall.Seconds(), float64(frames)/wall.Seconds())
+		steady := prog.full.Sub(prog.first)
+		fmt.Printf("  go: %d frames in %.2f s = %.1f frames/s; first frame after %v, then %.1f frames/s, finish %v\n",
+			frames, wall.Seconds(), float64(frames)/wall.Seconds(), prog.first.Sub(started).Round(time.Millisecond),
+			float64(frames-1)/steady.Seconds(), started.Add(wall).Sub(prog.full).Round(time.Millisecond))
 		pr, err := ffprobe(out)
 		if err != nil {
 			return err
