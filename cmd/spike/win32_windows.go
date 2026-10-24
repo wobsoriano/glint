@@ -44,6 +44,8 @@ var (
 	pGetClassNameW            = user32.NewProc("GetClassNameW")
 	pEnumWindows              = user32.NewProc("EnumWindows")
 	pIsWindow                 = user32.NewProc("IsWindow")
+	pIsWindowVisible          = user32.NewProc("IsWindowVisible")
+	pGetDoubleClickTime       = user32.NewProc("GetDoubleClickTime")
 
 	pCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
 	pCreateDIBSection   = gdi32.NewProc("CreateDIBSection")

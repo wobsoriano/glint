@@ -496,5 +496,8 @@ func runForeground() {
 			}).Children(func() { ui.Text(c, "Another app") })
 		})})
 		w.Focus()
+		if *grab != "" {
+			logf("foreground app holds %s: %v", *grab, mygo.GlobalShortcut.Register(*grab, func() {}))
+		}
 	})
 }
