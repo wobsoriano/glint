@@ -44,6 +44,7 @@ import (
 var (
 	dataDir = flag.String("data", "", "GLINT_DATA_DIR for this run (required)")
 	capture = flag.Bool("capture", false, "grab the primary display into a new Library capture")
+	sample  = flag.Bool("sample", false, "import an image of text with an email, a card and a phone number")
 	sizeArg = flag.String("size", "", "WxH: crop the grab to this size (scaled up first when the display is smaller)")
 	seed    = flag.Int("seed", 0, "add this many annotations before opening")
 	stats   = flag.String("frames", "", "write each frame's timings to this file (needs MYGO_FRAME_STATS=all)")
@@ -106,7 +107,25 @@ func main() {
 	}
 }
 
+// sampleImage is text with an email, a card number and a phone number, for smart redaction.
+func sampleImage() *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, 1600, 900))
+	render.Fill(img, render.White)
+	for i, line := range []string{
+		"Invoice 2026-118 for jane.doe@example.com",
+		"Card on file: 4242 4242 4242 4242",
+		"Questions? Call +1 415 555 0134",
+		"Thanks for your order.",
+	} {
+		render.DrawText(img, line, 120, 160+float32(i)*140, 64, render.RGB(0x1C1C1E))
+	}
+	return img
+}
+
 func pick(lib store.Library) (store.Item, error) {
+	if *sample {
+		return lib.ImportScreenshot(store.NewScreenshot{Base: sampleImage(), Created: time.Now(), Title: "OCR sample"})
+	}
 	if *capture {
 		img, err := grab()
 		if err != nil {

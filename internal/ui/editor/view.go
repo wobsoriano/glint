@@ -22,6 +22,10 @@ func (e *Editor) view(c *ui.Context) {
 		c.Toast(t)
 	}
 	e.toasts = nil
+	if e.clipboard != nil {
+		c.WriteClipboard(*e.clipboard)
+		e.clipboard = nil
+	}
 	e.shortcuts(c)
 	ui.Column(c).Fill().Background(pal.Base).Children(func() {
 		e.toolbar(c, pal)
@@ -60,6 +64,8 @@ func (e *Editor) shortcuts(c *ui.Context) {
 		{cmd, ui.KeyY, m.redo},
 		{cmd | shift, ui.KeyY, m.redo},
 		{cmd, ui.KeyP, e.pin},
+		{cmd | shift, ui.KeyR, e.smartRedact},
+		{cmd | shift, ui.KeyT, e.copyText},
 		{cmd, ui.KeyA, m.selectAll},
 		{cmd, ui.KeyEqual, func() { e.zoomStep(true) }},
 		{cmd | shift, ui.KeyEqual, func() { e.zoomStep(true) }},
@@ -253,6 +259,13 @@ func (e *Editor) toolbar(c *ui.Context, pal palette) {
 		}
 		if iconButton(c, "redo", theme.IconRedo, false, "Redo (Ctrl+Y)", pal) {
 			m.redo()
+		}
+		divider(c, pal)
+		if iconButton(c, "redact", theme.IconShield, false, "Smart redaction (Ctrl+Shift+R)", pal) {
+			e.smartRedact()
+		}
+		if iconButton(c, "ocr", theme.IconScan, false, "Copy text from image (Ctrl+Shift+T)", pal) {
+			e.copyText()
 		}
 	})
 }

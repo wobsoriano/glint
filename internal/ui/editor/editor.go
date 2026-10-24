@@ -70,6 +70,8 @@ type Editor struct {
 	toasts      []string
 	saving      bool
 	closed      bool
+	busy        bool    // OCR is running
+	clipboard   *string // text for the view to put on the clipboard
 	gallery     *gallery
 	canvasFocus ui.Handle
 }

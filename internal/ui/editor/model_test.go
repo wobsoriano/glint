@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wobsoriano/glint/internal/redact"
 	"github.com/wobsoriano/glint/internal/render"
 )
 
@@ -228,6 +229,32 @@ func TestTextToolTypesAndEmptyTextVanishes(t *testing.T) {
 	}
 	if !m.dirty() {
 		t.Error("typed text should make the edit dirty")
+	}
+}
+
+func TestFindingsBecomeOneUndoStepOfSelectedRedactions(t *testing.T) {
+	m := testModel(800, 600)
+	m.doc.DPI = 1.5
+	found := []redact.Finding{
+		{Kind: redact.Email, Rect: redact.Rect{X: 10, Y: 10, W: 200, H: 20}},
+		{Kind: redact.Email, Rect: redact.Rect{X: 10, Y: 40, W: 180, H: 20}},
+		{Kind: redact.Card, Rect: redact.Rect{X: 10, Y: 70, W: 220, H: 20}},
+	}
+	if msg := m.addFindings(found, render.RedactPixelate); msg != "Hid 2 emails, 1 card number; strength stays editable" {
+		t.Errorf("summary %q", msg)
+	}
+	if len(m.doc.Annotations) != 3 || len(m.sel) != 3 || m.tool != render.ToolSelect {
+		t.Fatalf("annotations %d, selected %d, tool %v", len(m.doc.Annotations), len(m.sel), m.tool)
+	}
+	if r := m.doc.Annotations[0].Shape.(render.Redact); r.Kind != render.RedactPixelate || r.Strength != render.RedactStrength*1.5 {
+		t.Errorf("redaction %+v", r)
+	}
+	if msg := m.addFindings(found, render.RedactPixelate); msg != "No sensitive info found" || len(m.doc.Annotations) != 3 {
+		t.Errorf("a second scan said %q and left %d annotations", msg, len(m.doc.Annotations))
+	}
+	m.undo()
+	if len(m.doc.Annotations) != 0 {
+		t.Errorf("one undo should remove every redaction, %d left", len(m.doc.Annotations))
 	}
 }
 
