@@ -1,5 +1,7 @@
 # Glint on macOS
 
+Glint ships for Windows only. This page is the plan for a macOS port.
+
 The Go build compiles for macOS and packages `Glint.app`, but nobody has run that app yet. Most
 of what makes Glint useful is missing there. It cannot take a screenshot, record, decode or
 encode video, run OCR or transcribe. The UI, the Library, the editor's renderer and the Studio
@@ -133,3 +135,33 @@ Compiling and packaging work anywhere. These steps do not:
   (`docs/building.md`).
 - The disk image `Glint <version>.dmg`, which `mygo build` makes only on macOS.
 - Displays with mixed scales.
+
+## Packaging notes
+
+These apply to the `Glint.app` that `go tool mygo build -platform darwin/universal` makes.
+
+
+The app is an agent app (`LSUIElement`): it lives in the menu bar, with no Dock icon. Its
+`Info.plist` carries the usage strings that the Screen Recording, Microphone and Camera prompts
+show. Input Monitoring has no usage string; macOS shows its own text. The icon is
+`resources/darwin/Glint.icns`, made from `assets/glint-mac-1024.png`, which sits inside Apple's
+icon grid. Rerun `go run ./tools/macicon` after changing that artwork.
+
+macOS grants Screen Recording, Input Monitoring, Microphone and Camera to an app's code
+signature. An app signed ad hoc, the default, asks again after each rebuild. Sign with a stable
+identity to keep the grants:
+
+```sh
+security find-identity -v -p codesigning
+go tool mygo build -platform darwin/arm64 -sign "Apple Development: Name (TEAMID)"
+open build/darwin-arm64/Glint.app
+```
+
+An app signed ad hoc and is not notarized. Gatekeeper blocks the first launch. On
+macOS 14 and earlier, users open it with right-click > Open. On macOS 15 and later, they click
+Open Anyway under System Settings > Privacy & Security after the first attempt. Either way,
+clearing the quarantine flag also works:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Glint.app
+```

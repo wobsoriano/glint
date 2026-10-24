@@ -1,8 +1,14 @@
 # Glint
 
-Glint is a screenshot, annotation and screen-recording app for Windows 10 and 11. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Everything runs on your PC: text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally. Glint has no accounts and no cloud upload.
+Glint is a screenshot, annotation and screen-recording app for Windows 10 and 11. It runs on Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Everything runs on your PC: text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally. Glint has no accounts and no cloud upload.
 
 Glint runs in the notification area. Every screenshot and recording goes into the Library, a folder of captures that you can search, reopen and edit again later.
+
+## Install
+
+Download `Glint-<version>-windows-x64-setup.exe` from [Releases](https://github.com/wobsoriano/glint/releases) and run it. The installer needs no administrator rights: it installs Glint for your user in `%LOCALAPPDATA%\Programs\Glint`, and Settings > Apps uninstalls it.
+
+Releases are not code-signed yet, so Windows SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**. See [Code signing policy](#code-signing-policy).
 
 ## Features
 
@@ -110,7 +116,7 @@ go run .                    # run from source
 go tool mygo build          # build Glint.exe and the installer into build/windows-amd64/
 ```
 
-`docs/building.md` covers tests, packaging, the macOS build and releases. Glint does not need ffmpeg.
+`docs/building.md` covers tests, packaging, code signing and releases. Glint does not need ffmpeg.
 
 Transcription downloads whisper.cpp 1.8.3 and its model the first time you use it. whisper.cpp needs the [Visual C++ runtime](https://aka.ms/vc14/vc_redist.x64.exe), which most Windows PCs already have. Glint tells you if it is missing.
 
@@ -149,6 +155,27 @@ go test ./...
 ```
 
 Run them from a signed-in desktop session: some tests capture the screen or play sound. `go test -short ./...` skips those. `docs/building.md` lists the other markings.
+
+## Privacy
+
+Glint has no accounts, analytics or telemetry, and never uploads your captures. It connects to the network only when you ask for transcription, to download the whisper.cpp runtime from [its GitHub releases](https://github.com/ggml-org/whisper.cpp/releases) and the model you pick from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp). The runtime is checked against a pinned SHA-256 hash, and the model against its published size.
+
+## Code signing policy
+
+Windows releases will be signed through [SignPath Foundation](https://signpath.org)'s free code signing for open-source projects, with a certificate issued to SignPath Foundation. The application is pending, and until it is accepted, releases are unsigned.
+
+Only binaries that the [Release workflow](.github/workflows/release.yml) builds from this repository are signed, and every signing request is approved by hand.
+
+| Role | Members |
+| --- | --- |
+| Committers and reviewers | [@wobsoriano](https://github.com/wobsoriano) |
+| Approvers | [@wobsoriano](https://github.com/wobsoriano) |
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. See [Privacy](#privacy).
+
+## License
+
+[MIT](LICENSE)
 
 ## Inspired by
 

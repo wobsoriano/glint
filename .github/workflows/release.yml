@@ -42,26 +42,13 @@ jobs:
             exit 1
           fi
 
-  macos:
-    needs: version
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      # mygo build signs the app ad hoc and puts it in a disk image, which needs macOS.
-      - run: go tool mygo build -platform darwin/universal
-      - run: cp "build/darwin-universal/Glint ${{ needs.version.outputs.version }}.dmg" "Glint-${{ needs.version.outputs.version }}-macos-universal.dmg"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: macos
-          path: Glint-${{ needs.version.outputs.version }}-macos-universal.dmg
-          if-no-files-found: error
-
   windows:
     needs: version
     runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      # Signing starts once the SignPath project is set up; see "Code signing" in docs/building.md.
+      SIGN: ${{ vars.SIGNPATH_PROJECT_SLUG != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -75,16 +62,89 @@ jobs:
       - run: go tool mygo build -platform windows/amd64
       # The GUI subsystem, the icon and the version information.
       - run: go run ./tools/packagecheck build/windows-amd64/Glint.exe
+
+      - name: Upload Glint.exe for signing
+        if: env.SIGN == 'true'
+        id: unsigned-exe
+        uses: actions/upload-artifact@v7
+        with:
+          path: build/windows-amd64/Glint.exe
+          archive: false
+          if-no-files-found: error
+      - name: Sign Glint.exe
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          # Each request waits for a person to approve it in SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+          skip-decompress: true
+      # The installer holds Glint.exe compressed, where SignPath cannot sign it. So build again
+      # with tools/signswap as the sign command: the build is reproducible, and signswap puts the
+      # signed Glint.exe in place before mygo packs the installer.
+      - name: Build the installer around the signed Glint.exe
+        if: env.SIGN == 'true'
+        shell: pwsh
+        env:
+          GLINT_UNSIGNED_DIR: ${{ github.workspace }}/unsigned
+          GLINT_SIGNED_DIR: ${{ github.workspace }}/signed
+        run: |
+          New-Item -ItemType Directory unsigned | Out-Null
+          Copy-Item build/windows-amd64/Glint.exe unsigned/Glint.exe
+          $config = Get-Content mygo.json -Raw | ConvertFrom-Json
+          if (-not $config.windows) { $config | Add-Member windows ([pscustomobject]@{}) }
+          $config.windows | Add-Member signCommand 'go run ./tools/signswap %1' -Force
+          $config | ConvertTo-Json -Depth 20 | Set-Content mygo.json
+          go tool mygo build -platform windows/amd64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $sig = Get-AuthenticodeSignature build/windows-amd64/Glint.exe
+          if ($sig.Status -ne 'Valid') { throw "Glint.exe is not signed: $($sig.Status) $($sig.StatusMessage)" }
+
       - shell: pwsh
-        run: Copy-Item "build\windows-amd64\Glint Setup ${{ needs.version.outputs.version }} amd64.exe" "Glint-${{ needs.version.outputs.version }}-windows-x64-setup.exe"
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item "build/windows-amd64/Glint Setup $env:VERSION amd64.exe" "dist/Glint-$env:VERSION-windows-x64-setup.exe"
+      - name: Upload the installer for signing
+        if: env.SIGN == 'true'
+        id: unsigned-setup
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/Glint-${{ env.VERSION }}-windows-x64-setup.exe
+          archive: false
+          if-no-files-found: error
+      - name: Sign the installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist
+          skip-decompress: true
+      - name: Check the installer's signature
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "dist/Glint-$env:VERSION-windows-x64-setup.exe"
+          if ($sig.Status -ne 'Valid') { throw "the installer is not signed: $($sig.Status) $($sig.StatusMessage)" }
       - uses: actions/upload-artifact@v7
         with:
           name: windows
-          path: Glint-${{ needs.version.outputs.version }}-windows-x64-setup.exe
+          path: dist/Glint-${{ env.VERSION }}-windows-x64-setup.exe
           if-no-files-found: error
 
   release:
-    needs: [version, macos, windows]
+    needs: [version, windows]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -93,10 +153,11 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       DRAFT: ${{ inputs.draft }}
     steps:
+      # Only the final installer: the files uploaded for SignPath are artifacts of this run too.
       - uses: actions/download-artifact@v8
         with:
+          name: windows
           path: dist
-          merge-multiple: true
       - run: |
           # Drafts have no git tag yet, so look them up in the release list rather than by tag.
           # The version job already refused published releases, so a match here is a draft.

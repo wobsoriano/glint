@@ -2,8 +2,9 @@
 
 Glint is a Go app built on [MyGo](https://mygo.egoist.dev) v0.6.3. Building it needs Go 1.27 and
 nothing else: no cgo, no C compiler, no SDK. `go.mod` pins the MyGo CLI as a tool, so
-`go tool mygo` runs the right version. Any machine compiles both platforms. Only the macOS disk
-image and its signature need a Mac.
+`go tool mygo` runs the right version. Glint ships for Windows only. The code also compiles for
+macOS, so the port described in `docs/mac-port.md` has a base to start from, but no macOS app is
+released.
 
 ## Run it
 
@@ -21,7 +22,7 @@ same way and rebuilds it when the code changes.
 ```sh
 go vet ./...
 go test ./...
-GOOS=darwin GOARCH=arm64 go build ./...
+GOOS=darwin GOARCH=arm64 go build ./...   # keeps the macOS stubs compiling
 ```
 
 Run `go test` from a signed-in desktop session. Tests that need one are marked like this:
@@ -47,18 +48,13 @@ a model or runs for minutes. Each command's doc comment gives its flags:
 ## Build the app
 
 ```sh
-go tool mygo build                              # Windows, on Windows
-go tool mygo build -platform windows/amd64      # Windows, from any machine
-go tool mygo build -platform darwin/universal   # macOS, Apple silicon and Intel in one app
+go tool mygo build                              # on Windows
+go tool mygo build -platform windows/amd64      # from any machine
 ```
 
-`mygo.json` configures the build: the name, identifier, version, file types and the macOS
-`Info.plist` keys. Outputs go to `build/<os>-<arch>/`:
-
-| Platform | Output |
-| --- | --- |
-| Windows | `Glint.exe`, `icon.png` beside it, and the installer `Glint Setup <version> amd64.exe` |
-| macOS | `Glint.app`, and on a Mac the disk image `Glint <version>.dmg` |
+`mygo.json` configures the build: the name, identifier, version and file types. The output goes
+to `build/windows-amd64/`: `Glint.exe`, `icon.png` beside it, and the installer
+`Glint Setup <version> amd64.exe`.
 
 The first Windows build downloads NSIS 3.13, which makes the installer, into
 `%LOCALAPPDATA%\mygo`. On macOS and Linux, install NSIS (`brew install makensis`,
@@ -89,9 +85,8 @@ Glint 0.1, the Rust build, registered "Open with" itself as `Glint.Image`, `Glin
 `Applications\glint.exe`. The installed Go build removes those entries when it starts, so
 "Open with" lists one Glint.
 
-The executable and the installer are not signed, so SmartScreen warns on first run. Set
-`windows.certificate` or `windows.signCommand` in `mygo.json` to sign them (see MyGo's
-`docs/distribution.md`).
+A local build is not signed, so SmartScreen warns on its first run. Releases are signed in CI;
+see "Code signing" below.
 
 Transcription downloads the whisper.cpp 1.8.3 libraries on first use. They need the Microsoft
 Visual C++ Redistributable (x64), which most PCs have and clean Windows installs lack. Glint
@@ -100,39 +95,11 @@ them, and its installer keeps them updated through Windows Update. When the runt
 or too old, transcription fails with a message that links to
 <https://aka.ms/vc14/vc_redist.x64.exe>.
 
-### macOS
-
-The app is an agent app (`LSUIElement`): it lives in the menu bar, with no Dock icon. Its
-`Info.plist` carries the usage strings that the Screen Recording, Microphone and Camera prompts
-show. Input Monitoring has no usage string; macOS shows its own text. The icon is
-`resources/darwin/Glint.icns`, made from `assets/glint-mac-1024.png`, which sits inside Apple's
-icon grid. Rerun `go run ./tools/macicon` after changing that artwork.
-
-macOS grants Screen Recording, Input Monitoring, Microphone and Camera to an app's code
-signature. An app signed ad hoc, the default, asks again after each rebuild. Sign with a stable
-identity to keep the grants:
-
-```sh
-security find-identity -v -p codesigning
-go tool mygo build -platform darwin/arm64 -sign "Apple Development: Name (TEAMID)"
-open build/darwin-arm64/Glint.app
-```
-
-The released app is signed ad hoc and is not notarized. Gatekeeper blocks the first launch. On
-macOS 14 and earlier, users open it with right-click > Open. On macOS 15 and later, they click
-Open Anyway under System Settings > Privacy & Security after the first attempt. Either way,
-clearing the quarantine flag also works:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Glint.app
-```
-
 ## Releasing
 
-The `version` in `mygo.json` names the release. The Release workflow builds the Windows
-installer on a Windows runner and the macOS disk image on a macOS runner with `mygo build`, tags
-the release `v<version>`, and attaches `Glint-<version>-windows-x64-setup.exe` and
-`Glint-<version>-macos-universal.dmg`.
+The `version` in `mygo.json` names the release. The Release workflow builds the installer on a
+Windows runner with `mygo build`, signs it when SignPath is set up, tags the release
+`v<version>`, and attaches `Glint-<version>-windows-x64-setup.exe`.
 
 1. Bump `version` in `mygo.json`, then commit and push to `master`.
 2. Run the Release workflow from the Actions tab, or from a terminal:
@@ -145,3 +112,32 @@ the release `v<version>`, and attaches `Glint-<version>-windows-x64-setup.exe` a
 
 Running the workflow again for the same version replaces the files on the draft release. Once a
 release is published, the workflow refuses to run for that version until `version` is bumped.
+
+## Code signing
+
+Releases are signed through [SignPath Foundation](https://signpath.org), which signs open-source
+projects for free. The certificate is issued to SignPath Foundation, so Windows names it as the
+publisher. Until the project is accepted, the workflow builds an unsigned installer and
+SmartScreen warns users on first run.
+
+The workflow signs two files, each in its own signing request that an approver accepts in
+SignPath:
+
+1. `Glint.exe`, as `mygo build` first makes it.
+2. The installer. The installer holds `Glint.exe` compressed, where SignPath cannot sign it, so
+   the workflow builds a second time with `tools/signswap` as `windows.signCommand`. The build
+   is reproducible, so the second `Glint.exe` has the same bytes as the first, and signswap
+   swaps in the signed copy before mygo packs the installer. The workflow then checks that
+   `Glint.exe` and the signed installer both carry a valid signature.
+
+To set it up once the project is accepted:
+
+1. In SignPath, add the predefined GitHub.com trusted build system to the organization and link
+   it to the Glint project. Give the project an artifact configuration whose root is a single
+   `<pe-file>` with `<authenticode-sign/>`, because the workflow uploads each file unzipped.
+2. In the GitHub repository, add the secret `SIGNPATH_API_TOKEN`, a token of a SignPath user who
+   may submit signing requests, and the variables `SIGNPATH_ORGANIZATION_ID`,
+   `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG`.
+
+The signing steps run only while `SIGNPATH_PROJECT_SLUG` is set. A request waits up to an hour
+for approval.
