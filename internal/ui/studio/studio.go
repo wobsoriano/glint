@@ -6,7 +6,6 @@
 package studio
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/wobsoriano/glint/internal/settings"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
 // Host is what Studio needs from the app. Every method runs on the main thread.
@@ -76,7 +76,7 @@ func OpenWith(host Host, sessionDir string, o Options) *Window {
 	sh := &mygoShell{}
 	ed, err := newEditor(host, sh, sessionDir, o)
 	if err != nil {
-		host.Toast(fmt.Sprintf("Couldn't open the recording: %v", err))
+		host.Toast("Couldn't open the recording: " + toast.Reason(err))
 		return nil
 	}
 	w.ed = ed
