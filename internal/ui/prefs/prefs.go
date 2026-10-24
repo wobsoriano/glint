@@ -5,6 +5,7 @@ import (
 	"runtime"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
 	"github.com/wobsoriano/glint/internal/ui/theme"
@@ -315,7 +316,7 @@ func (p *Prefs) privacy(c *ui.Context, pal theme.Palette) {
 			engine = "macOS text recognition, so nothing leaves your Mac"
 		}
 		noteText(c, pal, "Uses on-device "+engine+". The original stays in the Library; you can undo a redaction in the editor.")
-		choose(p, c, "Style", &s.RedactStyle, settings.RedactStyles, []string{"Blur", "Pixelate", "Solid"})
+		choose(p, c, "Style", &s.RedactStyle, render.AllRedactStyles[:], []string{"Blur", "Pixelate", "Solid"})
 		r := &s.RedactRules
 		rules := []struct {
 			label string

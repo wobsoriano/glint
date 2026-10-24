@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/settings"
 )
 
@@ -88,7 +89,7 @@ func TestTogglesSaveTheSettings(t *testing.T) {
 	must(t, tt.Click("Privacy"))
 	must(t, tt.Click("Phone numbers"))
 	must(t, tt.Click("Pixelate"))
-	if h.s.RedactRules.Phones || h.s.RedactStyle != settings.RedactPixelate {
+	if h.s.RedactRules.Phones || h.s.RedactStyle != render.RedactPixelate {
 		t.Fatalf("privacy: %+v %v", h.s.RedactRules, h.s.RedactStyle)
 	}
 }
