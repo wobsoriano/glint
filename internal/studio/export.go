@@ -26,8 +26,8 @@ const (
 	renderVersion   = 3
 	gifFPS          = 15
 	gifMaxShortSide = 480
-	// compositors is how many frames compose at once. Each already spreads its screen draw
-	// across cores; two keep the encoder fed while one waits on the other's overlays.
+	// compositors is how many frames compose at once; each also spreads its screen draw
+	// across cores.
 	compositors = 2
 )
 
@@ -44,7 +44,10 @@ func Export(ctx context.Context, s *Session, opts ExportOptions, progress func(f
 	}
 	project := s.Project.Clone()
 	project.Export = opts
-	ext := string(opts.Format)
+	ext := "mp4"
+	if opts.Format == FormatGif {
+		ext = "gif"
+	}
 	key := cacheKey(s, &project)
 	dir := s.RenderDir()
 	out := filepath.Join(dir, fmt.Sprintf("export-%s.%s", key, ext))

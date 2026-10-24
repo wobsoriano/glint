@@ -33,7 +33,7 @@ func (f *SourceFrame) RGBA() *image.RGBA {
 }
 
 // seekAheadMs is how far past the current frame FrameAt decodes forward before it seeks
-// instead: decoding 1.5 s of frames costs about what one seek to a keyframe does.
+// instead.
 const seekAheadMs = 1_500.0
 
 // Feed serves the frames of one video track by source time, decoding forward and seeking
