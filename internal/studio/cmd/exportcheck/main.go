@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/gif"
 	"image/png"
 	"io"
@@ -68,11 +69,17 @@ func main() {
 	real := flag.String("real", "", "directory of copied *.glintrec sessions to export at 1080p60")
 	only := flag.String("only", "", "run only the variant with this name")
 	profile := flag.String("cpuprofile", "", "write a CPU profile of the real-session exports")
+	stagesOf := flag.String("stages", "", "time each stage of a 1080p60 export of this session copy")
+	runs := flag.Int("runs", 5, "runs per stage for -stages")
 	flag.Parse()
 	if *work == "" {
 		log.Fatal("-work is required")
 	}
-	if *real != "" {
+	if *stagesOf != "" {
+		if err := stages(*work, *stagesOf, *rust, *profile, *runs); err != nil {
+			log.Fatal(err)
+		}
+	} else if *real != "" {
 		if err := realSessions(*work, *real, *rust, *profile); err != nil {
 			log.Fatal(err)
 		}
@@ -102,7 +109,10 @@ func synthetic(work, rust, only string) error {
 		}
 	}
 	if only == "" {
-		if err := checkThumbs(work, session); err != nil {
+		if err := checkThumbs(work, session, rust); err != nil {
+			return err
+		}
+		if err := checkCompress(work, rust); err != nil {
 			return err
 		}
 		return checkCancel(work, session)
@@ -110,9 +120,49 @@ func synthetic(work, rust, only string) error {
 	return nil
 }
 
+// rustStudio is the Rust studio example, built beside go_export.
+func rustStudio(goExport string) string {
+	return filepath.Join(filepath.Dir(goExport), "studio"+filepath.Ext(goExport))
+}
+
+// checkCompress shrinks and trims the 1080p render the way Trim & Compress does, with the
+// options the Rust studio example's compress mode hard-codes, and compares the two.
+func checkCompress(work, rust string) error {
+	fmt.Println("== compress")
+	srcs, err := filepath.Glob(filepath.Join(work, variants[0].name, "go", "render", "export-*.mp4"))
+	if err != nil || len(srcs) != 1 {
+		return fmt.Errorf("no render of %s to compress: %v", variants[0].name, err)
+	}
+	dst := filepath.Join(work, "compress-go.mp4")
+	opts := studio.CompressOptions{Resolution: studio.Res720, Quality: studio.QualityMedium, Codec: studio.CodecH264, Trim: &media.Span{StartMS: 1_000, EndMS: 4_000}}
+	prog := &progressLog{monotonic: true}
+	sum, err := studio.CompressVideo(context.Background(), srcs[0], dst, opts, prog.record)
+	if err != nil {
+		return err
+	}
+	pr, err := ffprobe(dst)
+	if err != nil {
+		return err
+	}
+	vs := pr.stream("video")
+	check(vs.Width == 1212 && vs.Height == 720 && math.Abs(pr.duration()-3) < 0.05 && pr.stream("audio") != nil,
+		"compressed to %dx%d, %.3f s, audio %s, %d frames, %d bytes, progress %.2f", vs.Width, vs.Height, pr.duration(), pr.streamCodec("audio"), sum.Frames, sum.Bytes, prog.last)
+	if rust == "" {
+		return nil
+	}
+	rdst := filepath.Join(work, "compress-rust.mp4")
+	os.Remove(rdst)
+	cmd := exec.Command(rustStudio(rust), filepath.Join(work, "session"), "compress", srcs[0], rdst)
+	cmd.Stdout, cmd.Stderr = io.Discard, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("rust compress: %w", err)
+	}
+	return compareMP4s(dst, rdst, 60)
+}
+
 // checkThumbs compares each thumbnail with the source frame it should show, then checks the
 // cached strip gives back the same pixels.
-func checkThumbs(work, session string) error {
+func checkThumbs(work, session, rust string) error {
 	fmt.Println("== thumbnails")
 	dir := filepath.Join(work, "thumbs")
 	s, err := prepare(session, dir, variants[0])
@@ -151,6 +201,39 @@ func checkThumbs(work, session string) error {
 	}
 	check(same, "cached strip gives the same thumbnails in %v", time.Since(started))
 	check(exists(filepath.Join(s.RenderDir(), fmt.Sprintf("thumbs-%dx%d.png", count, height))), "strip cached in render/")
+	if rust == "" {
+		return nil
+	}
+	rdir := filepath.Join(work, "thumbs-rust")
+	if _, err := prepare(session, rdir, variants[0]); err != nil {
+		return err
+	}
+	out := filepath.Join(rdir, "pngs")
+	cmd := exec.Command(rustStudio(rust), rdir, "thumbs", strconv.Itoa(count), strconv.Itoa(height), out)
+	cmd.Stdout, cmd.Stderr = io.Discard, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("rust thumbs: %w", err)
+	}
+	worst = math.Inf(1)
+	for i, th := range thumbs {
+		f, err := os.Open(filepath.Join(out, fmt.Sprintf("thumb-%d.png", i)))
+		if err != nil {
+			return err
+		}
+		img, err := png.Decode(f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		rgba := image.NewRGBA(img.Bounds())
+		draw.Draw(rgba, rgba.Rect, img, img.Bounds().Min, draw.Src)
+		if rgba.Rect != th.Rect {
+			check(false, "rust thumbnail %d is %v, go %v", i, rgba.Rect, th.Rect)
+			return nil
+		}
+		worst = min(worst, psnr(th.Pix, rgba.Pix))
+	}
+	check(worst > 30, "parity: thumbnails go against rust, worst PSNR %.1f dB", worst)
 	return nil
 }
 
