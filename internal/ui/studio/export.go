@@ -163,6 +163,11 @@ func (e *editor) jobDone(job jobKind, out string, err error) {
 		e.notify("Copied "+filepath.Base(out), false)
 	default:
 		e.showNotice(notice{text: "Saved " + filepath.Base(out), file: out})
+		// The app hands out the render of the saved project, so the project on disk has to
+		// be the one just rendered.
+		if e.dirty {
+			e.saveNow()
+		}
 		e.host.RecordingExported(out)
 	}
 }

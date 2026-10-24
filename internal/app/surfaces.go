@@ -38,7 +38,7 @@ var (
 	_ quicklook.Host = lookHost{}
 )
 
-// wire builds the surfaces. Studio is another worker's and stays nil until it exists.
+// wire builds the surfaces.
 func (a *App) wire() {
 	a.win.cards = stack.New(cardHost{a}, a.settings.Overlay)
 	a.win.look = quicklook.New(lookHost{a})
@@ -52,6 +52,7 @@ func (a *App) wire() {
 		OpenLibrary:  a.openLibrary,
 		OpenPrefs:    a.openPrefs,
 		OpenRecorder: a.win.recorder.Toggle,
+		OpenStudio:   a.openStudio,
 		OpenTrim:     a.openTrimWindow,
 	}
 }
