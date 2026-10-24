@@ -1,8 +1,30 @@
 # Glint
 
-Glint is a screenshot, annotation and screen-recording app for Windows 10 and 11. It runs on Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Everything runs on your PC: text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally. Glint has no accounts and no cloud upload.
+**A free, open-source Snipping Tool alternative for Windows 10 and 11.** Snipping Tool captures your screen. Glint makes it look good.
 
-Glint runs in the notification area. Every screenshot and recording goes into the Library, a folder of captures that you can search, reopen and edit again later.
+Glint does what Snipping Tool does (area, window and full-screen screenshots, screen recording with audio, copying text out of the screen) and adds what you would otherwise reach for another app to do: styled screenshots, a Library you can reopen and re-edit, and a recording studio with auto zoom, captions and editing by transcript. Everything runs on your PC. Glint has no accounts and no cloud upload.
+
+## Glint vs. Snipping Tool
+
+| | Snipping Tool | Glint |
+| --- | --- | --- |
+| Area, window and full-screen screenshots | Yes | Yes, plus the previous area again and a self-timer |
+| Annotate | Pen, highlighter, shapes | Arrows, shapes, numbered markers, text, highlight, pixelate and blur, all editable later |
+| Styled screenshots | No | Gradient, image or wallpaper backgrounds, padding, corners, shadow, saved presets |
+| Hide sensitive text | Emails and phone numbers | Emails, phone numbers, card numbers, API keys, IP addresses and tokens, automatically |
+| Copy text from the screen | Yes | Yes |
+| Captures you can reopen and re-edit | No | The Library: search, sort, Quick Look, and non-destructive edits |
+| Preview cards and pins | No | A card stack you can drag into other apps, and always-on-top pins |
+| Screen recording with audio | Yes | Yes, plus camera and keyboard and mouse input on separate tracks |
+| Auto zoom that follows your clicks | No | Yes |
+| Cursor, camera bubble and keystroke captions | No | Redrawn and adjustable after recording |
+| Edit a recording | Not built in | Built-in Studio: cut, trim, speed, styled frame, export at 60 fps |
+| Captions and transcript editing | No | On-device transcription, captions, cut by deleting words, remove filler words and silences |
+| Teleprompter | No | Scrolls with your voice |
+
+Snipping Tool's features change with Windows updates. This table describes it as of late 2026. Glint is not affiliated with Microsoft. Snipping Tool is a Microsoft product.
+
+Glint runs in the notification area and runs on Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally.
 
 ## Install
 
