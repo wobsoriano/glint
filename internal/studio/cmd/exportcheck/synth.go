@@ -132,7 +132,7 @@ func writeScreen(path string) error {
 	return err
 }
 
-// writeCamera is the Rust studio example's fake camera: a teal frame with a white bar
+// writeCamera is a fake camera: a teal frame with a white bar
 // sweeping across it, at 30 fps for the whole recording.
 func writeCamera(path string) error {
 	w, err := media.CreateVideoWriter(path, media.VideoParams{Width: 640, Height: 480, FPS: 30, Bitrate: 2_000_000}, nil)

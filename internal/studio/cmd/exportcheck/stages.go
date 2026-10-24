@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"image"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -28,8 +26,7 @@ type stageRun struct {
 
 // stages times each part of an export of one session alone, with the export options its
 // project holds, runs times each, so the end-to-end rate can be pinned on the slowest part.
-func stages(work, src, rust, profilePath string, runs int) error {
-	var rustFPS []float64
+func stages(work, src, profilePath string, runs int) error {
 	var profile *os.File
 	if profilePath != "" {
 		f, err := os.Create(profilePath)
@@ -98,106 +95,12 @@ func stages(work, src, rust, profilePath string, runs int) error {
 			profile.Close()
 			profile = nil
 		}
-		if rust == "" {
-			continue
-		}
-		os.RemoveAll(s.RenderDir())
-		_, res, err := runRust(rust, dir)
-		if err != nil {
-			return err
-		}
-		rustFPS = append(rustFPS, res.FPS)
 	}
 	for _, r := range results {
 		med, lo, hi := spread(r.fps)
 		cmed, _, _ := spread(r.cores)
 		fmt.Printf("  %-40s median %6.1f frames/s (range %.1f to %.1f over %d runs), %.1f cores busy\n", r.name, med, lo, hi, len(r.fps), cmed)
 	}
-	if len(rustFPS) > 0 {
-		med, lo, hi := spread(rustFPS)
-		fmt.Printf("  %-40s median %6.1f frames/s (range %.1f to %.1f over %d runs, alternated with Go)\n", "rust full export", med, lo, hi, len(rustFPS))
-	}
-	return nil
-}
-
-// exportOneShot is the Go side of a fair timing against the Rust go_export example: one
-// export per process. Media Foundation encodes far faster in the first few encoder sessions
-// a process opens (measured with crates/glint-media/examples/bframes.rs: about 500 frames/s
-// at 1212x720, then about 176), so timings taken after other encodes in one process are not
-// comparable with a fresh Rust process.
-func exportOneShot(dir string) error {
-	s, err := studio.LoadSession(dir)
-	if err != nil {
-		return err
-	}
-	if err := os.RemoveAll(s.RenderDir()); err != nil {
-		return err
-	}
-	fps := s.Project.Export.Fps.Value()
-	if s.Project.Export.Format == studio.FormatGif {
-		fps = 15
-	}
-	frames := max(int(math.Round(s.Project.DurationMs()*float64(fps)/1000)), 1)
-	started := time.Now()
-	path, err := studio.Export(context.Background(), s, s.Project.Export, nil)
-	if err != nil {
-		return err
-	}
-	secs := time.Since(started).Seconds()
-	out, _ := json.Marshal(rustResult{Path: path, Seconds: secs, Frames: frames, FPS: float64(frames) / secs})
-	fmt.Println(string(out))
-	return nil
-}
-
-// fairTiming exports one session runs times in Go and in Rust, each export in a fresh
-// process, alternating, from separate copies of src.
-func fairTiming(work, src, rust string, runs int) error {
-	copyOf := func(side string) (string, error) {
-		dir := filepath.Join(work, "fair", filepath.Base(filepath.Dir(src))+"-"+filepath.Base(src), side)
-		if err := os.RemoveAll(dir); err != nil {
-			return "", err
-		}
-		return dir, copyDir(src, dir)
-	}
-	goDir, err := copyOf("go")
-	if err != nil {
-		return err
-	}
-	rustDir, err := copyOf("rust")
-	if err != nil {
-		return err
-	}
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	var goFPS, rustFPS []float64
-	for range runs {
-		cmd := exec.Command(self, "-work", work, "-export", goDir)
-		cmd.Stderr = os.Stderr
-		out, err := cmd.Output()
-		if err != nil {
-			return fmt.Errorf("go export: %w", err)
-		}
-		var g rustResult
-		if err := json.Unmarshal(out, &g); err != nil {
-			return fmt.Errorf("go export printed %q: %w", out, err)
-		}
-		goFPS = append(goFPS, g.FPS)
-		if err := os.RemoveAll(filepath.Join(rustDir, "render")); err != nil {
-			return err
-		}
-		_, r, err := runRust(rust, rustDir)
-		if err != nil {
-			return err
-		}
-		rustFPS = append(rustFPS, r.FPS)
-		fmt.Printf("  run: go %.1f frames/s, rust %.1f frames/s (%d frames)\n", g.FPS, r.FPS, g.Frames)
-	}
-	gm, glo, ghi := spread(goFPS)
-	rm, rlo, rhi := spread(rustFPS)
-	fmt.Printf("== %s, one export per process: go median %.1f frames/s (%.1f to %.1f), rust median %.1f frames/s (%.1f to %.1f), %d runs each\n",
-		filepath.Base(src), gm, glo, ghi, rm, rlo, rhi, runs)
 	return nil
 }
 
