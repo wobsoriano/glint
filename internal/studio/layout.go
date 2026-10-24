@@ -1,15 +1,12 @@
 package studio
 
-import "math"
+import (
+	"math"
 
-// Rect is an axis-aligned rectangle in canvas pixels. It mirrors glint-render's
-// `annotate::R`; switch to the internal/render type once that package exports one.
-type Rect struct{ X, Y, W, H float32 }
+	"github.com/wobsoriano/glint/internal/render"
+)
 
-func (r Rect) Right() float32  { return r.X + r.W }
-func (r Rect) Bottom() float32 { return r.Y + r.H }
-
-func (r Rect) overlaps(o Rect) bool {
+func overlaps(r, o render.R) bool {
 	return r.X < o.Right() && o.X < r.Right() && r.Y < o.Bottom() && o.Y < r.Bottom()
 }
 
@@ -18,13 +15,13 @@ func (r Rect) overlaps(o Rect) bool {
 type MeasureText func(text string, size float32) (w, h float32)
 
 type Bubble struct {
-	Rect   Rect
+	Rect   render.R
 	Radius float32
 }
 
 // Layout places the screen card and camera bubble on an output canvas.
 type Layout struct {
-	Card   Rect
+	Card   render.R
 	Radius float32
 	// FillW and FillH are the size the cropped screen is drawn at before zoom; in Fill mode
 	// it overflows the card on one axis.
@@ -51,7 +48,7 @@ func FrameLayout(p *Project, srcW, srcH, outW, outH uint32) Layout {
 		cw, ch = aw, aw/content
 	}
 	l := Layout{
-		Card:   Rect{X: (w - cw) / 2, Y: (h - ch) / 2, W: cw, H: ch},
+		Card:   render.R{X: (w - cw) / 2, Y: (h - ch) / 2, W: cw, H: ch},
 		Radius: d.CornerRadius * short,
 	}
 	l.FillH = max(float64(ch), float64(cw)/float64(content))
@@ -65,7 +62,7 @@ func FrameLayout(p *Project, srcW, srcH, outW, outH uint32) Layout {
 		cx := clamp(cam.Center[0]*w, hx, w-hx)
 		cy := clamp(cam.Center[1]*h, hy, h-hy)
 		l.Bubble = &Bubble{
-			Rect:   Rect{X: cx - dia/2, Y: cy - dia/2, W: dia, H: dia},
+			Rect:   render.R{X: cx - dia/2, Y: cy - dia/2, W: dia, H: dia},
 			Radius: clamp(cam.Roundness, 0, 0.5) * dia,
 		}
 	}
@@ -104,7 +101,7 @@ func CursorScale(fillH float64, spriteScale float32) float64 {
 // KeystrokeBox is a laid-out keystroke caption. Its alphas already include the frame's
 // opacity.
 type KeystrokeBox struct {
-	Rect       Rect
+	Rect       render.R
 	Radius     float32
 	Font       float32
 	ModifiersX float32
@@ -117,7 +114,7 @@ type KeystrokeBox struct {
 
 // LayoutKeystroke places the keystroke caption inside the card at pos, moving it clear of
 // the caption bar when they would overlap.
-func LayoutKeystroke(card Rect, pos KeystrokePosition, k KeyFrame, captionBar *Rect, measure MeasureText) KeystrokeBox {
+func LayoutKeystroke(card render.R, pos KeystrokePosition, k KeyFrame, captionBar *render.R, measure MeasureText) KeystrokeBox {
 	short := min(card.W, card.H)
 	font := max(short*0.033, 11) * float32(k.Scale)
 	padX, padY := font*0.72, font*0.46
@@ -141,7 +138,7 @@ func LayoutKeystroke(card Rect, pos KeystrokePosition, k KeyFrame, captionBar *R
 	if pos.top() {
 		y = card.Y + margin
 	}
-	if captionBar != nil && (Rect{x, y, w, h}).overlaps(*captionBar) {
+	if captionBar != nil && overlaps(render.R{X: x, Y: y, W: w, H: h}, *captionBar) {
 		if pos.top() {
 			y = captionBar.Bottom() + margin/2
 		} else {
@@ -149,7 +146,7 @@ func LayoutKeystroke(card Rect, pos KeystrokePosition, k KeyFrame, captionBar *R
 		}
 	}
 	return KeystrokeBox{
-		Rect:       Rect{x, y, w, h},
+		Rect:       render.R{X: x, Y: y, W: w, H: h},
 		Radius:     font * 0.55,
 		Font:       font,
 		ModifiersX: x + padX,
@@ -171,8 +168,8 @@ const (
 	TonePending
 )
 
-// KaraokeColor is the highlight for the word being spoken, packed as 0xRRGGBBAA.
-const KaraokeColor uint32 = 0xFFD60AFF
+// KaraokeColor is the highlight for the word being spoken.
+const KaraokeColor render.Color = 0xFFD60AFF
 
 type PlacedWord struct {
 	Text string
@@ -181,7 +178,7 @@ type PlacedWord struct {
 }
 
 type CaptionBar struct {
-	Rect   Rect
+	Rect   render.R
 	Radius float32
 	Font   float32
 	// BackAlpha is the bar's black fill opacity.
@@ -238,7 +235,7 @@ func LayoutCaptions(w, h float32, s CaptionSettings, c CaptionFrame, measure Mea
 	}
 	bw, bh := widest+2*padX, lineH*float32(len(rows))+2*padY
 	bar := CaptionBar{
-		Rect:      Rect{X: (w - bw) / 2, Y: h*clamp(s.Position, 0.1, 0.95) - bh/2, W: bw, H: bh},
+		Rect:      render.R{X: (w - bw) / 2, Y: h*clamp(s.Position, 0.1, 0.95) - bh/2, W: bw, H: bh},
 		Radius:    min(font*0.6, bh/2),
 		Font:      font,
 		BackAlpha: 0.78,

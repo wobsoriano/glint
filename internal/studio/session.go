@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/wobsoriano/glint/internal/media/input"
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
 
@@ -35,13 +36,14 @@ func isFile(path string) bool {
 	return err == nil && st.Mode().IsRegular()
 }
 
-// Session is an opened recording package. It holds everything Studio reads from the
-// directory except decoded media and cursor sprites, which belong to the compositor.
+// Session is an opened recording package: everything Studio reads from the directory except
+// the decoded media.
 type Session struct {
-	Dir        string
-	Project    Project
-	Input      InputTimeline
-	Captions   []CaptionWord
+	Dir     string
+	Project Project
+	// Assets holds the recorded input, cursor sprites and transcript words the compositor
+	// draws from. SetTranscript replaces it.
+	Assets     *Assets
 	Tracks     Tracks
 	Transcript *transcribe.Transcript
 	// SourceW and SourceH are the pixel size of the screen master.
@@ -79,7 +81,7 @@ func OpenSession(dir string, sourceW, sourceH uint32, sourceDurationMs float64) 
 		s.Project = *project
 	} else {
 		s.Project = NewProject(sourceDurationMs)
-		s.Project.ApplyAutoZoom(&s.Input, sourceDurationMs)
+		s.Project.ApplyAutoZoom(s.Assets.Input(), sourceDurationMs)
 	}
 	if len(s.Project.CaptionCues) == 0 && s.Transcript != nil {
 		s.Project.CaptionCues = CaptionCues(*s.Transcript)
@@ -89,8 +91,8 @@ func OpenSession(dir string, sourceW, sourceH uint32, sourceDurationMs float64) 
 
 func (s *Session) SaveProject() error { return s.Project.Save(s.Dir) }
 
-// SetTranscript saves a new transcript and reloads the caption words from it. Give the
-// project cues from CaptionCues to show it.
+// SetTranscript saves a new transcript and replaces Assets with one whose caption words come
+// from it. Give the project cues from CaptionCues to show it.
 func (s *Session) SetTranscript(t transcribe.Transcript) error {
 	if err := t.Save(filepath.Join(s.Dir, transcribe.TranscriptFile)); err != nil {
 		return err
@@ -103,19 +105,19 @@ func (s *Session) SetTranscript(t transcribe.Transcript) error {
 func (s *Session) RenderDir() string { return filepath.Join(s.Dir, "render") }
 
 func (s *Session) loadAssets() error {
-	s.Captions = nil
+	var captions []CaptionWord
 	if s.Transcript != nil {
-		s.Captions = CaptionWords(*s.Transcript)
+		captions = CaptionWords(*s.Transcript)
 	}
-	if !isFile(filepath.Join(s.Dir, InputFile)) {
-		s.Input = InputTimeline{Version: 1, Size: [2]uint32{s.SourceW, s.SourceH}}
+	if !isFile(filepath.Join(s.Dir, input.File)) {
+		s.Assets = NewAssets(input.Timeline{Version: 1, Size: [2]uint32{s.SourceW, s.SourceH}}, nil, captions)
 		return nil
 	}
-	in, err := LoadInput(s.Dir)
+	assets, err := LoadAssets(s.Dir, captions)
 	if err != nil {
 		return fmt.Errorf("loading session assets in %s: %w", s.Dir, err)
 	}
-	s.Input = in
+	s.Assets = assets
 	return nil
 }
 

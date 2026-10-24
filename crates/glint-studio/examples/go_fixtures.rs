@@ -92,6 +92,8 @@ fn serde_cases() -> Vec<Value> {
         r#"{ "design": { "background": { "Gradient": { "stops": [4278190335, 16711935], "angle": 90 } } } }"#,
         r#"{ "design": { "background": { "Image": "C:\\bg.png" } } }"#,
         r#"{ "design": { "background": "Sparkles" } }"#,
+        r#"{ "design": { "background": { "Gradient": { "stops": [4278190335] } } } }"#,
+        r#"{ "design": { "background": { "Gradient": { "angle": 90 } } } }"#,
         r#"{ "design": { "camera": { "center": [0.1] } } }"#,
         r#"{ "caption_cues": [{ "start_ms": 0, "end_ms": 100, "text": "hi" }], "captions": { "enabled": true, "karaoke": true } }"#,
         r#"{ "caption_cues": [{ "start_ms": 0, "end_ms": 100 }] }"#,

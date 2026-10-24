@@ -8,21 +8,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wobsoriano/glint/internal/ocr"
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/settings"
 )
 
 // line lays words out 100px apart, each 90px wide and 20px tall, as the Rust tests do.
-func line(text string) Line {
-	var words []Word
+func line(text string) ocr.Line {
+	var words []ocr.Word
 	for i, t := range strings.Split(text, " ") {
-		words = append(words, Word{Text: t, Rect: Rect{float32(i) * 100, 0, 90, 20}})
+		words = append(words, ocr.Word{Text: t, Bounds: ocr.Rect{X: float32(i) * 100, W: 90, H: 20}})
 	}
-	return Line{Words: words, Rect: Rect{0, 0, 100 * float32(len(words)), 20}}
+	return ocr.Line{Words: words, Bounds: ocr.Rect{W: 100 * float32(len(words)), H: 20}}
 }
 
 func kindsIn(text string, rules settings.RedactRules) []Kind {
 	var out []Kind
-	for _, f := range Find([]Line{line(text)}, rules, 0) {
+	for _, f := range Find([]ocr.Line{line(text)}, rules, 0) {
 		out = append(out, f.Kind)
 	}
 	return out
@@ -52,7 +54,7 @@ func TestDetectsCommonSecrets(t *testing.T) {
 }
 
 func TestLabeledSecretCoversATokenOCRSplitInTwo(t *testing.T) {
-	found := Find([]Line{line("API key: sk_live_51 HxYzAbCdEfGhIjKlMnOpQr")}, settings.DefaultRedactRules(), 0)
+	found := Find([]ocr.Line{line("API key: sk_live_51 HxYzAbCdEfGhIjKlMnOpQr")}, settings.DefaultRedactRules(), 0)
 	if len(found) != 1 || found[0].Kind != Secret {
 		t.Fatalf("found %+v", found)
 	}
@@ -123,26 +125,26 @@ func TestDisabledRulesFindNothing(t *testing.T) {
 }
 
 func TestDanglingLabelCoversTheSpaceAfterIt(t *testing.T) {
-	l := Line{
-		Words: []Word{{"Password:", Rect{10, 40, 80, 20}}},
-		Rect:  Rect{10, 40, 80, 20},
+	l := ocr.Line{
+		Words:  []ocr.Word{{Text: "Password:", Bounds: ocr.Rect{X: 10, Y: 40, W: 80, H: 20}}},
+		Bounds: ocr.Rect{X: 10, Y: 40, W: 80, H: 20},
 	}
-	found := Find([]Line{l}, settings.DefaultRedactRules(), 2)
+	found := Find([]ocr.Line{l}, settings.DefaultRedactRules(), 2)
 	if len(found) != 1 || found[0].Kind != Secret {
 		t.Fatalf("found %+v", found)
 	}
-	if want := (Rect{90 + 4 - 2, 40 - 2, 480 + 4, 20 + 4}); found[0].Rect != want {
+	if want := (render.R{X: 90 + 4 - 2, Y: 40 - 2, W: 480 + 4, H: 20 + 4}); found[0].Rect != want {
 		t.Errorf("rect %+v, want %+v", found[0].Rect, want)
 	}
 }
 
 func TestOverlappingHitsMergeAcrossRules(t *testing.T) {
 	// The labeled rule and the high-entropy rule both hit the token; one rectangle results.
-	found := Find([]Line{line("token: Zq9xW2vB7nM4kL1pR8sT3yU6aD5fG0hJ")}, settings.DefaultRedactRules(), 0)
+	found := Find([]ocr.Line{line("token: Zq9xW2vB7nM4kL1pR8sT3yU6aD5fG0hJ")}, settings.DefaultRedactRules(), 0)
 	if len(found) != 1 {
 		t.Fatalf("found %+v", found)
 	}
-	two := Find([]Line{line("a@b.co"), {Words: []Word{{"c@d.co", Rect{0, 100, 90, 20}}}, Rect: Rect{0, 100, 90, 20}}}, settings.DefaultRedactRules(), 0)
+	two := Find([]ocr.Line{line("a@b.co"), {Words: []ocr.Word{{Text: "c@d.co", Bounds: ocr.Rect{Y: 100, W: 90, H: 20}}}, Bounds: ocr.Rect{Y: 100, W: 90, H: 20}}}, settings.DefaultRedactRules(), 0)
 	if len(two) != 2 {
 		t.Errorf("hits on separate lines merged: %+v", two)
 	}
@@ -155,13 +157,13 @@ func TestMatchesRustOnTheCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var lines []Line
+	var lines []ocr.Line
 	for n, text := range strings.Split(strings.TrimRight(strings.ReplaceAll(string(corpus), "\r\n", "\n"), "\n"), "\n") {
 		l := line(text)
 		dy := float32(n) * 30
-		l.Rect.Y += dy
+		l.Bounds.Y += dy
 		for i := range l.Words {
-			l.Words[i].Rect.Y += dy
+			l.Words[i].Bounds.Y += dy
 		}
 		lines = append(lines, l)
 	}

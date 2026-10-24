@@ -3,14 +3,16 @@ package studio
 import (
 	"math"
 	"testing"
+
+	"github.com/wobsoriano/glint/internal/media/input"
 )
 
-func click(t uint64, x, y float32) Click {
-	return Click{T: t, Up: t + 100, X: x, Y: y, Button: "left"}
+func click(t uint64, x, y float32) input.Click {
+	return input.Click{T: t, Up: t + 100, X: x, Y: y, Button: input.ButtonLeft}
 }
 
 func TestAutoZoomClustersClicksWithLeadInAndHold(t *testing.T) {
-	in := InputTimeline{Version: 1, Size: [2]uint32{1920, 1080}, Clicks: []Click{
+	in := input.Timeline{Version: 1, Size: [2]uint32{1920, 1080}, Clicks: []input.Click{
 		click(2_000, 100, 100), click(3_000, 200, 100), click(9_000, 900, 500),
 		click(10_000, 5_000, 500), click(19_500, 500, 500),
 	}}
@@ -26,7 +28,7 @@ func TestAutoZoomClustersClicksWithLeadInAndHold(t *testing.T) {
 }
 
 func TestRegeneratingAutoZoomKeepsManualZooms(t *testing.T) {
-	in := InputTimeline{Version: 1, Size: [2]uint32{100, 100}, Clicks: []Click{click(1_000, 50, 50)}}
+	in := input.Timeline{Version: 1, Size: [2]uint32{100, 100}, Clicks: []input.Click{click(1_000, 50, 50)}}
 	p := NewProject(10_000)
 	p.AddZoom(Span{6_000, 7_000})
 	p.ApplyAutoZoom(&in, 10_000)
@@ -54,7 +56,7 @@ func at(t *testing.T, track []Viewport, ms float64) Viewport {
 func TestCameraEasesInHoldsAndEasesOut(t *testing.T) {
 	p := NewProject(8_000)
 	p.Zooms = append(p.Zooms, Zoom{StartMs: 1_000, EndMs: 4_000, Scale: 2, Focus: FixedFocus(0.25, 0.25), Enabled: true})
-	in := InputTimeline{Version: 1, Size: [2]uint32{1000, 1000}}
+	in := input.Timeline{Version: 1, Size: [2]uint32{1000, 1000}}
 	track := cameraTrack(&p, &in)
 	eq(t, at(t, track, 500), IdentityViewport)
 	if e := at(t, track, 1_150); !(e.Scale > 1 && e.Scale < 2) {
@@ -71,7 +73,7 @@ func TestCameraEasesInHoldsAndEasesOut(t *testing.T) {
 func TestCameraFollowsPointerInsideAZoom(t *testing.T) {
 	p := NewProject(6_000)
 	p.Zooms = append(p.Zooms, Zoom{StartMs: 0, EndMs: 6_000, Scale: 2, Enabled: true})
-	in := InputTimeline{Version: 1, Size: [2]uint32{1000, 1000}, Pointer: []PointerSample{{0, 200, 500, 0}, {2_000, 800, 500, 0}}}
+	in := input.Timeline{Version: 1, Size: [2]uint32{1000, 1000}, Pointer: []input.PointerSample{{T: 0, X: 200, Y: 500}, {T: 2_000, X: 800, Y: 500}}}
 	track := cameraTrack(&p, &in)
 	if x := at(t, track, 1_900).X; x >= 0.35 {
 		t.Fatalf("framing the left: %v", x)
@@ -83,11 +85,11 @@ func TestCameraFollowsPointerInsideAZoom(t *testing.T) {
 
 func TestCursorGlidesTowardSamplesAndLandsOnClicks(t *testing.T) {
 	p := NewProject(3_000)
-	in := InputTimeline{
+	in := input.Timeline{
 		Version: 1,
 		Size:    [2]uint32{1000, 1000},
-		Pointer: []PointerSample{{0, 100, 100, 0}, {500, 900, 100, 0}},
-		Clicks:  []Click{{T: 2_000, Up: 2_100, X: 500, Y: 800, Button: "left"}},
+		Pointer: []input.PointerSample{{T: 0, X: 100, Y: 100}, {T: 500, X: 900, Y: 100}},
+		Clicks:  []input.Click{{T: 2_000, Up: 2_100, X: 500, Y: 800, Button: input.ButtonLeft}},
 	}
 	track := BuildPointerTrack(&p, &in)
 	at := func(ms float64) PointerFrame {

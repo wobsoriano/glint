@@ -3,9 +3,7 @@
 // spellings and defaults for missing fields, with unknown fields ignored.
 package settings
 
-import (
-	"encoding/json"
-)
+import "github.com/wobsoriano/glint/internal/render"
 
 type AfterShot struct {
 	Preview bool `json:"preview"`
@@ -129,22 +127,6 @@ type LibraryPrefs struct {
 	Inspector bool        `json:"inspector"`
 }
 
-// RedactStyle is how a redaction hides what is under it.
-type RedactStyle string
-
-const (
-	RedactBlur     RedactStyle = "Blur"
-	RedactPixelate RedactStyle = "Pixelate"
-	RedactSolid    RedactStyle = "Solid"
-)
-
-var RedactStyles = []RedactStyle{RedactBlur, RedactPixelate, RedactSolid}
-
-func (v *RedactStyle) UnmarshalJSON(b []byte) (err error) {
-	*v, err = parseEnum(b, RedactStyles)
-	return err
-}
-
 // RedactRules picks which kinds of sensitive text automatic redaction looks for.
 type RedactRules struct {
 	Emails         bool `json:"emails"`
@@ -210,53 +192,28 @@ func (h *Hotkeys) Binding(a HotkeyAction) *string {
 }
 
 type Settings struct {
-	// Style is the default screenshot look, kept as the JSON the file holds until
-	// internal/render's Style replaces it.
-	Style             json.RawMessage `json:"style"`
-	LaunchAtLogin     bool            `json:"launch_at_login"`
-	IncludeOwnWindows bool            `json:"include_own_windows"`
-	TimerSeconds      uint32          `json:"timer_seconds"`
-	Format            ExportFormat    `json:"format"`
-	JPEGQuality       uint8           `json:"jpeg_quality"`
-	SaveDir           string          `json:"save_dir"`
-	SaveWithoutDialog bool            `json:"save_without_dialog"`
-	WindowShadow      bool            `json:"window_shadow"`
-	ShowLoupe         bool            `json:"show_loupe"`
-	AfterShot         AfterShot       `json:"after_shot"`
-	AfterRecording    AfterRecording  `json:"after_recording"`
-	Record            RecordPrefs     `json:"record"`
-	Overlay           OverlayPrefs    `json:"overlay"`
-	Hotkeys           Hotkeys         `json:"hotkeys"`
-	AutoRedact        bool            `json:"auto_redact"`
-	RedactStyle       RedactStyle     `json:"redact_style"`
-	RedactRules       RedactRules     `json:"redact_rules"`
-	LastArea          *Area           `json:"last_area"`
-	Library           LibraryPrefs    `json:"library"`
+	// Style is the default screenshot look.
+	Style             render.Style       `json:"style"`
+	LaunchAtLogin     bool               `json:"launch_at_login"`
+	IncludeOwnWindows bool               `json:"include_own_windows"`
+	TimerSeconds      uint32             `json:"timer_seconds"`
+	Format            ExportFormat       `json:"format"`
+	JPEGQuality       uint8              `json:"jpeg_quality"`
+	SaveDir           string             `json:"save_dir"`
+	SaveWithoutDialog bool               `json:"save_without_dialog"`
+	WindowShadow      bool               `json:"window_shadow"`
+	ShowLoupe         bool               `json:"show_loupe"`
+	AfterShot         AfterShot          `json:"after_shot"`
+	AfterRecording    AfterRecording     `json:"after_recording"`
+	Record            RecordPrefs        `json:"record"`
+	Overlay           OverlayPrefs       `json:"overlay"`
+	Hotkeys           Hotkeys            `json:"hotkeys"`
+	AutoRedact        bool               `json:"auto_redact"`
+	RedactStyle       render.RedactStyle `json:"redact_style"`
+	RedactRules       RedactRules        `json:"redact_rules"`
+	LastArea          *Area              `json:"last_area"`
+	Library           LibraryPrefs       `json:"library"`
 }
-
-// defaultStyle is what the Rust build writes for Style::default().
-const defaultStyle = `{
-    "background": {
-      "Gradient": {
-        "stops": [
-          1667691007,
-          2824206335,
-          3964180991
-        ],
-        "angle": 135.0
-      }
-    },
-    "padding": 64.0,
-    "inset": 0.0,
-    "auto_balance": true,
-    "radius": 12.0,
-    "shadow": 40.0,
-    "shadow_opacity": 0.45,
-    "aspect": null,
-    "align": 4,
-    "chrome": "None",
-    "chrome_title": true
-  }`
 
 func DefaultRedactRules() RedactRules {
 	return RedactRules{Emails: true, Phones: true, CreditCards: true, Secrets: true, IPAddresses: true, IDs: true, URLsWithTokens: true}
@@ -264,7 +221,7 @@ func DefaultRedactRules() RedactRules {
 
 func Default() Settings {
 	return Settings{
-		Style:             json.RawMessage(defaultStyle),
+		Style:             render.DefaultStyle(),
 		TimerSeconds:      5,
 		Format:            FormatPNG,
 		JPEGQuality:       85,
@@ -290,7 +247,7 @@ func Default() Settings {
 			Recording:    "Ctrl+Shift+7",
 			Library:      "Ctrl+Shift+L",
 		},
-		RedactStyle: RedactBlur,
+		RedactStyle: render.RedactBlur,
 		RedactRules: DefaultRedactRules(),
 		Library:     LibraryPrefs{View: ViewGrid, Sort: SortCaptured, Inspector: true},
 	}

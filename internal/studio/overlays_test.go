@@ -1,6 +1,10 @@
 package studio
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/wobsoriano/glint/internal/media/input"
+)
 
 func word(text string, start, end float64) CaptionWord {
 	return CaptionWord{Text: text, StartMs: start, EndMs: end}
@@ -65,7 +69,7 @@ func TestEditedCueTextShowsWithTimingSpreadOverItsWords(t *testing.T) {
 
 func TestKeystrokePopsInSwapsAndFades(t *testing.T) {
 	p := NewProject(10_000)
-	in := InputTimeline{Keys: []KeyPress{{T: 1_000, Label: "Ctrl+Shift+S"}, {T: 1_500, Label: "Enter"}}}
+	in := input.Timeline{Keys: []input.KeyPress{{T: 1_000, Label: "Ctrl+Shift+S"}, {T: 1_500, Label: "Enter"}}}
 	track := BuildKeyTrack(&p, &in)
 	if _, ok := track.At(900); ok {
 		t.Fatal("nothing before the first key")
@@ -101,7 +105,7 @@ func TestLabelsSplitIntoModifiersAndKeyOnBothPlatforms(t *testing.T) {
 
 func TestClickRingExpandsAndFades(t *testing.T) {
 	p := NewProject(5_000)
-	in := InputTimeline{Clicks: []Click{{T: 1_000, Up: 1_100, X: 10, Y: 20, Button: "left"}}}
+	in := input.Timeline{Clicks: []input.Click{{T: 1_000, Up: 1_100, X: 10, Y: 20, Button: input.ButtonLeft}}}
 	track := BuildClickTrack(&p, &in)
 	eq(t, len(track.At(999, 10)), 0)
 	early := track.At(1_000, 10)[0]

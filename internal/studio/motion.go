@@ -5,6 +5,8 @@ import (
 	"math"
 	"slices"
 	"sort"
+
+	"github.com/wobsoriano/glint/internal/media/input"
 )
 
 // The step constants are variables so derived values such as stepMs/1000 round at run time,
@@ -87,7 +89,7 @@ type pointerEvent struct {
 	cursor  uint32
 }
 
-func outputPointerEvents(p *Project, in *InputTimeline) []pointerEvent {
+func outputPointerEvents(p *Project, in *input.Timeline) []pointerEvent {
 	src := in.Pointer
 	var events []pointerEvent
 	for _, s := range src {
@@ -113,7 +115,7 @@ type press struct{ t, up, x, y float64 }
 // PointerTrack is the smoothed cursor on the output timeline.
 type PointerTrack struct{ frames []PointerFrame }
 
-func BuildPointerTrack(p *Project, in *InputTimeline) PointerTrack {
+func BuildPointerTrack(p *Project, in *input.Timeline) PointerTrack {
 	events := outputPointerEvents(p, in)
 	if len(events) == 0 {
 		return PointerTrack{}
@@ -205,7 +207,7 @@ type Motion struct {
 	Captions CaptionTrack
 }
 
-func BuildMotion(p *Project, in *InputTimeline, captions []CaptionWord) *Motion {
+func BuildMotion(p *Project, in *input.Timeline, captions []CaptionWord) *Motion {
 	pointer := BuildPointerTrack(p, in)
 	camera := cameraTrack(p, in)
 	return &Motion{
