@@ -119,7 +119,6 @@ func (t *Toast) expire(d time.Duration) {
 	}()
 }
 
-// Close removes the toast at once.
 func (t *Toast) Close() {
 	if t.gone {
 		return
@@ -131,9 +130,3 @@ func (t *Toast) Close() {
 		current = nil
 	}
 }
-
-// Visible reports whether the toast still shows.
-func (t *Toast) Visible() bool { return !t.gone }
-
-// Handle is the toast's native window, for tests and capture checks.
-func (t *Toast) Handle() uintptr { return t.win.NativeHandle() }

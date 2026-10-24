@@ -149,7 +149,6 @@ func HardLinkOutsideCache(file, id, title string) (string, error) {
 	return path, nil
 }
 
-// formatOf picks the format a Save dialog's chosen name asks for, else fallback.
 func formatOf(path string, fallback settings.ExportFormat) settings.ExportFormat {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".jpg", ".jpeg":

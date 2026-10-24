@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/wobsoriano/glint/internal/settings"
@@ -79,21 +78,3 @@ func (e menuEntry) menuLabel() string {
 }
 
 func timerSeconds(s settings.Settings) int { return max(int(s.TimerSeconds), 1) }
-
-// DisplayHotkey writes a shortcut as the platform does: Ctrl+Shift+4 on Windows, ⌃⇧4 on macOS.
-func DisplayHotkey(accel string) string {
-	if runtime.GOOS != "darwin" {
-		return strings.ReplaceAll(accel, "Super", "Win")
-	}
-	parts := strings.Split(accel, "+")
-	key := parts[len(parts)-1]
-	var b strings.Builder
-	for _, m := range [...]struct{ name, sym string }{{"Ctrl", "⌃"}, {"Alt", "⌥"}, {"Shift", "⇧"}, {"Super", "⌘"}} {
-		for _, p := range parts[:len(parts)-1] {
-			if strings.EqualFold(p, m.name) {
-				b.WriteString(m.sym)
-			}
-		}
-	}
-	return b.String() + key
-}

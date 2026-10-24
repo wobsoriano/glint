@@ -92,7 +92,6 @@ func (a *Actions) CopyImage(img image.Image, done func(error)) {
 	})
 }
 
-// withPixels loads a screenshot's image and hands it to f on the main thread.
 func (a *Actions) withPixels(item store.Item, f func(image.Image)) {
 	if item.Kind() != store.Screenshot {
 		a.toast("This works on screenshots; a recording has no single image to use")
@@ -121,7 +120,6 @@ func (a *Actions) recordingFile(item store.Item) (string, []string, error) {
 	return path, nil, nil
 }
 
-// withRecordingFile resolves a recording's video on a goroutine and hands it to f.
 func (a *Actions) withRecordingFile(item store.Item, f func(string, error)) {
 	a.background(func() func() {
 		file, notices, err := a.recordingFile(item)

@@ -242,7 +242,6 @@ func (a *App) OpenFiles(paths []string) {
 	}
 }
 
-// Library is the Library on disk.
 func (a *App) Library() store.Library { return a.library }
 
 func (a *App) saveSettings() {

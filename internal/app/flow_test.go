@@ -258,7 +258,7 @@ func TestFullScreenTakesTheDisplayWithThePointer(t *testing.T) {
 func TestWindowCaptureTakesTheForegroundWindowWithItsShadow(t *testing.T) {
 	h := newHarness(t, func(s *settings.Settings) { s.WindowShadow = true })
 	h.screen.fg = &platform.Window{ID: 77, Title: "Notes", Bounds: platform.Rect{X: 220, Y: 10, W: 40, H: 30}}
-	h.do(1, func() { h.Do(CmdCaptureWindow) })
+	h.do(2, func() { h.Do(CmdCaptureWindow) })
 	if !slices.Equal(h.screen.windowsAt, []int64{77}) || !slices.Equal(h.screen.shadows, []bool{true}) {
 		t.Fatalf("captured windows %v with shadows %v", h.screen.windowsAt, h.screen.shadows)
 	}
@@ -266,6 +266,13 @@ func TestWindowCaptureTakesTheForegroundWindowWithItsShadow(t *testing.T) {
 	if len(items) != 1 || items[0].Meta.Source == nil || *items[0].Meta.Source != "Notes" {
 		t.Fatalf("imported %+v", items)
 	}
+
+	h.screen.winErr = errors.New("PrintWindow failed")
+	h.do(2, func() { h.Do(CmdCaptureWindow) })
+	if last := h.screen.rects[len(h.screen.rects)-1]; last != h.screen.fg.Bounds {
+		t.Fatalf("a failed window capture does not read the screen at the window: %v", last)
+	}
+	h.screen.winErr = nil
 
 	h.screen.fg = nil
 	h.do(1, func() { h.Do(CmdCaptureWindow) })
@@ -278,7 +285,7 @@ func TestClickingAWindowInTheOverlayCapturesItLiveOrFallsBack(t *testing.T) {
 	h := newHarness(t, func(s *settings.Settings) { s.WindowShadow = false })
 	w := platform.Window{ID: 5, Title: "Editor", Bounds: platform.Rect{X: 10, Y: 10, W: 60, H: 50}}
 	h.Do(CmdCaptureArea)
-	h.do(1, func() { h.picker.pick(image.Rect(10, 10, 70, 60), &w) })
+	h.do(2, func() { h.picker.pick(image.Rect(10, 10, 70, 60), &w) })
 	if !slices.Equal(h.screen.windowsAt, []int64{5}) || h.screen.shadows[0] {
 		t.Fatalf("window capture %v shadow %v", h.screen.windowsAt, h.screen.shadows)
 	}
@@ -288,7 +295,7 @@ func TestClickingAWindowInTheOverlayCapturesItLiveOrFallsBack(t *testing.T) {
 
 	h.screen.winErr = errors.New("minimized")
 	h.Do(CmdCaptureArea)
-	h.do(1, func() { h.picker.pick(image.Rect(10, 10, 70, 60), &w) })
+	h.do(2, func() { h.picker.pick(image.Rect(10, 10, 70, 60), &w) })
 	newest := h.items(t)[0]
 	if got := readPNG(t, newest.Deliverable()); !samePixels(got, crop(h.screen.pixels, image.Rect(10, 10, 70, 60))) {
 		t.Fatal("a failed window capture does not keep the frozen pixels")

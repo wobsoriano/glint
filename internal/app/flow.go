@@ -19,7 +19,6 @@ import (
 	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
-// shot is a screenshot on its way into the Library.
 type shot struct {
 	image   *image.RGBA
 	dpi     float64
@@ -78,19 +77,23 @@ func (a *App) picked(p overlay.Pick) {
 		return
 	}
 	s := shot{image: p.Image, dpi: p.Scale, created: time.Now()}
-	if p.Window != nil {
-		s.title = p.Window.Title
-		// The window itself, without what covered it and with its shadow when the settings ask.
-		if img, err := a.sys.captureWindow(p.Window.ID, a.settings.WindowShadow); err == nil {
+	if p.Window == nil {
+		a.finish(s)
+		return
+	}
+	// The window itself, without what covered it and with its shadow when the settings ask.
+	w, shadow := *p.Window, a.settings.WindowShadow
+	s.title = w.Title
+	a.background(func() func() {
+		if img, err := a.sys.captureWindow(w.ID, shadow); err == nil {
 			s.image = img
 		} else {
-			log.Printf("app: capturing window %q: %v; keeping the frozen pixels", p.Window.Title, err)
+			log.Printf("app: capturing window %q: %v; keeping the frozen pixels", w.Title, err)
 		}
-	}
-	a.finish(s)
+		return func() { a.finish(s) }
+	})
 }
 
-// displayAt is the display holding p, or the first.
 func displayAt(ds []platform.Display, p image.Point) platform.Display {
 	for _, d := range ds {
 		if d.Bounds.Contains(p.X, p.Y) {
@@ -127,19 +130,26 @@ func (a *App) captureWindow() {
 		return
 	}
 	c := image.Pt(w.Bounds.X+w.Bounds.W/2, w.Bounds.Y+w.Bounds.H/2)
-	dpi := displayAt(ds, c).Scale
-	img, err := a.sys.captureWindow(w.ID, a.settings.WindowShadow)
-	if err != nil {
-		log.Printf("app: capturing window %q: %v; reading the screen instead", w.Title, err)
-		if img, err = a.sys.captureRect(w.Bounds); err != nil {
-			a.toast("Capture failed: " + err.Error())
-			return
+	s := shot{dpi: displayAt(ds, c).Scale, title: w.Title, created: time.Now()}
+	shadow := a.settings.WindowShadow
+	// PrintWindow waits for the window to paint, off the main thread in case its app hangs.
+	a.background(func() func() {
+		img, err := a.sys.captureWindow(w.ID, shadow)
+		if err != nil {
+			log.Printf("app: capturing window %q: %v; reading the screen instead", w.Title, err)
+			img, err = a.sys.captureRect(w.Bounds)
 		}
-	}
-	a.finish(shot{image: img, dpi: dpi, title: w.Title, created: time.Now()})
+		return func() {
+			if err != nil {
+				a.toast("Capture failed: " + err.Error())
+				return
+			}
+			s.image = img
+			a.finish(s)
+		}
+	})
 }
 
-// capturePrevious captures the last area again, on the display holding its centre.
 func (a *App) capturePrevious() {
 	last := a.settings.LastArea
 	if last == nil {
@@ -197,7 +207,6 @@ func countdown(secs int) string {
 	return fmt.Sprintf("Capturing in %d seconds…", secs)
 }
 
-// finish redacts the shot when the settings ask, then imports it.
 func (a *App) finish(s shot) {
 	if !a.settings.AutoRedact {
 		a.importShot(s, nil)
@@ -281,7 +290,6 @@ func (a *App) importShot(s shot, findings []redact.Finding) {
 	})
 }
 
-// step is one thing that happens after a capture.
 type step int
 
 const (

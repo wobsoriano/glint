@@ -124,15 +124,6 @@ func (o *Overlay) Close() {
 	}
 }
 
-// Handles are the overlay windows, for checks that read the screen.
-func (o *Overlay) Handles() []uintptr {
-	var out []uintptr
-	for _, s := range o.surfaces {
-		out = append(out, s.win.NativeHandle())
-	}
-	return out
-}
-
 func (o *Overlay) decide(s *surface, r Result) {
 	if !o.open {
 		return
@@ -162,7 +153,6 @@ func (o *Overlay) decide(s *surface, r Result) {
 	}
 }
 
-// crop copies r out of img into an image of its own.
 func crop(img *image.RGBA, r image.Rectangle) *image.RGBA {
 	out := image.NewRGBA(image.Rect(0, 0, r.Dx(), r.Dy()))
 	for y := 0; y < r.Dy(); y++ {
@@ -172,7 +162,6 @@ func crop(img *image.RGBA, r image.Rectangle) *image.RGBA {
 	return out
 }
 
-// surface is the overlay of one display.
 type surface struct {
 	o       *Overlay
 	shot    Shot

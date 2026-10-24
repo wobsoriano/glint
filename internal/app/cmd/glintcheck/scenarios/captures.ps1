@@ -30,8 +30,8 @@ Start-Sleep -Milliseconds 1500
 $items = Items $dir
 $m = Meta $items[-1].FullName
 "items: $($items.Count); $($m.width)x$($m.height), source: $($m.source)"
+# The rest of the desktop is live (tooltips, the clock), so only the stage is compared.
 Check cmp -a "$($items[-1].FullName)\image.png" -b "$dir\02-before-fullscreen.png" -arect '168,121,1084,630' -brect '168,121,1084,630'
-Check cmp -a "$($items[-1].FullName)\image.png" -b "$dir\02-before-fullscreen.png" -tol 0
 
 Step 'Ctrl+Shift+5 captures the foreground window, with its shadow'
 Click 700 136 300
