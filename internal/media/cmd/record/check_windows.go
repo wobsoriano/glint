@@ -132,6 +132,14 @@ func check(dir string, sum media.RecordSummary, size image.Point, c config, p sc
 	if c.system {
 		audio(dir, frames, sum, c, p, st, k)
 	}
+	if c.mic {
+		if wav, err := media.ReadWAV(filepath.Join(dir, "mic.wav")); err != nil {
+			k.ok(false, "mic.wav reads: %v", err)
+		} else {
+			k.ok(wav.SampleRate == 48000 && wav.Channels == 1 && math.Abs(float64(wav.DurationMS())-float64(sum.DurationMS)) <= 2,
+				"mic.wav %d Hz, %d channel, %d ms against %d ms of media time", wav.SampleRate, wav.Channels, wav.DurationMS(), sum.DurationMS)
+		}
+	}
 	pointer(dir, sum, st, c, mv, k)
 
 	in, err := studio.OpenSession(dir, sum.Width, sum.Height, float64(sum.DurationMS))
