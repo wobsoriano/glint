@@ -36,8 +36,12 @@ func Parse(data []byte) (Settings, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Default(), err
 	}
-	if !isStruct(s.Style) {
-		return Default(), fmt.Errorf("style: expected an object, found %s", s.Style)
+	// render.Style reads null as its defaults, where serde rejects it.
+	var raw struct {
+		Style json.RawMessage `json:"style"`
+	}
+	if json.Unmarshal(data, &raw) == nil && raw.Style != nil && !isStruct(raw.Style) {
+		return Default(), fmt.Errorf("style: expected an object, found %s", raw.Style)
 	}
 	s.Overlay.Layout = s.Overlay.Layout.Normalized()
 	return s, nil

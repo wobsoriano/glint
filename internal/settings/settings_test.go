@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/settings/serde"
 )
 
@@ -213,12 +214,19 @@ func TestPresetsRoundTripByteForByte(t *testing.T) {
 }
 
 func TestPresetsMissingEffectsAndFiles(t *testing.T) {
-	presets, err := LoadPresets("testdata/rust/presets-no-effects.json")
-	if err != nil || len(presets) != 1 || presets[0].Effects != nil {
-		t.Fatalf("got %+v, %v", presets, err)
+	bare, err := LoadPresets("testdata/rust/presets-no-effects.json")
+	if err != nil || len(bare) != 1 || !reflect.DeepEqual(bare[0].Effects, render.DefaultEffects()) {
+		t.Fatalf("got %+v, %v", bare, err)
 	}
-	if got := string(encode(t, presets)); strings.Contains(got, "effects") {
-		t.Errorf("absent effects were written: %s", got)
+	// Rust saves the default style and effects it filled in, which is what it wrote for the
+	// first preset in presets.json, made from a default document.
+	plain, err := LoadPresets("testdata/rust/presets.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain[0].Name = bare[0].Name
+	if got, want := encode(t, bare), encode(t, plain[:1]); !bytes.Equal(got, want) {
+		t.Errorf("re-saved preset without effects differs: %s", firstDifference(got, want))
 	}
 	if _, err := LoadPresets("testdata/rust/presets-reject-no-style.json"); err == nil {
 		t.Error("a preset without a style loaded")
@@ -243,7 +251,7 @@ func TestWriteFilesForRust(t *testing.T) {
 	s.Record.Target, s.Record.Area, s.Record.Mic = RecordArea, &Area{-5, 0, 640, 480}, ptr("USB \"Mic\"")
 	s.Overlay.Layout.Place(CardDelete, CornerZone(TopLeft), -1)
 	s.Overlay.Layout.Place(CardCopyText, CenterZone, 0)
-	s.Library.Sort, s.RedactStyle = SortName, RedactSolid
+	s.Library.Sort, s.RedactStyle = SortName, render.RedactSolid
 	if err := s.SaveTo(filepath.Join(dir, "settings-custom.json")); err != nil {
 		t.Fatal(err)
 	}
