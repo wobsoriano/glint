@@ -90,7 +90,10 @@ func Deliverable(ctx context.Context, s *Session) (string, error) {
 	return Export(ctx, s, s.Project.Export, nil)
 }
 
-// Bitrate is the encoder's average bits per second for a size, rate and quality.
+// Bitrate is the encoder's average bits per second for a size, rate and quality, from 0.1,
+// 0.065 or 0.04 bits a pixel. A small video gets a floor so it stays legible, 1.5 Mbps at
+// High. The floor scales with the bits a pixel, as the Rust build's single 1.5 Mbps floor did
+// not, so each quality stays smaller than the one above it however small the video.
 func Bitrate(width, height, fps uint32, q Quality) int {
 	bpp := 0.1
 	switch q {
@@ -99,7 +102,7 @@ func Bitrate(width, height, fps uint32, q Quality) int {
 	case QualityLow:
 		bpp = 0.04
 	}
-	return int(clamp(float64(width)*float64(height)*float64(fps)*bpp, 1_500_000, 80_000_000))
+	return int(clamp(float64(width)*float64(height)*float64(fps)*bpp, 15_000_000*bpp, 80_000_000))
 }
 
 // CompressOptions says how Trim & Compress re-encodes a video.

@@ -57,7 +57,7 @@ func TestTrimHandlesKeepAMinimumSpanInsideTheSource(t *testing.T) {
 func TestTranscodeOptionsFollowTheSettings(t *testing.T) {
 	opts := Options{Resolution: P720, Quality: Small, Codec: media.HEVC, KeepAudio: false}
 	got := transcodeOptions(source(3840, 2160), Trim{3_000, 5_000}, opts)
-	if got.Width != 1280 || got.Height != 720 || got.Bitrate != 1_500_000 || got.Codec != media.HEVC || !got.DropAudio ||
+	if got.Width != 1280 || got.Height != 720 || got.Bitrate != 1_105_920 || got.Codec != media.HEVC || !got.DropAudio ||
 		got.Trim == nil || *got.Trim != (media.Span{StartMS: 3_000, EndMS: 5_000}) {
 		t.Fatalf("transcode options %+v trim %v", got, got.Trim)
 	}

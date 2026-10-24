@@ -130,6 +130,10 @@ func (a *App) ready() {
 		forgetRustOpenWith()
 	}
 	excludeOwnWindows(a.settings.IncludeOwnWindows)
+	// Listed before anything can start a recording, so its new staging folder is never one.
+	if orphans := a.library.Orphans(); len(orphans) > 0 {
+		go a.recoverRecordings(orphans)
+	}
 	a.registerHotkeys()
 	a.buildTray()
 	a.open(a.launch)

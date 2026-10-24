@@ -61,6 +61,9 @@ type WriteSummary struct {
 // ErrNoAudio is returned when a file has no audio track.
 var ErrNoAudio = errors.New("media: no audio track")
 
+// ErrNoCamera is returned for a camera id that no connected camera has.
+var ErrNoCamera = errors.New("no camera with id")
+
 // frameTime is frame i's presentation time in 100-nanosecond units at fps, exact rather than
 // accumulated so long files keep in step with their audio.
 func frameTime(i int64, fps int) int64 { return i * 10_000_000 / int64(fps) }

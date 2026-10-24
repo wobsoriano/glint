@@ -2,9 +2,12 @@ package record
 
 import (
 	"math"
+	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/wobsoriano/glint/internal/media"
 	"github.com/wobsoriano/glint/internal/platform"
@@ -84,14 +87,48 @@ func TestIgnoredKeysAreEveryBoundHotkey(t *testing.T) {
 	}
 }
 
-func TestWarningSummaryKeepsEveryWarningAndDropsDeviceDetail(t *testing.T) {
-	got := warningSummary([]string{
-		"microphone not recorded: microphone {0.0.1.00000000}.{deadbeef}: Element not found.",
-		`camera not recorded: no camera with id \\?\usb#gone`,
-		"could not disable the capture border",
+// The warnings are what media.Recorder says, verbatim, for a missing microphone and camera
+// at the start and at the stop of one recording.
+var missingDevices = []string{
+	"microphone not recorded: microphone glint-missing-mic: microphone glint-missing-mic not found: HRESULT 0x80070057",
+	"camera not recorded: no camera with id glint-missing-camera",
+}
+
+func TestANoticeNamesEachMissingDeviceOnce(t *testing.T) {
+	if got, want := recordingNotice(true, missingDevices), "Recording without the microphone and the camera"; got != want {
+		t.Errorf("while recording: %q, want %q", got, want)
+	}
+	stopped := append(slices.Clone(missingDevices), missingDevices...)
+	if got, want := recordingNotice(false, stopped), "Recorded without the microphone and the camera"; got != want {
+		t.Errorf("after recording: %q, want %q", got, want)
+	}
+	if got := recordingNotice(false, nil); got != "" {
+		t.Errorf("no warnings: %q", got)
+	}
+}
+
+func TestANoticeSaysWhichTracksStoppedEarlyAndKeepsOtherWarnings(t *testing.T) {
+	staging := filepath.Join(t.TempDir(), "Library", ".2026-10-24_10-00-00_ab12.tmp")
+	got := recordingNotice(false, []string{
+		`system audio not recorded: AUDCLNT_E_DEVICE_INVALIDATED`,
+		filepath.Join(staging, "mic.wav") + ": write: disk full",
+		filepath.Join(staging, "input.json") + ": access denied",
+		"the screen capture failed; the recording ends there: device removed",
+		"the captured window closed; the recording ends there",
 	})
-	if want := "microphone not recorded · camera not recorded · could not disable the capture border"; got != want {
-		t.Errorf("got %q", got)
+	want := "Recorded without system audio. The microphone and the cursor stopped early. " +
+		"The screen capture failed; the recording ends there. The captured window closed; the recording ends there"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestEveryNoticeFitsAToast(t *testing.T) {
+	all := []string{
+		"input not recorded: hook failed", "system audio not recorded: x", "microphone not recorded: x", "camera not recorded: x",
+	}
+	if got := recordingNotice(false, all); utf8.RuneCountInString(got) > toastChars {
+		t.Errorf("%d characters: %q", utf8.RuneCountInString(got), got)
 	}
 }
 

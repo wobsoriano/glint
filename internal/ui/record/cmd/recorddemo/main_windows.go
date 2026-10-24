@@ -59,12 +59,13 @@ func (h *host) Library() store.Library { return h.lib }
 func (h *host) SelectRegion(kind settings.RecordTarget, d platform.Display, done func(record.Selection, bool)) {
 	record.Select(kind, d, done)
 }
-func (h *host) RecordingFinished(item store.Item, warnings []string) {
-	log.Printf("recording finished: %s %dx%d %d ms, warnings %v", item.Dir, item.Meta.Width, item.Meta.Height, *item.Meta.DurationMs, warnings)
+func (h *host) RecordingFinished(item store.Item, notice string) {
+	log.Printf("recording finished: %s %dx%d %d ms, notice %q", item.Dir, item.Meta.Width, item.Meta.Height, *item.Meta.DurationMs, notice)
 	h.mu.Lock()
 	h.finished = append(h.finished, item)
 	h.mu.Unlock()
 }
+func (h *host) ToastAbove(msg string, gap float64) { h.Toast(msg) }
 func (h *host) Toast(msg string) {
 	log.Printf("toast: %s", msg)
 	h.mu.Lock()

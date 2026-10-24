@@ -26,7 +26,9 @@ func TestFrameCountsAndBitrates(t *testing.T) {
 	eq(t, frameCount(5_975, 30), 179)
 	eq(t, Bitrate(1920, 1080, 30, QualityHigh), 6_220_800)
 	eq(t, Bitrate(1920, 1080, 60, QualityLow), 4_976_640)
-	eq(t, Bitrate(320, 240, 30, QualityLow), 1_500_000)
+	eq(t, Bitrate(320, 240, 30, QualityHigh), 1_500_000)
+	eq(t, Bitrate(320, 240, 30, QualityMedium), 975_000)
+	eq(t, Bitrate(320, 240, 30, QualityLow), 600_000)
 }
 
 func twoColours() *image.NRGBA {

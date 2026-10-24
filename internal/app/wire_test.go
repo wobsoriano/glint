@@ -36,14 +36,14 @@ func TestAFinishedRecordingRunsAfterRecording(t *testing.T) {
 	var listed []store.Item
 	h.Surfaces.Imported = func(it store.Item) { listed = append(listed, it) }
 	item := store.Item{Dir: filepath.Join(t.TempDir(), "2026-10-23_10-00-00_ab12.glintrec"), Meta: store.Meta{Kind: store.Recording, Title: "Recording"}}
-	h.RecordingFinished(item, []string{"microphone not recorded: gone"})
+	h.RecordingFinished(item, "Recorded without the microphone")
 	if h.last != item.Dir || len(listed) != 1 {
 		t.Fatalf("last %q, listed %d", h.last, len(listed))
 	}
 	if len(h.acts.items) != 1 || len(h.acts.saved) != 1 || len(h.cards) != 1 || h.cards[0].Dir != item.Dir {
 		t.Fatalf("copied %d, saved %d, cards %d", len(h.acts.items), len(h.acts.saved), len(h.cards))
 	}
-	for _, want := range []string{"microphone not recorded: gone", "Studio is not available yet"} {
+	for _, want := range []string{"Recorded without the microphone", "Studio is not available yet"} {
 		if !slices.Contains(h.toasts, want) {
 			t.Errorf("no toast %q in %q", want, h.toasts)
 		}
@@ -51,7 +51,7 @@ func TestAFinishedRecordingRunsAfterRecording(t *testing.T) {
 	var studio []string
 	h.Surfaces.OpenStudio = func(dir string) { studio = append(studio, dir) }
 	h.settings.AfterRecording = settings.AfterRecording{Studio: true}
-	h.RecordingFinished(item, nil)
+	h.RecordingFinished(item, "")
 	if !slices.Equal(studio, []string{item.Dir}) {
 		t.Fatalf("Studio opened %q", studio)
 	}

@@ -33,6 +33,9 @@ const ThumbMax = 512
 
 const recordingExt = ".glintrec"
 
+// stampLayout is the local creation time that starts every capture id.
+const stampLayout = "2006-01-02_15-04-05"
+
 // Item is one capture as listed: its directory, its meta.json and its size on disk.
 type Item struct {
 	Dir   string
@@ -191,7 +194,7 @@ func (l Library) BeginRecording(created time.Time) (PendingRecording, error) {
 func (l Library) FinishRecording(p PendingRecording, info RecordingInfo, firstFrame image.Image) (Item, error) {
 	meta := Meta{
 		Version: 1, Kind: Recording, Title: DefaultTitle(Recording, p.Created), Created: p.Created, Modified: p.Created,
-		Width: info.Width, Height: info.Height, DurationMs: &info.DurationMs, Source: &info.Source,
+		Width: info.Width, Height: info.Height, DurationMs: &info.DurationMs, Source: optional(info.Source),
 	}
 	if firstFrame != nil {
 		if err := writePNG(Thumbnail(firstFrame), filepath.Join(p.Dir, "thumb.png")); err != nil {
@@ -273,13 +276,13 @@ func (l Library) Scan() []Item {
 }
 
 func (l Library) reserve(created time.Time) (id, staging string, err error) {
-	stamp := created.In(time.Local).Format("2006-01-02_15-04-05")
+	stamp := created.In(time.Local).Format(stampLayout)
 	for range 16 {
 		id = fmt.Sprintf("%s_%04x", stamp, rand.N(1<<16))
 		if exists(filepath.Join(l.root, id)) || exists(filepath.Join(l.root, id+recordingExt)) {
 			continue
 		}
-		staging = filepath.Join(l.root, "."+id+".tmp")
+		staging = filepath.Join(l.root, "."+id+stagingExt)
 		switch err := os.Mkdir(staging, 0o755); {
 		case err == nil:
 			return id, staging, nil

@@ -3,10 +3,14 @@ package record
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/wobsoriano/glint/internal/media/input"
 	"github.com/wobsoriano/glint/internal/settings"
 )
 
@@ -110,13 +114,82 @@ func ignoredKeys(h settings.Hotkeys) []string {
 	return out
 }
 
-// warningSummary keeps the gist of each warning, dropping the device detail after ": ".
-func warningSummary(warnings []string) string {
-	short := make([]string, len(warnings))
-	for i, w := range warnings {
-		short[i], _, _ = strings.Cut(w, ": ")
+type track struct{ name, file, noun string }
+
+// tracks are a recording's optional tracks in the order a notice names them: the name
+// media.Recorder's warnings give each, the file it writes, and how a notice says it. The
+// recording draws the pointer from the input track, so without it there is no cursor.
+var tracks = []track{
+	{"microphone", "mic.wav", "the microphone"},
+	{"system audio", "system.wav", "system audio"},
+	{"camera", "camera.mp4", "the camera"},
+	{"input", input.File, "the cursor"},
+}
+
+// toastChars is about the most a toast shows before it cuts the text.
+const toastChars = 76
+
+// recordingNotice turns a recorder's warnings into one line for a toast, naming each track
+// once however many warnings name it: the tracks left out, then those that stopped early,
+// then anything else, without its detail. It is empty when nothing went wrong.
+func recordingNotice(running bool, warnings []string) string {
+	without, early := make([]bool, len(tracks)), make([]bool, len(tracks))
+	var rest []string
+	for _, w := range warnings {
+		head, _, _ := strings.Cut(w, ": ")
+		i := slices.IndexFunc(tracks, func(t track) bool {
+			return head == t.name+" not recorded" || filepath.Base(head) == t.file
+		})
+		switch {
+		case i < 0:
+			if line := capitalize(head); !slices.Contains(rest, line) {
+				rest = append(rest, line)
+			}
+		case strings.HasSuffix(head, " not recorded"):
+			without[i] = true
+		default:
+			early[i] = true
+		}
 	}
-	return strings.Join(short, " · ")
+	var lines []string
+	if nouns := named(without); nouns != "" {
+		verb := "Recorded"
+		if running {
+			verb = "Recording"
+		}
+		lines = append(lines, verb+" without "+nouns)
+	}
+	if nouns := named(early); nouns != "" {
+		lines = append(lines, capitalize(nouns)+" stopped early")
+	}
+	return strings.Join(append(lines, rest...), ". ")
+}
+
+// named lists the tracks marked in which, as "a, b and c".
+func named(which []bool) string {
+	var s []string
+	for i, on := range which {
+		if on {
+			s = append(s, tracks[i].noun)
+		}
+	}
+	return list(s)
+}
+
+// list joins a, b and c as "a, b and c".
+func list(s []string) string {
+	if len(s) < 2 {
+		return strings.Join(s, "")
+	}
+	return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[n:]
 }
 
 // span is the words [start, end) of one line.

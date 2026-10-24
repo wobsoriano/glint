@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 	"time"
 
 	"github.com/wobsoriano/glint/internal/media"
@@ -55,7 +54,7 @@ func runCamera(h *host, ctl *record.Controller) {
 		}
 	} else {
 		l.Check(d.window(record.SurfaceCamera) == 0, "no bubble opens for the camera that is gone")
-		l.Check(strings.HasPrefix(h.lastToast(), "Camera preview unavailable: no camera with id"), "the user is told: %q", h.lastToast())
+		l.Check(h.lastToast() == "Camera unavailable: recording continues without it", "the user is told: %q", h.lastToast())
 		if d.click(record.SurfacePicker, "camera") && l.Check(d.waitSurface(record.SurfacePanel, true, 2*time.Second), "the camera list opens") {
 			time.Sleep(300 * time.Millisecond)
 			_, _, none := d.point(record.SurfacePanel, "cam-none")

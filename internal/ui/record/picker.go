@@ -207,7 +207,7 @@ func (c *Controller) pickerView(ctx *ui.Context, pk *picker) {
 		case devicePresent:
 			camIcon, camLabel = theme.IconCamera, name
 		case deviceMissing:
-			camColor, camLabel, camTip = caution(p), "Camera unavailable", "Camera unavailable: recording continues without it"
+			camColor, camLabel, camTip = caution(p), "Camera unavailable", cameraMissing
 		}
 		cam := c.chip(ctx, p, "camera", pk.panel == cameraPanel, true, camTip).MaxWidth(176)
 		cam.Children(func() {
