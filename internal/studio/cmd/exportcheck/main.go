@@ -78,9 +78,23 @@ func main() {
 	blur := flag.Bool("blur", true, "motion blur for -real exports")
 	stagesOf := flag.String("stages", "", "time each stage of a 1080p60 export of this session copy")
 	runs := flag.Int("runs", 5, "runs per stage for -stages")
+	exportOnce := flag.String("export", "", "export this session copy once with its own options, as the Rust go_export does, and print the timing as JSON")
+	fair := flag.String("fair", "", "time Go against -rust on copies of this session, one export per process, -runs times each")
 	flag.Parse()
 	if *work == "" {
 		log.Fatal("-work is required")
+	}
+	if *exportOnce != "" {
+		if err := exportOneShot(*exportOnce); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *fair != "" {
+		if err := fairTiming(*work, *fair, *rust, *runs); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 	if *stagesOf != "" {
 		if err := stages(*work, *stagesOf, *rust, *profile, *runs); err != nil {

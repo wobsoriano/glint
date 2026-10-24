@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -24,8 +26,8 @@ type stageRun struct {
 	frames int
 }
 
-// stages times each part of a 1080p60 export of one session alone, runs times each, so the
-// end-to-end rate can be pinned on the slowest part.
+// stages times each part of an export of one session alone, with the export options its
+// project holds, runs times each, so the end-to-end rate can be pinned on the slowest part.
 func stages(work, src, rust, profilePath string, runs int) error {
 	var rustFPS []float64
 	var profile *os.File
@@ -48,11 +50,11 @@ func stages(work, src, rust, profilePath string, runs int) error {
 		return err
 	}
 	p := s.Project
-	p.Export = studio.DefaultExportOptions()
 	w, h := p.OutputSize(s.SourceW, s.SourceH)
 	fps := p.Export.Fps.Value()
 	frames := int(math.Round(p.DurationMs() * float64(fps) / 1000))
-	fmt.Printf("== stages of %s: %dx%d source, %d frames at %dx%d %d fps, GOMAXPROCS %d\n", filepath.Base(src), s.SourceW, s.SourceH, frames, w, h, fps, runtime.GOMAXPROCS(0))
+	fmt.Printf("== stages of %s: %dx%d source, %d frames at %dx%d %d fps, motion blur %v, GOMAXPROCS %d\n",
+		filepath.Base(filepath.Dir(src))+"/"+filepath.Base(src), s.SourceW, s.SourceH, frames, w, h, fps, p.Export.MotionBlur, runtime.GOMAXPROCS(0))
 
 	samples, err := composedSamples(s, &p, w, h, 8)
 	if err != nil {
@@ -115,6 +117,87 @@ func stages(work, src, rust, profilePath string, runs int) error {
 		med, lo, hi := spread(rustFPS)
 		fmt.Printf("  %-40s median %6.1f frames/s (range %.1f to %.1f over %d runs, alternated with Go)\n", "rust full export", med, lo, hi, len(rustFPS))
 	}
+	return nil
+}
+
+// exportOneShot is the Go side of a fair timing against the Rust go_export example: one
+// export per process. Media Foundation encodes far faster in the first few encoder sessions
+// a process opens (measured with crates/glint-media/examples/bframes.rs: about 500 frames/s
+// at 1212x720, then about 176), so timings taken after other encodes in one process are not
+// comparable with a fresh Rust process.
+func exportOneShot(dir string) error {
+	s, err := studio.LoadSession(dir)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(s.RenderDir()); err != nil {
+		return err
+	}
+	fps := s.Project.Export.Fps.Value()
+	if s.Project.Export.Format == studio.FormatGif {
+		fps = 15
+	}
+	frames := max(int(math.Round(s.Project.DurationMs()*float64(fps)/1000)), 1)
+	started := time.Now()
+	path, err := studio.Export(context.Background(), s, s.Project.Export, nil)
+	if err != nil {
+		return err
+	}
+	secs := time.Since(started).Seconds()
+	out, _ := json.Marshal(rustResult{Path: path, Seconds: secs, Frames: frames, FPS: float64(frames) / secs})
+	fmt.Println(string(out))
+	return nil
+}
+
+// fairTiming exports one session runs times in Go and in Rust, each export in a fresh
+// process, alternating, from separate copies of src.
+func fairTiming(work, src, rust string, runs int) error {
+	copyOf := func(side string) (string, error) {
+		dir := filepath.Join(work, "fair", filepath.Base(filepath.Dir(src))+"-"+filepath.Base(src), side)
+		if err := os.RemoveAll(dir); err != nil {
+			return "", err
+		}
+		return dir, copyDir(src, dir)
+	}
+	goDir, err := copyOf("go")
+	if err != nil {
+		return err
+	}
+	rustDir, err := copyOf("rust")
+	if err != nil {
+		return err
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	var goFPS, rustFPS []float64
+	for range runs {
+		cmd := exec.Command(self, "-work", work, "-export", goDir)
+		cmd.Stderr = os.Stderr
+		out, err := cmd.Output()
+		if err != nil {
+			return fmt.Errorf("go export: %w", err)
+		}
+		var g rustResult
+		if err := json.Unmarshal(out, &g); err != nil {
+			return fmt.Errorf("go export printed %q: %w", out, err)
+		}
+		goFPS = append(goFPS, g.FPS)
+		if err := os.RemoveAll(filepath.Join(rustDir, "render")); err != nil {
+			return err
+		}
+		_, r, err := runRust(rust, rustDir)
+		if err != nil {
+			return err
+		}
+		rustFPS = append(rustFPS, r.FPS)
+		fmt.Printf("  run: go %.1f frames/s, rust %.1f frames/s (%d frames)\n", g.FPS, r.FPS, g.Frames)
+	}
+	gm, glo, ghi := spread(goFPS)
+	rm, rlo, rhi := spread(rustFPS)
+	fmt.Printf("== %s, one export per process: go median %.1f frames/s (%.1f to %.1f), rust median %.1f frames/s (%.1f to %.1f), %d runs each\n",
+		filepath.Base(src), gm, glo, ghi, rm, rlo, rhi, runs)
 	return nil
 }
 
@@ -203,12 +286,16 @@ func encodeOnly(path string, samples []*image.NRGBA, w, h, fps uint32, frames in
 		return err
 	}
 	defer writer.Close()
+	started := time.Now()
 	for i := range frames {
 		f := samples[i%len(samples)]
 		if err := writer.WriteFrame(&image.RGBA{Pix: f.Pix, Stride: f.Stride, Rect: f.Rect}); err != nil {
 			return err
 		}
 	}
-	_, err = writer.Finish()
+	queued := time.Since(started)
+	sum, err := writer.Finish()
+	fmt.Printf("    encode only: frames queued in %v, finish drained for %v, hardware encoder %v\n",
+		queued.Round(time.Millisecond), (time.Since(started) - queued).Round(time.Millisecond), sum.Hardware)
 	return err
 }
