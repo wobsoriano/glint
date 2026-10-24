@@ -42,7 +42,8 @@ type Library struct {
 	asking   bool
 	notice   string
 
-	thumbs map[thumbKey]*thumb
+	// thumbs holds each thumbnail asked for, nil while it decodes and when it cannot be read.
+	thumbs map[thumbKey]*ui.Bitmap
 	// shown is the visible items as this frame lists them, which the widgets key by.
 	shown []store.Item
 }
@@ -54,16 +55,10 @@ type thumbKey struct {
 	modified int64
 }
 
-// thumb is a thumbnail being decoded (bmp nil, failed false), shown, or missing.
-type thumb struct {
-	bmp    *ui.Bitmap
-	failed bool
-}
-
 // New makes a Library over the captures scan lists. post must run its function on the main
 // thread; pickFolder may be nil, which leaves Export… out.
 func New(host Host, scan func() []store.Item, post func(func()), pickFolder func() (string, bool)) *Library {
-	l := &Library{host: host, scan: scan, post: post, pickFolder: pickFolder, cursor: -1, thumbs: map[thumbKey]*thumb{}}
+	l := &Library{host: host, scan: scan, post: post, pickFolder: pickFolder, cursor: -1, thumbs: map[thumbKey]*ui.Bitmap{}}
 	l.grid.Key = l.key
 	l.list.Key = l.key
 	l.grid.Selected, l.list.Selected = &l.cursor, &l.cursor
@@ -216,19 +211,21 @@ func (l *Library) export(items []store.Item) {
 // it is ready or when it cannot be read.
 func (l *Library) thumb(it store.Item) *ui.Bitmap {
 	k := keyOf(it)
-	if t, ok := l.thumbs[k]; ok {
-		return t.bmp
+	if bmp, ok := l.thumbs[k]; ok {
+		return bmp
 	}
-	t := &thumb{}
-	l.thumbs[k] = t
+	l.thumbs[k] = nil
 	path := it.Thumb()
 	go func() {
 		var bmp *ui.Bitmap
-		data, err := os.ReadFile(path)
-		if err == nil {
-			bmp, err = ui.DecodeBitmap(data)
+		if data, err := os.ReadFile(path); err == nil {
+			bmp, _ = ui.DecodeBitmap(data)
 		}
-		l.post(func() { t.bmp, t.failed = bmp, err != nil })
+		l.post(func() {
+			if _, wanted := l.thumbs[k]; wanted {
+				l.thumbs[k] = bmp
+			}
+		})
 	}()
 	return nil
 }

@@ -2,10 +2,12 @@
 // host that registers the global shortcuts with MyGo and logs every call to demo.log in the
 // data directory. Launch at login is only logged, so the demo never touches the login items.
 //
-//	prefsdemo [-pane shortcuts] [-hold Ctrl+Alt+K]
+//	prefsdemo [-pane shortcuts]
 //
-// -hold registers one shortcut and waits, as another app holding it would, so a second
-// prefsdemo sees Windows refuse it.
+// A combination another app holds never reaches the window, since Windows hands it to that
+// app, so a refusal cannot be staged by pressing one. PREFSDEMO_REFUSE=Ctrl+Alt+K makes the
+// host refuse that combination as Windows would; PREFSDEMO_LOGIN_FAILS makes launch at
+// login fail.
 package main
 
 import (
@@ -83,7 +85,12 @@ func (h *host) RebindHotkey(a settings.HotkeyAction, accel string) error {
 	if old != "" {
 		mygo.GlobalShortcut.Unregister(old)
 	}
-	if err := h.register(a, accel); err != nil {
+	err := h.register(a, accel)
+	if refuse := os.Getenv("PREFSDEMO_REFUSE"); err == nil && strings.EqualFold(refuse, accel) {
+		mygo.GlobalShortcut.Unregister(accel)
+		err = errors.New("Hot key is already registered. (PREFSDEMO_REFUSE)")
+	}
+	if err != nil {
 		if old != "" && h.register(a, old) != nil {
 			log.Printf("could not restore %s", old)
 		}
@@ -96,7 +103,6 @@ func (h *host) RebindHotkey(a settings.HotkeyAction, accel string) error {
 
 func main() {
 	pane := flag.String("pane", "general", "the pane to show first")
-	hold := flag.String("hold", "", "only hold this global shortcut")
 	flag.Parse()
 	if os.Getenv("GLINT_DATA_DIR") == "" {
 		fmt.Fprintln(os.Stderr, "set GLINT_DATA_DIR to a temporary data directory")
@@ -107,12 +113,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.SetOutput(io.MultiWriter(os.Stderr, f))
-	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.WhenReady(func() {
-		if *hold != "" {
-			log.Printf("hold %s: %v", *hold, mygo.GlobalShortcut.Register(*hold, func() {}))
-			return
-		}
 		h := &host{s: settings.Load()}
 		h.ResumeHotkeys()
 		first := prefs.General
