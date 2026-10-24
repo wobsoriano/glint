@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/draw"
 	"os"
+	"path/filepath"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -247,7 +248,8 @@ func (e *Editor) export(img *image.RGBA, ask bool) {
 		case err != nil:
 			e.toast("Not saved: " + err.Error())
 		default:
-			e.toast("Saved to " + path)
+			// The toast holds one line, which cuts a full path off.
+			e.toast("Saved to " + filepath.Base(path))
 		}
 	})
 }

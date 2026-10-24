@@ -58,10 +58,14 @@ func (a *App) cursorScale() float64 {
 	return 1
 }
 
-// edited shows a saved edit wherever the capture shows: its preview card and the Library.
+// edited shows a saved edit wherever the capture shows: its preview card, Quick Look and the
+// Library.
 func (a *App) edited(item store.Item) {
 	if a.win.cards != nil {
 		a.win.cards.Refresh(item)
+	}
+	if a.win.look != nil {
+		a.win.look.Refresh(item)
 	}
 	if a.Surfaces.Imported != nil {
 		a.Surfaces.Imported(item)

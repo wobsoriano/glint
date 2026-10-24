@@ -68,21 +68,42 @@ func (v *Viewer) Open(item store.Item) {
 				})
 			})
 		} else {
-			go func() {
-				img, err := decode(item.Deliverable())
-				win.Update(func() {
-					if v.win == win && v.item.Dir == item.Dir {
-						v.err = err
-						if err == nil {
-							v.bmp = ui.NewBitmap(img)
-						}
-					}
-				})
-			}()
+			v.load(item)
 		}
 		win.Show()
 		win.Focus()
 	})
+}
+
+// Refresh shows a capture's saved edit when the window previews it. A recording keeps playing
+// as it is.
+func (v *Viewer) Refresh(item store.Item) {
+	mygo.RunOnMain(func() {
+		if v.win == nil || v.item.Dir != item.Dir {
+			return
+		}
+		v.item = item
+		v.win.SetTitle(item.Meta.Title)
+		if item.Kind() != store.Recording {
+			v.load(item)
+		}
+	})
+}
+
+// load decodes a screenshot into the open window.
+func (v *Viewer) load(item store.Item) {
+	win := v.win
+	go func() {
+		img, err := decode(item.Deliverable())
+		win.Update(func() {
+			if v.win == win && v.item.Dir == item.Dir {
+				v.err = err
+				if err == nil {
+					v.bmp = ui.NewBitmap(img)
+				}
+			}
+		})
+	}()
 }
 
 // Close closes the window, and reports whether it was open.
