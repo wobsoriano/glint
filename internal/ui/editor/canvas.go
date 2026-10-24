@@ -290,17 +290,20 @@ func (e *Editor) paintCanvas(p *ui.Painter, r ui.Rect, pal palette) {
 		cv.onDraw()
 	}
 	g := cv.geom
-	if s := cv.shown; s != nil && cv.bmp != nil {
-		at := g.fromCanvas(render.Pt{X: s.job.region.X, Y: s.job.region.Y})
-		end := g.fromCanvas(render.Pt{X: s.job.region.Right(), Y: s.job.region.Bottom()})
-		box := ui.Rect{X: r.X + at.X, Y: r.Y + at.Y, W: end.X - at.X, H: end.Y - at.Y}
-		if _, ok := s.job.doc.Style.Background.(render.NoBackground); ok {
-			p.Fill(box, ui.RGB(0x1A, 0x1A, 0x1D), 0)
+	// An element's Clip cuts its children, not what its own Draw paints.
+	p.Clip(r, 0, func() {
+		if s := cv.shown; s != nil && cv.bmp != nil {
+			at := g.fromCanvas(render.Pt{X: s.job.region.X, Y: s.job.region.Y})
+			end := g.fromCanvas(render.Pt{X: s.job.region.Right(), Y: s.job.region.Bottom()})
+			box := ui.Rect{X: r.X + at.X, Y: r.Y + at.Y, W: end.X - at.X, H: end.Y - at.Y}
+			if _, ok := s.job.doc.Style.Background.(render.NoBackground); ok {
+				p.Fill(box, ui.RGB(0x1A, 0x1A, 0x1D), 0)
+			}
+			p.Image(cv.bmp, box, ui.FillBox)
 		}
-		p.Image(cv.bmp, box, ui.FillBox)
-	}
-	e.paintSprites(p, r)
-	e.paintOverlays(p, r, pal)
+		e.paintSprites(p, r)
+		e.paintOverlays(p, r, pal)
+	})
 }
 
 func (e *Editor) paintSprites(p *ui.Painter, r ui.Rect) {

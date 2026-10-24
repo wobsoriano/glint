@@ -299,12 +299,12 @@ func (h *host) Pin(img *image.RGBA, dpi float32) error {
 		w, hh = w*k, hh*k
 	}
 	mygo.RunOnMain(func() {
-		mygo.NewWindow(mygo.WindowOptions{Title: "Glint pin", Width: int(w), Height: int(hh), Frameless: true, AlwaysOnTop: true,
+		mygo.NewWindow(mygo.WindowOptions{Title: "editordemo pin", Width: int(w), Height: int(hh), Frameless: true, AlwaysOnTop: true,
 			Content: ui.View(func(c *ui.Context) {
 				ui.Image(c, bmp).Fill().DragWindow()
 				if c.Shortcut(0, ui.KeyEscape) {
 					for _, win := range mygo.Windows() {
-						if win.Title() == "Glint pin" {
+						if win.Title() == "editordemo pin" {
 							win.Close()
 						}
 					}
@@ -447,4 +447,3 @@ func q(v []float64) string {
 	at := func(p float64) float64 { return s[min(len(s)-1, int(p*float64(len(s))))] }
 	return fmt.Sprintf("p50 %.2f, p90 %.2f, p99 %.2f, max %.2f ms", at(0.5), at(0.9), at(0.99), s[len(s)-1])
 }
-
