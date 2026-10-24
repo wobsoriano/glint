@@ -196,6 +196,7 @@ type engine struct {
 	current      *playRun
 	rendered     float64
 	haveRendered bool
+	renderErr    *string
 }
 
 // playRun is one run of playback: its clock and the audio output feeding it, nil when no audio
@@ -340,8 +341,15 @@ func (e *engine) run() {
 		img, err := e.render(e.position)
 		switch {
 		case err != nil:
-			p.setErr(err.Error())
+			msg := err.Error()
+			e.renderErr = &msg
+			p.err.Store(e.renderErr)
 		default:
+			// A frame that renders again clears its own error, but not an audio one.
+			if e.renderErr != nil {
+				p.err.CompareAndSwap(e.renderErr, nil)
+				e.renderErr = nil
+			}
 			p.frames.put(shownFrame{img: img, outputMs: e.position, clockMs: clock, composeMs: float64(time.Since(began).Microseconds()) / 1000})
 			if p.onFrame != nil {
 				p.onFrame()
