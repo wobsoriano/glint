@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"io"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -23,11 +24,7 @@ type player struct {
 	shown   atomic.Int64
 	posMS   atomic.Int64
 	playing atomic.Bool
-	// audible is set while the audio output plays the recording's sound.
-	audible atomic.Bool
 	err     atomic.Pointer[error]
-	// audioErr is why the recording plays without sound, when it has sound to play.
-	audioErr atomic.Pointer[error]
 }
 
 // ring is how many frames are in flight: ui.Bitmap.Update keeps the image it is given until the
@@ -73,7 +70,7 @@ type speaker struct {
 
 // speak starts the sound at ms. Without sound, or when the output fails, the clock is the
 // wall clock and the picture plays on.
-func (p *player) speak(track *playback.Soundtrack, ms int64) *speaker {
+func speak(track *playback.Soundtrack, ms int64) *speaker {
 	s := &speaker{track: track}
 	if track != nil {
 		err := track.SeekMS(ms)
@@ -81,12 +78,11 @@ func (p *player) speak(track *playback.Soundtrack, ms int64) *speaker {
 			s.out, err = playback.StartAudioOutput(track.Fill)
 		}
 		if err != nil {
-			p.audioErr.Store(&err)
+			log.Printf("quicklook: playing without sound: %v", err)
 			s.track = nil
 		}
 	}
 	s.clock = playback.NewClock(ms, s.out)
-	p.audible.Store(s.out != nil)
 	return s
 }
 
@@ -96,11 +92,10 @@ func (s *speaker) topUp() {
 	}
 }
 
-func (s *speaker) close(p *player) {
+func (s *speaker) close() {
 	if s.out != nil {
 		s.out.Close()
 	}
-	p.audible.Store(false)
 }
 
 func (p *player) run(ctx context.Context, item store.Item, show func(*image.RGBA)) error {
@@ -113,33 +108,33 @@ func (p *player) run(ctx context.Context, item store.Item, show func(*image.RGBA
 	sound, closeSound, err := openSound(item)
 	switch {
 	case err != nil:
-		p.audioErr.Store(&err)
+		log.Printf("quicklook: playing without sound: %v", err)
 	case sound != nil:
 		defer closeSound()
 		track = playback.NewSoundtrack(sound)
 	}
 	var frames [ring]*image.RGBA
 	pos := int64(0)
-	sp := p.speak(track, pos)
-	defer func() { sp.close(p) }()
+	sp := speak(track, pos)
+	defer func() { sp.close() }()
 	for n := 0; ; n++ {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-p.toggle:
-			sp.close(p)
+			sp.close()
 			p.playing.Store(false)
 			if err := p.wait(ctx); err != nil {
 				return err
 			}
 			p.playing.Store(true)
-			sp = p.speak(track, pos)
+			sp = speak(track, pos)
 		default:
 		}
 		sp.topUp()
 		f, err := r.NextFrame()
 		if errors.Is(err, io.EOF) {
-			sp.close(p)
+			sp.close()
 			p.playing.Store(false)
 			if err := p.wait(ctx); err != nil {
 				return err
@@ -149,7 +144,7 @@ func (p *player) run(ctx context.Context, item store.Item, show func(*image.RGBA
 			}
 			p.playing.Store(true)
 			pos = 0
-			sp = p.speak(track, pos)
+			sp = speak(track, pos)
 			continue
 		}
 		if err != nil {

@@ -111,20 +111,6 @@ func (v *Viewer) Frames() (n, ms int64) {
 	return n, ms
 }
 
-// Audible reports whether a recording's sound is playing on the output device now, and why
-// it plays without sound when it has some.
-func (v *Viewer) Audible() (on bool, err error) {
-	mygo.RunOnMain(func() {
-		if v.player != nil {
-			on = v.player.audible.Load()
-			if e := v.player.audioErr.Load(); e != nil {
-				err = *e
-			}
-		}
-	})
-	return on, err
-}
-
 func (v *Viewer) stopPlayer() {
 	if v.player != nil {
 		v.player.stop()
