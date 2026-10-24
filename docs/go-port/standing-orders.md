@@ -24,7 +24,8 @@ Read `docs/go-port/plan.md` first. These orders hold for every unit of the rewri
    (Glide, Click, DClick, Drag, Keys, TypeText, Shot, Win, Place, Front) are in
    `tools/drive/drive.ps1`. Dot-source that file only. Do not use `promo/real/lib.ps1`: it
    launches and kills the Rust Glint. Name your own variables so they cannot be mistaken
-   for the app you test, and never start `targetelease\glint.exe` (the Rust build), which
+   for the app you test, and never start `target
+elease\glint.exe` (the Rust build), which
    writes to the real Library.
 7. Before you report done, run `gofmt -l`, `go vet ./...`, `go build ./...`,
    `GOOS=darwin GOARCH=arm64 go build ./...` and `go test` for your packages. All must be clean.
