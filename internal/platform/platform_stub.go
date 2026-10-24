@@ -19,9 +19,6 @@ func Windows() ([]Window, error) { return nil, ErrUnsupported }
 // CursorPos is the pointer in physical pixels of the virtual desktop.
 func CursorPos() (int, int) { return 0, 0 }
 
-// Recognize finds the lines of text in img with the OS's own engine, in no particular order.
-func Recognize(img *image.RGBA) ([]OCRLine, error) { return nil, ErrUnsupported }
-
 // ExcludeFromCapture keeps the native window out of screenshots and recordings, or lets it in.
 func ExcludeFromCapture(handle uintptr, exclude bool) error { return ErrUnsupported }
 

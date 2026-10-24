@@ -22,7 +22,8 @@ The rewrite is done when all of the following hold:
 | Package | Owns | Ported from |
 | --- | --- | --- |
 | `main.go` | flags, single instance, `App.Run` | `src/main.rs`, `src/ipc.rs` |
-| `internal/platform` | screen pixels, windows list, OCR, capture exclusion, wallpaper, launch at login | `src/sys/*`, `src/capture.rs`, `src/ocr.rs` |
+| `internal/platform` | screen pixels, windows list, capture exclusion, wallpaper, launch at login | `src/sys/*`, `src/capture.rs` |
+| `internal/ocr` | text recognition with the OS engine, reading order | `src/ocr.rs`, `src/sys/*/ocr.rs` |
 | `internal/settings` | `settings.json`, `presets.json`, data dir, `GLINT_DATA_DIR` | `src/settings.rs` |
 | `internal/store` | the Library on disk: `CaptureMeta`, ids, import, thumbnails, rename, trash | `src/store.rs`, `src/library.rs` |
 | `internal/render` | CPU compositor: styles, backgrounds, effects, annotations, `EditDoc` | `crates/glint-render` |

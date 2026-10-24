@@ -1,12 +1,9 @@
 // Package platform reaches the operating system for what MyGo does not cover: the screen's
-// pixels, the windows on it, text recognition, keeping Glint's windows out of captures, the
+// pixels, the windows on it, keeping Glint's windows out of captures, the
 // wallpaper and launching at login. Every OS implements the same functions in its own files.
 package platform
 
-import (
-	"errors"
-	"sort"
-)
+import "errors"
 
 // ErrUnsupported is returned where the running OS has no implementation yet.
 var ErrUnsupported = errors.ErrUnsupported
@@ -45,25 +42,4 @@ type Window struct {
 	PID   int
 	// Bounds is the visible frame, without the invisible resize borders Windows adds.
 	Bounds Rect
-}
-
-// OCRLine is one recognized line of text, with its bounds in the recognized image's pixels.
-type OCRLine struct {
-	Text   string
-	Bounds Rect
-}
-
-// ReadingOrder sorts lines top to bottom, and lines that share a row left to right, so text
-// in columns reads column by column only when the columns do not share rows.
-func ReadingOrder(lines []OCRLine) []OCRLine {
-	out := append([]OCRLine(nil), lines...)
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i].Bounds, out[j].Bounds
-		overlap := min(a.Y+a.H, b.Y+b.H) - max(a.Y, b.Y)
-		if overlap > min(a.H, b.H)/2 {
-			return a.X < b.X
-		}
-		return a.Y < b.Y
-	})
-	return out
 }
