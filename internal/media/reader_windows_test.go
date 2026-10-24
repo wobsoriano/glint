@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/wobsoriano/glint/internal/media/internal/mf"
 )
 
 func TestReaderSeeksToTheRightFrame(t *testing.T) {
@@ -79,6 +81,53 @@ func TestReaderPlaysToTheEndAfterSeeking(t *testing.T) {
 	}
 	if n != 15 {
 		t.Fatalf("decoded %d frames from 3.5 s to the end, want 15", n)
+	}
+}
+
+// The last of 120 frames at 30 fps starts at 3966 ms and shows until the track ends at
+// 4000 ms, so a seek anywhere from there to past the end lands on it.
+func TestReaderSeekPastTheLastFrameLandsOnIt(t *testing.T) {
+	f := writeFixture(t, "1080p30.mp4", 1920, 1080, 30, 120, true, false)
+	readers := map[string]func() (*FrameReader, error){
+		"default": func() (*FrameReader, error) { return OpenFrameReader(f.path) },
+		"software": func() (*FrameReader, error) {
+			if err := mf.Startup(); err != nil {
+				return nil, err
+			}
+			leave, err := mf.Enter()
+			if err != nil {
+				return nil, err
+			}
+			defer leave()
+			return openFrameReader(f.path, nil)
+		},
+	}
+	for name, open := range readers {
+		r, err := open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, target := range []int64{3990, 4000, 4500, 3990} {
+			if err := r.SeekMS(target); err != nil {
+				t.Fatal(err)
+			}
+			frame, err := r.NextFrame()
+			if err != nil {
+				t.Errorf("%s: seek to %d ms: %v", name, target, err)
+				continue
+			}
+			if want := int64(119 * 1000 / 30); frame.TMS != want {
+				t.Errorf("%s: seek to %d ms gave the frame at %d ms, want %d", name, target, frame.TMS, want)
+			}
+			if right, before := psnr(pattern(119, f.w, f.h), frame.ToRGBA(nil)), psnr(pattern(118, f.w, f.h), frame.ToRGBA(nil)); right < before+3 {
+				t.Errorf("%s: seek to %d ms: PSNR %.2f dB against the last frame, %.2f against the one before", name, target, right, before)
+			}
+			frame.Release()
+			if _, err := r.NextFrame(); err != io.EOF {
+				t.Errorf("%s: after the last frame NextFrame gave %v, want io.EOF", name, err)
+			}
+		}
+		r.Close()
 	}
 }
 

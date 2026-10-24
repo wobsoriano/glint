@@ -204,31 +204,44 @@ func (e *editor) exportOverlay(c *ui.Context, pal theme.Palette) {
 	if _, closed := e.export.(exportClosed); closed {
 		return
 	}
-	// The scrim takes presses so nothing behind the card reacts; the card is its sibling, not
-	// its child, or the scrim would take the card's presses too.
-	ui.Box(c.Key("export-overlay")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
-		ui.Box(c.Key("export-scrim")).Fill().Background(ui.RGBA(0, 0, 0, 0.5)).
-			HandleInput(func(ev ui.InputEvent) bool { return ev.Kind == ui.InputPointerDown })
-		ui.Column(c.Key("export-card")).Attach(ui.AnchorCenter, ui.AnchorCenter).Width(440).Padding(20).Gap(12).Radius(theme.RadiusWindow).Background(pal.Flyout).Border(1, pal.Border).
-			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Children(func() {
-			switch s := e.export.(type) {
-			case *exportDialog:
-				e.exportDialog(c, s, pal)
-			case *exportRunning:
-				title := "Exporting…"
-				if s.job == jobCopy {
-					title = "Rendering for the clipboard…"
-				}
-				ui.Text(c, title).FontSize(15).FontWeight(theme.Semibold)
-				progressBar(c, s.progress, "Export progress", pal)
-				ui.Row(c).Children(func() {
-					ui.Text(c, fmt.Sprintf("%.0f%%", s.progress*100)).FontSize(13).TextColor(pal.Muted).Grow(1)
-					if button(c, "export-cancel", "Cancel", noIcon, false, pal).Clicked() {
-						e.cancelExport()
+	// The overlay is modal so the keyboard stays with the dialog: the field or button that had
+	// the focus behind it would otherwise take Enter. The card holds the focus itself, since
+	// a focused chip would take Enter too, and the chips leave it there when clicked.
+	ui.Overlay(c, func() {
+		back := ui.Box(c.Key("export-overlay")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Modal()
+		escape, enter := back.OverlayShortcut(0, ui.KeyEscape), back.OverlayShortcut(0, ui.KeyEnter)
+		// The scrim takes presses so nothing behind the card reacts; the card is its sibling,
+		// not its child, or the scrim would take the card's presses too.
+		back.Children(func() {
+			ui.Box(c.Key("export-scrim")).Fill().Background(ui.RGBA(0, 0, 0, 0.5)).
+				HandleInput(func(ev ui.InputEvent) bool { return ev.Kind == ui.InputPointerDown })
+			ui.Column(c.Key("export-card")).Attach(ui.AnchorCenter, ui.AnchorCenter).Width(440).Padding(20).Gap(12).Radius(theme.RadiusWindow).Background(pal.Flyout).Border(1, pal.Border).
+				Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Focusable().FocusRing(false).AutoFocus().Children(func() {
+				switch s := e.export.(type) {
+				case *exportDialog:
+					e.exportDialog(c, s, pal)
+				case *exportRunning:
+					title := "Exporting…"
+					if s.job == jobCopy {
+						title = "Rendering for the clipboard…"
 					}
-				})
-			}
+					ui.Text(c, title).FontSize(15).FontWeight(theme.Semibold)
+					progressBar(c, s.progress, "Export progress", pal)
+					ui.Row(c).Children(func() {
+						ui.Text(c, fmt.Sprintf("%.0f%%", s.progress*100)).FontSize(13).TextColor(pal.Muted).Grow(1)
+						if button(c, "export-cancel", "Cancel", noIcon, false, pal).Clicked() {
+							e.cancelExport()
+						}
+					})
+				}
+			})
 		})
+		switch {
+		case escape:
+			e.cancelExport()
+		case enter:
+			e.runJob(jobExport)
+		}
 	})
 }
 

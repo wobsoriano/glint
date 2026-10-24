@@ -72,6 +72,33 @@ func TestFeedServesFramesBySourceTime(t *testing.T) {
 	}
 }
 
+// The track's last frame starts at 1966.7 ms and shows until its end at 2000 ms, where a
+// timeline ends when its last clip runs to the end of the recording.
+func TestFeedShowsTheLastFrameAtTheEndOfTheTrack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "screen.mp4")
+	writeCountingScreen(t, path)
+	for _, steps := range [][]float64{{2_000}, {1_990}, {0, 2_000}, {1_990, 500, 2_000}, {2_000, 2_000}} {
+		feed, err := OpenFeed(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ms := range steps {
+			f, err := feed.FrameAt(ms)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f == nil {
+				t.Errorf("steps %v: no frame at %v ms", steps, ms)
+				continue
+			}
+			if want := min(int(ms*30/1000+0.5), testFrames-1); frameIndex(f) != want {
+				t.Errorf("steps %v: frame at %v ms is %d, want %d", steps, ms, frameIndex(f), want)
+			}
+		}
+		feed.Close()
+	}
+}
+
 func testSession(t *testing.T) *Session {
 	t.Helper()
 	dir := t.TempDir()

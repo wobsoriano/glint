@@ -160,13 +160,16 @@ func (fr *FrameReader) Size() (width, height int) { return fr.width, fr.height }
 func (fr *FrameReader) FPS() float64              { return fr.fps }
 func (fr *FrameReader) DurationMS() int64         { return fr.durationMS }
 
-// SeekMS positions the reader so the next frame is the first one at or after ms.
+// SeekMS positions the reader so the next frame is the first one at or after ms, or the
+// last frame when ms is past its start: that frame is still on screen until the track ends.
 func (fr *FrameReader) SeekMS(ms int64) error {
 	leave, err := mf.Enter()
 	if err != nil {
 		return err
 	}
 	defer leave()
+	// Media Foundation refuses a position past the duration.
+	ms = min(ms, fr.durationMS)
 	if err := fr.r.SetPosition(ms * 10_000); err != nil {
 		return err
 	}
@@ -182,14 +185,30 @@ func (fr *FrameReader) NextFrame() (*Nv12Frame, error) {
 	}
 	defer leave()
 	halfFrame := int64(500 / max(fr.fps, 1))
+	// skipped is the latest frame a seek passed over, kept in case the track ends before the
+	// seek's target.
+	var skipped mf.Sample
+	var skippedT int64
+	defer func() {
+		if !skipped.IsNil() {
+			skipped.Release()
+		}
+	}()
 	for {
 		sample, t, err := fr.readSample()
+		if errors.Is(err, io.EOF) && !skipped.IsNil() {
+			fr.skipUntil = noSkip
+			return fr.copyOut(skippedT, skipped)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if fr.skipUntil != noSkip {
 			if t+halfFrame < fr.skipUntil {
-				sample.Release()
+				if !skipped.IsNil() {
+					skipped.Release()
+				}
+				skipped, skippedT = sample, t
 				continue
 			}
 			fr.skipUntil = noSkip

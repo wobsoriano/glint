@@ -1,6 +1,7 @@
 # Studio on the transcribed session from transcribe.ps1: the transcript's Edit video tab (a
 # word cut and filler removal), a clip's speed set to 2x, the clip's end trimmed by dragging,
-# undo and redo, a Studio preset saved, and an export whose length shows the cuts. Studio is
+# undo and redo, the playhead at the end with no player error, a Studio preset saved, and an
+# export started with Enter whose length shows the cuts. Studio is
 # placed at 0,0 1440x900; screenshots record every step.
 param([switch] $Explore)
 . "$PSScriptRoot\..\..\internal\app\cmd\glintcheck\scenarios\common.ps1"
@@ -35,6 +36,21 @@ function Transcript-Words {
     , $words
 }
 function Mid($word) { [int](($word[0] + $word[1]) / 2) }
+# Red-pink pixels where the player writes an error, above the preview's top right corner, such
+# as "screen.mp4 has no frames": none while frames come.
+function Player-Error {
+    $bmp = New-Object Drawing.Bitmap 152, 15
+    $gr = [Drawing.Graphics]::FromImage($bmp); $gr.CopyFromScreen(960, 58, 0, 0, $bmp.Size); $gr.Dispose()
+    $red = 0
+    for ($x = 0; $x -lt $bmp.Width; $x++) {
+        for ($y = 0; $y -lt $bmp.Height; $y++) {
+            $c = $bmp.GetPixel($x, $y)
+            if ($c.R - [math]::Max($c.G, $c.B) -gt 40) { $red++ }
+        }
+    }
+    $bmp.Dispose()
+    $red
+}
 try {
     if (-not (Wait-Until { (Win $win) -ne [IntPtr]::Zero } 8000)) { throw "Studio did not open: $win" }
     Start-Sleep -Milliseconds 2000
@@ -84,6 +100,11 @@ try {
     Start-Sleep -Milliseconds 2000
     Shot "$dir\17-trimmed.png"
     "after the trim: $(Summary)"
+    Step 'the playhead at the end of the timeline'
+    [Promo.In]::keybd_event(0x23, 0, 0, [UIntPtr]::Zero); [Promo.In]::keybd_event(0x23, 0, 2, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 1000
+    Shot "$dir\17b-end.png"
+    "player error pixels: $(Player-Error)"
     Step 'save a Studio preset'
     Click 1400 72 150; Start-Sleep -Milliseconds 400
     Click 1230 237 200; TypeText 'Verify preset' 30
@@ -93,7 +114,10 @@ try {
     Step 'export: its length follows the cuts'
     $n = @(Get-ChildItem "$dir\exports\*.mp4" -ErrorAction SilentlyContinue).Count
     Keys 'Ctrl+E'; Start-Sleep -Milliseconds 700; Shot "$dir\19-export.png"; Keys 'Enter'
-    Wait-Until { @(Get-ChildItem "$dir\exports\*.mp4" -ErrorAction SilentlyContinue).Count -gt $n } 120000 | Out-Null
+    if (-not (Wait-Until { @(Get-ChildItem "$dir\exports\*.mp4" -ErrorAction SilentlyContinue).Count -gt $n } 120000)) {
+        Shot "$dir\19b-no-export.png"
+        throw 'Enter in the export dialog wrote no MP4 in 120 s'
+    }
     Start-Sleep -Milliseconds 800
     Get-ChildItem "$dir\exports\*.mp4" | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Check probe -file $_.FullName }
     $p = Project

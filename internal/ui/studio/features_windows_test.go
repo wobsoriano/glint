@@ -228,6 +228,39 @@ func TestExportCancelLeavesNoFileThenExportsTheTimeline(t *testing.T) {
 	}
 }
 
+// The preset name keeps the focus after Save preset is clicked, and it takes Enter; the
+// export dialog opened over it still has to.
+func TestExportDialogTakesEnterAndEscapeWhateverHadTheFocus(t *testing.T) {
+	e, sh, _, tt, _ := testStudio(t)
+	click(t, tt, "Presets")
+	click(t, tt, "Preset name")
+	tt.Type("Look")
+	click(t, tt, "Save preset")
+	presets, zooms := len(e.presetList), len(e.project().Zooms)
+
+	tt.Key(ui.Cmd, ui.KeyE)
+	tt.Key(0, ui.KeyEscape)
+	if _, closed := e.export.(exportClosed); !closed {
+		t.Fatalf("Escape left the export dialog as %T", e.export)
+	}
+
+	tt.Key(ui.Cmd, ui.KeyE)
+	click(t, tt, "720p")
+	tt.Key(0, ui.KeyZ)
+	tt.Key(0, ui.KeyEnter)
+	if !e.exportRunning() {
+		t.Fatalf("Enter left the export as %T", e.export)
+	}
+	if len(e.presetList) != presets || e.presetName != "" || len(e.project().Zooms) != zooms {
+		t.Errorf("keys reached behind the dialog: %d presets, want %d; preset name %q; %d zooms, want %d", len(e.presetList), presets, e.presetName, len(e.project().Zooms), zooms)
+	}
+	tt.Key(0, ui.KeyEscape)
+	settle(t, e, sh, tt, func() bool { return !e.exportRunning() })
+	if e.notice == nil || e.notice.text != "Export cancelled" {
+		t.Errorf("notice after Escape during the export: %+v", e.notice)
+	}
+}
+
 func TestCursorAudioBackgroundAndExportChoices(t *testing.T) {
 	e, _, _, tt, _ := testStudio(t)
 	click(t, tt, "Cursor")
