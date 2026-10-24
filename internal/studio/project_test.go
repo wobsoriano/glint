@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
 
@@ -202,7 +203,7 @@ func TestPresetsRoundTripAndDefaultAppliesToNewProjects(t *testing.T) {
 	eq(t, len(store.List()), 0)
 
 	design := DefaultDesign()
-	design.Background = json.RawMessage(`{"Solid":287454207}`)
+	design.Background = render.SolidBackground{Color: 287454207}
 	design.Padding = 0.1
 	design.Cursor.Size = 2.5
 	design.Camera = CameraSettings{Visible: false, Center: [2]float32{0.1, 0.2}, Size: 0.3, Roundness: 0.1}
@@ -226,8 +227,6 @@ func TestPresetsRoundTripAndDefaultAppliesToNewProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sameJSON(t, loaded.Design.Background, design.Background)
-	loaded.Design.Background = design.Background
 	eq(t, loaded.Design, design)
 
 	if _, ok := store.DefaultPreset(); ok {

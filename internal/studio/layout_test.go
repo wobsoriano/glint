@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/wobsoriano/glint/internal/render"
 )
 
 // monoMeasure stands in for the font: every character is half the size wide.
@@ -33,7 +35,7 @@ func TestFillOverflowsTheCardOnOneAxis(t *testing.T) {
 	p.Aspect, p.AspectMode = AspectVertical9x16, AspectFill
 	p.Design.Padding = 0
 	l := FrameLayout(&p, 2560, 1440, 1080, 1920)
-	eq(t, l.Card, Rect{0, 0, 1080, 1920})
+	eq(t, l.Card, render.R{X: 0, Y: 0, W: 1080, H: 1920})
 	eq(t, l.FillH, 1920.0)
 	if l.FillW <= 1080 {
 		t.Fatalf("fill width %v should overflow the card", l.FillW)
@@ -58,16 +60,16 @@ func TestCameraBubbleStaysOnCanvas(t *testing.T) {
 }
 
 func TestKeystrokeMovesClearOfTheCaptionBar(t *testing.T) {
-	card := Rect{0, 0, 1920, 1080}
+	card := render.R{X: 0, Y: 0, W: 1920, H: 1080}
 	key := KeyFrame{Modifiers: "Ctrl+", Key: "S", Opacity: 1, Scale: 1}
 	margin := min(card.W, card.H) * 0.045
 	free := LayoutKeystroke(card, KeysBottomCenter, key, nil, monoMeasure)
 	if free.Rect.Bottom() != card.Bottom()-margin {
 		t.Fatalf("bottom margin: %+v", free.Rect)
 	}
-	bar := Rect{600, free.Rect.Y + 5, 720, 80}
+	bar := render.R{X: 600, Y: free.Rect.Y + 5, W: 720, H: 80}
 	moved := LayoutKeystroke(card, KeysBottomCenter, key, &bar, monoMeasure)
-	if moved.Rect.Bottom() > bar.Y || moved.Rect.overlaps(bar) {
+	if moved.Rect.Bottom() > bar.Y || overlaps(moved.Rect, bar) {
 		t.Fatalf("keystroke %+v overlaps caption bar %+v", moved.Rect, bar)
 	}
 	top := LayoutKeystroke(card, KeysTopLeft, key, &bar, monoMeasure)

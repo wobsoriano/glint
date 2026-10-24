@@ -33,7 +33,9 @@ func (GradientBackground) isBackground() {}
 func (BlurredBackground) isBackground()  {}
 func (ImageBackground) isBackground()    {}
 
-func marshalBackground(b Background) ([]byte, error) {
+// MarshalBackground writes b as serde writes glint-render's `Background` enum. A nil b is
+// NoBackground.
+func MarshalBackground(b Background) ([]byte, error) {
 	switch b := b.(type) {
 	case nil, NoBackground:
 		return []byte(`"None"`), nil
@@ -49,7 +51,8 @@ func marshalBackground(b Background) ([]byte, error) {
 	return nil, fmt.Errorf("unknown background %T", b)
 }
 
-func unmarshalBackground(data []byte) (Background, error) {
+// ParseBackground reads a Background as MarshalBackground writes it.
+func ParseBackground(data []byte) (Background, error) {
 	var unit string
 	if json.Unmarshal(data, &unit) == nil {
 		switch unit {
@@ -76,11 +79,17 @@ func unmarshalBackground(data []byte) (Background, error) {
 			}
 			return SolidBackground{c}, nil
 		case "Gradient":
-			var g Gradient
+			var g struct {
+				Stops *[]Color `json:"stops"`
+				Angle *float32 `json:"angle"`
+			}
 			if err := strictUnmarshal(v, &g); err != nil {
 				return nil, err
 			}
-			return GradientBackground{g}, nil
+			if g.Stops == nil || g.Angle == nil {
+				return nil, fmt.Errorf("gradient background needs stops and angle")
+			}
+			return GradientBackground{Gradient{*g.Stops, *g.Angle}}, nil
 		case "Image":
 			var p string
 			if err := strictUnmarshal(v, &p); err != nil {
@@ -195,7 +204,7 @@ type styleJSON struct {
 }
 
 func (s Style) MarshalJSON() ([]byte, error) {
-	bg, err := marshalBackground(s.Background)
+	bg, err := MarshalBackground(s.Background)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +220,7 @@ func (s *Style) UnmarshalJSON(data []byte) error {
 	bg := d.Background
 	if j.Background != nil && string(j.Background) != "null" {
 		var err error
-		if bg, err = unmarshalBackground(j.Background); err != nil {
+		if bg, err = ParseBackground(j.Background); err != nil {
 			return err
 		}
 	}

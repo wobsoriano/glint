@@ -43,7 +43,7 @@ func (p *Preset) UnmarshalJSON(data []byte) error {
 
 func (p Preset) Apply(project *Project) {
 	project.Design = p.Design
-	project.Design.Background = slices.Clone(p.Design.Background)
+	project.Design.Background = cloneBackground(p.Design.Background)
 }
 
 type PresetStore struct{ dir string }

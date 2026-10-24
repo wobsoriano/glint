@@ -9,6 +9,8 @@ import (
 	"math"
 	"path/filepath"
 	"slices"
+
+	"github.com/wobsoriano/glint/internal/render"
 )
 
 const (
@@ -83,7 +85,7 @@ func (p Project) Clone() Project {
 	p.Clips = slices.Clone(p.Clips)
 	p.Zooms = slices.Clone(p.Zooms)
 	p.CaptionCues = slices.Clone(p.CaptionCues)
-	p.Design.Background = slices.Clone(p.Design.Background)
+	p.Design.Background = cloneBackground(p.Design.Background)
 	return p
 }
 
@@ -282,9 +284,7 @@ func (f *ZoomFocus) UnmarshalJSON(data []byte) error {
 }
 
 type Design struct {
-	// Background is glint-render's `style::Background`, kept as raw JSON until internal/render
-	// exports the type. Replace with render.Background.
-	Background json.RawMessage `json:"background"`
+	Background render.Background `json:"-"`
 	// Card inset as a fraction of the canvas's short side.
 	Padding float32 `json:"padding"`
 	// Card corner radius as a fraction of the canvas's short side.
@@ -295,12 +295,9 @@ type Design struct {
 	Camera CameraSettings `json:"camera"`
 }
 
-// defaultBackground is `Background::Gradient(GRADIENTS[0])`, the Aurora gradient.
-const defaultBackground = `{"Gradient":{"stops":[1667691007,2824206335,3964180991],"angle":135.0}}`
-
 func DefaultDesign() Design {
 	return Design{
-		Background:   json.RawMessage(defaultBackground),
+		Background:   cloneBackground(render.GradientBackground{Gradient: render.Gradients[0].Gradient}),
 		Padding:      0.06,
 		CornerRadius: 0.02,
 		Shadow:       0.45,
@@ -309,59 +306,45 @@ func DefaultDesign() Design {
 	}
 }
 
+func (d Design) MarshalJSON() ([]byte, error) {
+	type plain Design
+	bg, err := render.MarshalBackground(d.Background)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Background json.RawMessage `json:"background"`
+		plain
+	}{bg, plain(d)})
+}
+
 func (d *Design) UnmarshalJSON(data []byte) error {
 	type plain Design
 	v := plain(DefaultDesign())
-	if err := json.Unmarshal(data, &v); err != nil {
+	wire := struct {
+		Background json.RawMessage `json:"background"`
+		*plain
+	}{plain: &v}
+	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	if err := checkBackground(v.Background); err != nil {
-		return err
+	if wire.Background != nil {
+		bg, err := render.ParseBackground(wire.Background)
+		if err != nil {
+			return fmt.Errorf("background: %w", err)
+		}
+		v.Background = bg
 	}
 	*d = Design(v)
 	return nil
 }
 
-// checkBackground rejects what serde would reject for the externally tagged Background enum,
-// so a broken file is caught on read instead of at render time.
-func checkBackground(raw json.RawMessage) error {
-	var unit string
-	if json.Unmarshal(raw, &unit) == nil {
-		switch unit {
-		case "None", "Blurred":
-			return nil
-		}
-		return fmt.Errorf("unknown background variant `%s`", unit)
+func cloneBackground(b render.Background) render.Background {
+	if g, ok := b.(render.GradientBackground); ok {
+		g.Gradient.Stops = slices.Clone(g.Gradient.Stops)
+		return g
 	}
-	var tagged map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &tagged); err != nil || len(tagged) != 1 {
-		return fmt.Errorf("invalid background %s", raw)
-	}
-	for tag, body := range tagged {
-		var err error
-		switch tag {
-		case "Solid":
-			var c uint32
-			err = json.Unmarshal(body, &c)
-		case "Gradient":
-			if err = requireKeys(body, "stops", "angle"); err == nil {
-				var g struct {
-					Stops []uint32 `json:"stops"`
-					Angle float32  `json:"angle"`
-				}
-				err = json.Unmarshal(body, &g)
-			}
-		case "Image":
-			var path string
-			err = json.Unmarshal(body, &path)
-		default:
-			err = fmt.Errorf("unknown background variant `%s`", tag)
-		}
-		if err != nil {
-			return fmt.Errorf("background %s: %w", tag, err)
-		}
-	}
-	return nil
+	return b
 }
 
 type CursorSettings struct {
