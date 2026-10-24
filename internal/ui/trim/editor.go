@@ -648,4 +648,3 @@ func iconButton(c *ui.Context, label string, icon theme.IconName, primary bool) 
 		ui.Text(c, label).SingleLine()
 	})
 }
-
