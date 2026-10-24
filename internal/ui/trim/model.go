@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/wobsoriano/glint/internal/media"
+	"github.com/wobsoriano/glint/internal/studio"
 )
 
 // VideoExtensions are the files Trim & Compress opens.
@@ -84,9 +85,9 @@ func (q Quality) Label() string {
 	return [...]string{"High", "Medium", "Small"}[q]
 }
 
-// bitsPerPixel is Studio's export rate for the quality: High, Medium and Low there.
-func (q Quality) bitsPerPixel() float64 {
-	return [...]float64{0.1, 0.065, 0.04}[q]
+// studio is Studio's export quality of the same rate: High, Medium and Low there.
+func (q Quality) studio() studio.Quality {
+	return [...]studio.Quality{studio.QualityHigh, studio.QualityMedium, studio.QualityLow}[q]
 }
 
 type Options struct {
@@ -111,14 +112,10 @@ func OutputSize(w, h int, r Resolution) (int, int) {
 	return w &^ 1, h &^ 1
 }
 
-// bitrate is Studio's export bitrate: bits per pixel per frame, clamped to 1.5..80 Mbps.
-func bitrate(w, h, fps int, q Quality) int {
-	return int(min(max(float64(w)*float64(h)*float64(fps)*q.bitsPerPixel(), 1_500_000), 80_000_000))
-}
-
+// videoBitrate is Studio's export bitrate for the output size, as the Rust build's was.
 func videoBitrate(src Source, opts Options) int {
 	w, h := OutputSize(src.Width, src.Height, opts.Resolution)
-	return bitrate(w, h, src.FPS, opts.Quality)
+	return studio.Bitrate(uint32(w), uint32(h), uint32(src.FPS), opts.Quality.studio())
 }
 
 // EstimateBytes is the output's size at the encoder's target rates.
