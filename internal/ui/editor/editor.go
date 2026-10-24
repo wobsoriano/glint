@@ -130,6 +130,9 @@ func Open(o Options) *Editor {
 	return e
 }
 
+// Window is the editor's window, for the app to raise or place it.
+func (e *Editor) Window() *mygo.Window { return e.win }
+
 func (e *Editor) toast(msg string) { e.toasts = append(e.toasts, msg) }
 
 // async runs slow work off the main thread; without a window, as in tests, it runs at once.

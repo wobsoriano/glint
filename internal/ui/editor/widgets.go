@@ -80,7 +80,7 @@ func swatch(c *ui.Context, key any, colors []render.Color, selected bool, sz flo
 	}
 	clicked := b.Clicked()
 	b.Children(func() {
-		inner := ui.Box(c).Fill().Radius(sz * 0.22).Border(1, pal.Border)
+		inner := ui.Box(c).Fill().Radius(sz*0.22).Border(1, pal.Border)
 		if len(colors) >= 2 {
 			stops := make([]ui.GradientStop, len(colors))
 			for i, col := range colors {

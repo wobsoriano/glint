@@ -604,7 +604,9 @@ func (e *Editor) backgroundSection(c *ui.Context, pal palette) {
 			})
 			if v, ok := slider(c, "hue", "Custom hue", float32(e.hue), 0, 360, bg.Color.Hex(), pal); ok {
 				e.hue = float64(v)
-				m.edit("hue", func(d *render.EditDoc) { d.Style.Background = render.SolidBackground{Color: render.FromHSL(v, 0.7, 0.62)} })
+				m.edit("hue", func(d *render.EditDoc) {
+					d.Style.Background = render.SolidBackground{Color: render.FromHSL(v, 0.7, 0.62)}
+				})
 			}
 		case render.ImageBackground:
 			if len(walls) == 0 {
