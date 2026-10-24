@@ -59,6 +59,7 @@ func (a *App) buildTray() {
 		return
 	}
 	a.tray = tray
+	log.Printf("app: tray icon at %+v", tray.Bounds())
 	// MyGo reports each click's release and no double click, so two clicks within the
 	// system's double-click time are one (docs/go-port/mygo-findings.md, section 4).
 	tray.OnClick(func() {

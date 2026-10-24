@@ -66,8 +66,9 @@ func width(msg string) int {
 
 func (t *Toast) view(c *ui.Context) {
 	p := theme.Apply(c)
-	c.Root().Background(ui.Transparent)
-	ui.Row(c).Fill().Margin(6).Padding(0, 16).Gap(8).AlignItems(ui.Center).Radius(theme.RadiusPill).
+	// The inset is the root's padding: a filling row with a margin overflows the window.
+	c.Root().Background(ui.Transparent).Padding(6)
+	ui.Row(c).Fill().Padding(0, 16).Gap(8).AlignItems(ui.Center).Radius(theme.RadiusPill).
 		Background(p.Flyout).Border(1, p.Border).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.25)).Children(func() {
 		ui.Icon(c, theme.Icon(theme.IconSparkles)).Size(15, 15).TextColor(p.Accent)
 		ui.Text(c, t.msg).SingleLine().Shrink(1).TextColor(p.Text)
