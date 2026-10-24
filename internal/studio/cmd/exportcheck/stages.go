@@ -67,7 +67,7 @@ func stages(work, src, rust, profilePath string, runs int) error {
 		}
 		wall := time.Since(t0)
 		r.fps = append(r.fps, float64(n)/wall.Seconds())
-		r.cores = append(r.cores, (processCPU() - cpu).Seconds()/wall.Seconds())
+		r.cores = append(r.cores, (processCPU()-cpu).Seconds()/wall.Seconds())
 		r.frames = n
 		return nil
 	}
