@@ -1,13 +1,12 @@
 // Command exportcheck proves Studio export on real files. It builds a synthetic session,
 // exports edits of it, and checks each render with ffprobe, against ComposeFrame, for audio
-// and flash onsets lining up, and (given the Rust exporter) against the Rust build's render.
+// and flash onsets lining up.
 // It also exports copies of Library sessions and times them. Never point -real at the
 // Library itself; copy it first.
 //
-//	cargo build --release -p glint-studio --example go_export --example studio
-//	go run ./internal/studio/cmd/exportcheck -work <tmp> -rust <target>/release/examples/go_export.exe
-//	go run ./internal/studio/cmd/exportcheck -work <tmp> -real <copies> [-blur=false] -rust ...
-//	go run ./internal/studio/cmd/exportcheck -work <tmp> -stages <copies>/<id>.glintrec -runs 5 -rust ...
+//	go run ./internal/studio/cmd/exportcheck -work <tmp>
+//	go run ./internal/studio/cmd/exportcheck -work <tmp> -real <copies> [-blur=false]
+//	go run ./internal/studio/cmd/exportcheck -work <tmp> -stages <copies>/<id>.glintrec -runs 5
 package main
 
 import (
@@ -17,8 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/draw"
-	"image/gif"
 	"image/png"
 	"io"
 	"io/fs"
@@ -71,40 +68,25 @@ func check(ok bool, format string, args ...any) {
 
 func main() {
 	work := flag.String("work", "", "scratch directory for sessions and renders")
-	rust := flag.String("rust", "", "path to the Rust go_export example, for parity")
 	real := flag.String("real", "", "directory of copied *.glintrec sessions to export at 1080p60")
 	only := flag.String("only", "", "run only the variant with this name")
 	profile := flag.String("cpuprofile", "", "write a CPU profile of the real-session exports")
 	blur := flag.Bool("blur", true, "motion blur for -real exports")
 	stagesOf := flag.String("stages", "", "time each stage of a 1080p60 export of this session copy")
 	runs := flag.Int("runs", 5, "runs per stage for -stages")
-	exportOnce := flag.String("export", "", "export this session copy once with its own options, as the Rust go_export does, and print the timing as JSON")
-	fair := flag.String("fair", "", "time Go against -rust on copies of this session, one export per process, -runs times each")
 	flag.Parse()
 	if *work == "" {
 		log.Fatal("-work is required")
 	}
-	if *exportOnce != "" {
-		if err := exportOneShot(*exportOnce); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if *fair != "" {
-		if err := fairTiming(*work, *fair, *rust, *runs); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
 	if *stagesOf != "" {
-		if err := stages(*work, *stagesOf, *rust, *profile, *runs); err != nil {
+		if err := stages(*work, *stagesOf, *profile, *runs); err != nil {
 			log.Fatal(err)
 		}
 	} else if *real != "" {
-		if err := realSessions(*work, *real, *rust, *profile, *blur); err != nil {
+		if err := realSessions(*work, *real, *profile, *blur); err != nil {
 			log.Fatal(err)
 		}
-	} else if err := synthetic(*work, *rust, *only); err != nil {
+	} else if err := synthetic(*work, *only); err != nil {
 		log.Fatal(err)
 	}
 	if failures > 0 {
@@ -114,7 +96,7 @@ func main() {
 	fmt.Println("all checks passed")
 }
 
-func synthetic(work, rust, only string) error {
+func synthetic(work, only string) error {
 	session := filepath.Join(work, "session")
 	if !exists(filepath.Join(session, "screen.mp4")) {
 		if err := synthesize(session); err != nil {
@@ -125,15 +107,15 @@ func synthetic(work, rust, only string) error {
 		if only != "" && v.name != only {
 			continue
 		}
-		if err := runVariant(work, session, rust, v); err != nil {
+		if err := runVariant(work, session, v); err != nil {
 			return fmt.Errorf("%s: %w", v.name, err)
 		}
 	}
 	if only == "" {
-		if err := checkThumbs(work, session, rust); err != nil {
+		if err := checkThumbs(work, session); err != nil {
 			return err
 		}
-		if err := checkCompress(work, rust); err != nil {
+		if err := checkCompress(work); err != nil {
 			return err
 		}
 		return checkCancel(work, session)
@@ -141,14 +123,9 @@ func synthetic(work, rust, only string) error {
 	return nil
 }
 
-// rustStudio is the Rust studio example, built beside go_export.
-func rustStudio(goExport string) string {
-	return filepath.Join(filepath.Dir(goExport), "studio"+filepath.Ext(goExport))
-}
-
 // checkCompress shrinks and trims the 1080p render the way Trim & Compress does, with the
-// options the Rust studio example's compress mode hard-codes, and compares the two.
-func checkCompress(work, rust string) error {
+// fixed options.
+func checkCompress(work string) error {
 	fmt.Println("== compress")
 	srcs, err := filepath.Glob(filepath.Join(work, variants[0].name, "go", "render", "export-*.mp4"))
 	if err != nil || len(srcs) != 1 {
@@ -168,22 +145,12 @@ func checkCompress(work, rust string) error {
 	vs := pr.stream("video")
 	check(vs.Width == 1212 && vs.Height == 720 && math.Abs(pr.duration()-3) < 0.05 && pr.stream("audio") != nil,
 		"compressed to %dx%d, %.3f s, audio %s, %d frames, %d bytes, progress %.2f", vs.Width, vs.Height, pr.duration(), pr.streamCodec("audio"), sum.Frames, sum.Bytes, prog.last)
-	if rust == "" {
-		return nil
-	}
-	rdst := filepath.Join(work, "compress-rust.mp4")
-	os.Remove(rdst)
-	cmd := exec.Command(rustStudio(rust), filepath.Join(work, "session"), "compress", srcs[0], rdst)
-	cmd.Stdout, cmd.Stderr = io.Discard, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("rust compress: %w", err)
-	}
-	return compareMP4s(dst, rdst, 60)
+	return nil
 }
 
 // checkThumbs compares each thumbnail with the source frame it should show, then checks the
 // cached strip gives back the same pixels.
-func checkThumbs(work, session, rust string) error {
+func checkThumbs(work, session string) error {
 	fmt.Println("== thumbnails")
 	dir := filepath.Join(work, "thumbs")
 	s, err := prepare(session, dir, variants[0])
@@ -222,39 +189,6 @@ func checkThumbs(work, session, rust string) error {
 	}
 	check(same, "cached strip gives the same thumbnails in %v", time.Since(started))
 	check(exists(filepath.Join(s.RenderDir(), fmt.Sprintf("thumbs-%dx%d.png", count, height))), "strip cached in render/")
-	if rust == "" {
-		return nil
-	}
-	rdir := filepath.Join(work, "thumbs-rust")
-	if _, err := prepare(session, rdir, variants[0]); err != nil {
-		return err
-	}
-	out := filepath.Join(rdir, "pngs")
-	cmd := exec.Command(rustStudio(rust), rdir, "thumbs", strconv.Itoa(count), strconv.Itoa(height), out)
-	cmd.Stdout, cmd.Stderr = io.Discard, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("rust thumbs: %w", err)
-	}
-	worst = math.Inf(1)
-	for i, th := range thumbs {
-		f, err := os.Open(filepath.Join(out, fmt.Sprintf("thumb-%d.png", i)))
-		if err != nil {
-			return err
-		}
-		img, err := png.Decode(f)
-		f.Close()
-		if err != nil {
-			return err
-		}
-		rgba := image.NewRGBA(img.Bounds())
-		draw.Draw(rgba, rgba.Rect, img, img.Bounds().Min, draw.Src)
-		if rgba.Rect != th.Rect {
-			check(false, "rust thumbnail %d is %v, go %v", i, rgba.Rect, th.Rect)
-			return nil
-		}
-		worst = min(worst, psnr(th.Pix, rgba.Pix))
-	}
-	check(worst > 30, "parity: thumbnails go against rust, worst PSNR %.1f dB", worst)
 	return nil
 }
 
@@ -307,7 +241,7 @@ func (l *progressLog) record(p float64) {
 	l.calls++
 }
 
-func runVariant(work, session, rust string, v variant) error {
+func runVariant(work, session string, v variant) error {
 	fmt.Printf("== %s\n", v.name)
 	dir := filepath.Join(work, v.name, "go")
 	s, err := prepare(session, dir, v)
@@ -369,22 +303,7 @@ func runVariant(work, session, rust string, v variant) error {
 			fmt.Println("  skip onsets: this machine has no Media Foundation decoder for", vs.CodecName)
 		}
 	}
-	if rust == "" {
-		return nil
-	}
-	rdir := filepath.Join(work, v.name, "rust")
-	if _, err := prepare(session, rdir, v); err != nil {
-		return err
-	}
-	rout, rinfo, err := runRust(rust, rdir)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("  rust: %s in %.2f s = %.1f frames/s\n", filepath.Base(rout), rinfo.Seconds, rinfo.FPS)
-	if v.format == studio.FormatGif {
-		return compareGIFs(out, rout)
-	}
-	return compareMP4s(out, rout, fps)
+	return nil
 }
 
 // compareWithCompose decodes output frames and composes the same output times from the
@@ -610,74 +529,6 @@ func audioOnsets(w *media.WavData) []float64 {
 	return onsets
 }
 
-type rustResult struct {
-	Path    string  `json:"path"`
-	Seconds float64 `json:"seconds"`
-	Frames  int     `json:"frames"`
-	FPS     float64 `json:"fps_achieved"`
-}
-
-func runRust(exe, dir string) (string, rustResult, error) {
-	var res rustResult
-	cmd := exec.Command(exe, dir)
-	cmd.Stderr = os.Stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", res, fmt.Errorf("rust exporter: %w", err)
-	}
-	if err := json.Unmarshal(out, &res); err != nil {
-		return "", res, fmt.Errorf("rust exporter printed %q: %w", out, err)
-	}
-	return res.Path, res, nil
-}
-
-func compareMP4s(goOut, rustOut string, fps uint32) error {
-	gp, err := ffprobe(goOut)
-	if err != nil {
-		return err
-	}
-	rp, err := ffprobe(rustOut)
-	if err != nil {
-		return err
-	}
-	gv, rv := gp.stream("video"), rp.stream("video")
-	check(gv.frames() == rv.frames() && gv.Width == rv.Width && gv.Height == rv.Height,
-		"parity: go %d frames %dx%d, rust %d frames %dx%d", gv.frames(), gv.Width, gv.Height, rv.frames(), rv.Width, rv.Height)
-	check(math.Abs(gp.duration()-rp.duration()) < 0.001, "parity: duration go %.3f s, rust %.3f s", gp.duration(), rp.duration())
-	indices := sampleIndices(gv.frames())
-	gf, err := outputFrames(goOut, gp, indices, fps)
-	if err != nil {
-		return err
-	}
-	rf, err := outputFrames(rustOut, rp, indices, fps)
-	if err != nil {
-		return err
-	}
-	worst := math.Inf(1)
-	var report []string
-	for k, i := range indices {
-		db := psnr(gf[k].Pix, rf[k].Pix)
-		worst = min(worst, db)
-		report = append(report, fmt.Sprintf("%d:%.1f", i, db))
-	}
-	check(worst > 30, "parity: PSNR go against rust at frame:dB %s", strings.Join(report, " "))
-	ga, err := media.ReadMP4Audio(goOut)
-	if err != nil {
-		return err
-	}
-	ra, err := media.ReadMP4Audio(rustOut)
-	if err != nil {
-		return err
-	}
-	g, r := rmsPerSecond(ga), rmsPerSecond(ra)
-	var worstDiff float64
-	for i := range min(len(g), len(r)) {
-		worstDiff = max(worstDiff, math.Abs(g[i]-r[i]))
-	}
-	check(len(g) == len(r) && worstDiff < 0.01, "parity: audio RMS per second go %v rust %v (worst difference %.4f)", round3(g), round3(r), worstDiff)
-	return nil
-}
-
 func round3(v []float64) []float64 {
 	out := make([]float64, len(v))
 	for i, x := range v {
@@ -698,44 +549,6 @@ func rmsPerSecond(w *media.WavData) []float64 {
 		out = append(out, math.Sqrt(sum/float64(end-start)))
 	}
 	return out
-}
-
-func compareGIFs(goOut, rustOut string) error {
-	read := func(path string) (*gif.GIF, error) {
-		f, err := os.Open(path)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
-		return gif.DecodeAll(f)
-	}
-	g, err := read(goOut)
-	if err != nil {
-		return err
-	}
-	r, err := read(rustOut)
-	if err != nil {
-		return err
-	}
-	check(len(g.Image) == len(r.Image) && fmt.Sprint(g.Delay) == fmt.Sprint(r.Delay) && g.LoopCount == r.LoopCount,
-		"parity: gif go %d frames loop %d, rust %d frames loop %d, delays equal %v", len(g.Image), g.LoopCount, len(r.Image), r.LoopCount, fmt.Sprint(g.Delay) == fmt.Sprint(r.Delay))
-	gs, rs := g.Image[0].Palette, r.Image[0].Palette
-	same := 0
-	for i := range min(len(gs), len(rs)) {
-		if gs[i] == rs[i] {
-			same++
-		}
-	}
-	fmt.Printf("  gif palettes: %d of %d entries identical\n", same, len(gs))
-	worst := math.Inf(1)
-	var report []string
-	for _, i := range sampleIndices(len(g.Image)) {
-		db := psnr(toRGBA(g.Image[i]).Pix, toRGBA(r.Image[i]).Pix)
-		worst = min(worst, db)
-		report = append(report, fmt.Sprintf("%d:%.1f", i, db))
-	}
-	check(worst > 30, "parity: gif PSNR go against rust at frame:dB %s", strings.Join(report, " "))
-	return nil
 }
 
 func toRGBA(p *image.Paletted) *image.RGBA {
@@ -777,7 +590,7 @@ func checkCancel(work, session string) error {
 	return nil
 }
 
-func realSessions(work, copies, rust, profile string, blur bool) error {
+func realSessions(work, copies, profile string, blur bool) error {
 	dirs, err := filepath.Glob(filepath.Join(copies, "*.glintrec"))
 	if err != nil || len(dirs) == 0 {
 		return fmt.Errorf("no *.glintrec in %s: %v", copies, err)
@@ -830,24 +643,6 @@ func realSessions(work, copies, rust, profile string, blur bool) error {
 		vs := pr.stream("video")
 		check(vs.frames() == frames && vs.Width == int(w) && vs.Height == int(h) && pr.stream("audio") != nil == (s.Tracks.Mic != "" || s.Tracks.System != ""),
 			"ffprobe: %d frames %dx%d %s, audio %s, %.3f s", vs.frames(), vs.Width, vs.Height, vs.RFrameRate, pr.streamCodec("audio"), pr.duration())
-		if rust == "" {
-			continue
-		}
-		rdir := filepath.Join(work, "real", name, "rust")
-		if err := os.RemoveAll(rdir); err != nil {
-			return err
-		}
-		if err := copyDir(src, rdir); err != nil {
-			return err
-		}
-		rout, rinfo, err := runRust(rust, rdir)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("  rust: %d frames in %.2f s = %.1f frames/s\n", rinfo.Frames, rinfo.Seconds, rinfo.FPS)
-		if err := compareMP4s(out, rout, 60); err != nil {
-			return err
-		}
 	}
 	return nil
 }
