@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"image"
@@ -172,11 +173,11 @@ func (o *overlay) magnifier(pt *ui.Painter, r ui.Rect) {
 
 var hideGap = flag.Duration("gap", 200*time.Millisecond, "how long the overlay stays hidden between the timed shows")
 
-var variant = flag.String("variant", "fullscreen", "overlay window: plain (MyGo only), after (SetWindowPos after Show), nocaption (strip WS_CAPTION), fullscreen (ITaskbarList2::MarkFullscreenWindow), panel (Panel window)")
+var variant = flag.String("variant", "", "overlay: panel-square (default), plain, after, nocaption, fullscreen, nocap-mark, notop, notop-nocap, reassert, panel; editor: vector (default), cpu, canvas")
 
 func (o *overlay) show() {
 	o.drawn, o.shownAt = false, time.Now()
-	switch *variant {
+	switch cmp.Or(*variant, "panel-square") {
 	case "plain", "panel":
 		placePhysical(o.hwnd, o.mon.bounds)
 		o.win.Show()
@@ -241,7 +242,7 @@ func newOverlay(m monitor, shot *image.RGBA) *overlay {
 		Hidden:        true,
 		DisableResize: true,
 		DisableShadow: true,
-		Panel:         strings.HasPrefix(*variant, "panel"),
+		Panel:         strings.HasPrefix(cmp.Or(*variant, "panel-square"), "panel"),
 		Content:       ui.View(o.view),
 	})
 	o.hwnd = o.win.NativeHandle()

@@ -99,6 +99,12 @@ func driveTray(p *trayProbe) {
 	defer finish(&failures)
 	saved := cursorPos()
 	defer moveTo(saved.X, saved.Y)
+	defer func() {
+		time.Sleep(300 * time.Millisecond)
+		if windowText(foreground()) == "System tray overflow window." {
+			keys(vkEscape)
+		}
+	}()
 
 	err := mygo.GlobalShortcut.Register("Ctrl+Shift+4", func() { p.hotkey <- "Ctrl+Shift+4" })
 	check(&failures, err == nil, "Register Ctrl+Shift+4: %v", err)
@@ -155,7 +161,6 @@ func driveTray(p *trayProbe) {
 				}
 			}
 		}
-		savePNG(out("tray-overflow.png"), shot)
 		if n < 4 {
 			return 0, 0, false
 		}
@@ -207,7 +212,7 @@ func driveTray(p *trayProbe) {
 		keys(vkDown)
 		keys(vkRight)
 		time.Sleep(700 * time.Millisecond)
-		shot = captureScreen(rect{r.Left - 10, r.Top - 120, r.Right + 260, r.Bottom + 10})
+		shot = captureScreen(r)
 		savePNG(out("tray-menu.png"), shot)
 		keys(vkDown)
 		keys(vkReturn)

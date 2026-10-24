@@ -331,7 +331,7 @@ func runEditor() {
 	frames := &frameLog{}
 	log.SetOutput(frames)
 	v := *variant
-	if v == "fullscreen" {
+	if v == "" {
 		v = "vector"
 	}
 	mygo.App.WhenReady(func() {
