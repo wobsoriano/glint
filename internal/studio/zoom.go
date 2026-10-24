@@ -5,6 +5,8 @@ import (
 	"math"
 	"slices"
 	"sort"
+
+	"github.com/wobsoriano/glint/internal/media/input"
 )
 
 // Viewport is a virtual camera state. X and Y are the point, normalized inside the cropped
@@ -32,15 +34,15 @@ const (
 
 // AutoZooms builds auto zooms in source time from the recorded clicks: each click inside the
 // frame gets a lead-in and hold, and zooms that overlap or nearly touch merge into one.
-func AutoZooms(in *InputTimeline, sourceDurationMs float64) []Zoom {
+func AutoZooms(in *input.Timeline, sourceDurationMs float64) []Zoom {
 	w, h := float32(in.Size[0]), float32(in.Size[1])
-	var clicks []Click
+	var clicks []input.Click
 	for _, c := range in.Clicks {
 		if float64(c.T) < sourceDurationMs-tailExclusionMs && c.X >= 0 && c.X <= w && c.Y >= 0 && c.Y <= h {
 			clicks = append(clicks, c)
 		}
 	}
-	slices.SortStableFunc(clicks, func(a, b Click) int { return cmp.Compare(a.T, b.T) })
+	slices.SortStableFunc(clicks, func(a, b input.Click) int { return cmp.Compare(a.T, b.T) })
 	var zooms []Zoom
 	for _, c := range clicks {
 		start := max(float64(c.T)-leadInMs, 0)
@@ -58,7 +60,7 @@ func AutoZooms(in *InputTimeline, sourceDurationMs float64) []Zoom {
 }
 
 // ApplyAutoZoom regenerates auto zooms from the clicks, keeping manual ones.
-func (p *Project) ApplyAutoZoom(in *InputTimeline, sourceDurationMs float64) {
+func (p *Project) ApplyAutoZoom(in *input.Timeline, sourceDurationMs float64) {
 	p.Zooms = slices.DeleteFunc(p.Zooms, func(z Zoom) bool { return z.Auto })
 	p.Zooms = append(p.Zooms, AutoZooms(in, sourceDurationMs)...)
 	slices.SortStableFunc(p.Zooms, func(a, b Zoom) int { return cmp.Compare(a.StartMs, b.StartMs) })
@@ -114,7 +116,7 @@ func clampToFrame(v, scale float64) float64 {
 
 type timedPoint struct{ t, x, y float64 }
 
-func cameraTrack(p *Project, in *InputTimeline) []Viewport {
+func cameraTrack(p *Project, in *input.Timeline) []Viewport {
 	n := stepCount(p.DurationMs())
 	if !slices.ContainsFunc(p.Zooms, func(z Zoom) bool { return z.Enabled }) {
 		return []Viewport{IdentityViewport, IdentityViewport}
@@ -211,7 +213,7 @@ const (
 	handoffSpan = 0.2
 )
 
-func reframeTrack(p *Project, in *InputTimeline, camera []Viewport, pointer *PointerTrack) []Viewport {
+func reframeTrack(p *Project, in *input.Timeline, camera []Viewport, pointer *PointerTrack) []Viewport {
 	r, ok := p.Aspect.Ratio()
 	if !ok || p.AspectMode != AspectFill {
 		return nil

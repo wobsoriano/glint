@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/wobsoriano/glint/internal/media/input"
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
 
@@ -40,7 +41,7 @@ func isFile(path string) bool {
 type Session struct {
 	Dir        string
 	Project    Project
-	Input      InputTimeline
+	Input      input.Timeline
 	Captions   []CaptionWord
 	Tracks     Tracks
 	Transcript *transcribe.Transcript
@@ -107,11 +108,11 @@ func (s *Session) loadAssets() error {
 	if s.Transcript != nil {
 		s.Captions = CaptionWords(*s.Transcript)
 	}
-	if !isFile(filepath.Join(s.Dir, InputFile)) {
-		s.Input = InputTimeline{Version: 1, Size: [2]uint32{s.SourceW, s.SourceH}}
+	if !isFile(filepath.Join(s.Dir, input.File)) {
+		s.Input = input.Timeline{Version: 1, Size: [2]uint32{s.SourceW, s.SourceH}}
 		return nil
 	}
-	in, err := LoadInput(s.Dir)
+	in, err := input.Load(s.Dir)
 	if err != nil {
 		return fmt.Errorf("loading session assets in %s: %w", s.Dir, err)
 	}

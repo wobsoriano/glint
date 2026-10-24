@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/wobsoriano/glint/internal/media/input"
 )
 
 const (
@@ -33,7 +35,7 @@ type clickPress struct{ t, x, y float64 }
 // ClickTrack is the click highlights on the output timeline.
 type ClickTrack struct{ presses []clickPress }
 
-func BuildClickTrack(p *Project, in *InputTimeline) ClickTrack {
+func BuildClickTrack(p *Project, in *input.Timeline) ClickTrack {
 	var presses []clickPress
 	for _, c := range in.Clicks {
 		if t, ok := p.EventOutputTime(float64(c.T)); ok {
@@ -95,7 +97,7 @@ type keyEvent struct {
 // KeyTrack is the keystroke caption on the output timeline.
 type KeyTrack struct{ events []keyEvent }
 
-func BuildKeyTrack(p *Project, in *InputTimeline) KeyTrack {
+func BuildKeyTrack(p *Project, in *input.Timeline) KeyTrack {
 	var events []keyEvent
 	for _, k := range in.Keys {
 		if k.Label == "" {

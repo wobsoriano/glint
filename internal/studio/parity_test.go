@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/wobsoriano/glint/internal/media/input"
 )
 
 // TestRustParity compares auto zoom and every motion track against dumps written by the Rust
@@ -54,7 +56,7 @@ func checkParity(t *testing.T, file string) {
 	if err := json.Unmarshal(data, &dump); err != nil {
 		t.Fatal(err)
 	}
-	in, err := LoadInput(dump.Dir)
+	in, err := input.Load(dump.Dir)
 	if err != nil {
 		t.Fatal(err)
 	}
