@@ -35,6 +35,7 @@ var (
 	width   = flag.Int("width", 1920, "synthetic session width")
 	height  = flag.Int("height", 1080, "synthetic session height")
 	fps     = flag.Int("fps", 60, "synthetic session frame rate")
+	camera  = flag.Bool("camera", false, "give the synthetic session a camera track")
 	openDir = flag.String("open", "", "session to open")
 	saveDir = flag.String("savedir", "", "where Save and Export write")
 	info    = flag.String("info", "", "print the session's project as Studio reads it and exit")
@@ -47,7 +48,7 @@ func main() {
 	}
 	switch {
 	case *makeDir != "":
-		ms, err := synth.Write(*makeDir, synth.Options{Width: *width, Height: *height, FPS: *fps, Speech: *speech})
+		ms, err := synth.Write(*makeDir, synth.Options{Width: *width, Height: *height, FPS: *fps, Speech: *speech, Camera: *camera})
 		if err != nil {
 			log.Fatal(err)
 		}

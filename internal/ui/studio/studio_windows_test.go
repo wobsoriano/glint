@@ -55,7 +55,12 @@ func (h *fakeHost) RecordingExported(path string) { h.exported = append(h.export
 func testStudio(t *testing.T) (*editor, *fakeShell, *fakeHost, *ui.Tester, string) {
 	t.Helper()
 	t.Setenv("GLINT_DATA_DIR", t.TempDir())
-	dir := testSession(t)
+	return openStudio(t, testSession(t))
+}
+
+// openStudio opens Studio on dir with the data dir the test has set, sound off.
+func openStudio(t *testing.T, dir string) (*editor, *fakeShell, *fakeHost, *ui.Tester, string) {
+	t.Helper()
 	sh := &fakeShell{}
 	h := &fakeHost{s: settings.Default()}
 	h.s.SaveDir = filepath.Join(t.TempDir(), "out")

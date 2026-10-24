@@ -22,6 +22,8 @@ type Options struct {
 	Width, Height, FPS int
 	// Speech narrates the session through SAPI; without it system.wav holds tone bursts.
 	Speech bool
+	// Camera adds camera.mp4: a teal frame with a white bar sweeping across it.
+	Camera bool
 }
 
 // Phrases are the narration, each followed by its pause in milliseconds. The fillers and the
@@ -64,7 +66,31 @@ func Write(dir string, o Options) (int, error) {
 	if err := writeCursor(filepath.Join(dir, "cursors", "0.png")); err != nil {
 		return 0, err
 	}
+	if o.Camera {
+		if err := writeCamera(filepath.Join(dir, "camera.mp4"), ms); err != nil {
+			return 0, err
+		}
+	}
 	return ms, writeInput(dir, o, ms)
+}
+
+func writeCamera(path string, ms int) error {
+	w, err := media.CreateVideoWriter(path, media.VideoParams{Width: 640, Height: 480, FPS: 30, Bitrate: 2_000_000}, nil)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	img := image.NewRGBA(image.Rect(0, 0, 640, 480))
+	for i := range ms * 30 / 1000 {
+		fill(img, img.Rect, color.RGBA{30, uint8(60 + i%120), 90, 255})
+		x := i * 2 % 640
+		fill(img, image.Rect(x, 0, x+24, 480), color.RGBA{255, 255, 255, 255})
+		if err := w.WriteFrame(img); err != nil {
+			return err
+		}
+	}
+	_, err = w.Finish()
+	return err
 }
 
 // narration speaks each phrase with SAPI and lays them end to end with their pauses, as

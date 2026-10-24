@@ -130,14 +130,17 @@ func slider(c *ui.Context, key, title string, value, lo, hi float32, display str
 	return float32(v), changed
 }
 
+// toggle is a switch whose whole row turns it over, as the Rust Studio's toggles are.
 func toggle(c *ui.Context, key, title string, on bool, pal theme.Palette) bool {
 	v := on
 	changed := false
-	ui.Row(c.Key(key)).Gap(12).Children(func() {
+	row := ui.ButtonBase(c.Key(key)).Gap(12).Label(title).KeepFocus()
+	clicked := row.Clicked()
+	row.Children(func() {
 		ui.Text(c, title).FontSize(13).TextColor(pal.Text).Grow(1)
 		changed = ui.Switch(c, &v).Label(title).KeepFocus().Changed()
 	})
-	return changed
+	return changed || clicked
 }
 
 // progressBar is a thin bar filled to p of 0..1.

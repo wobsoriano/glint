@@ -18,22 +18,27 @@ var (
 	sessionErr  error
 )
 
-// testSession copies a synthetic 1280x720 30 fps session with tone bursts into a temp dir.
-func testSession(t *testing.T) string {
+// testSession copies a synthetic 1280x720 30 fps session with tone bursts into a temp dir,
+// with its camera track when camera is set.
+func testSession(t *testing.T, camera ...bool) string {
 	t.Helper()
 	sessionOnce.Do(func() {
-		sessionDir = filepath.Join(os.TempDir(), "glint-studio-ui-test-session")
+		sessionDir = filepath.Join(os.TempDir(), "glint-studio-ui-test-session-2")
 		if _, err := os.Stat(filepath.Join(sessionDir, "input.json")); err == nil {
 			return
 		}
 		os.RemoveAll(sessionDir)
-		_, sessionErr = synth.Write(sessionDir, synth.Options{Width: 1280, Height: 720, FPS: 30})
+		_, sessionErr = synth.Write(sessionDir, synth.Options{Width: 1280, Height: 720, FPS: 30, Camera: true})
 	})
 	if sessionErr != nil {
 		t.Fatal(sessionErr)
 	}
 	dir := t.TempDir()
-	for _, name := range []string{"screen.mp4", "system.wav", "input.json", "cursors/0.png"} {
+	names := []string{"screen.mp4", "system.wav", "input.json", "cursors/0.png"}
+	if len(camera) > 0 && camera[0] {
+		names = append(names, "camera.mp4")
+	}
+	for _, name := range names {
 		data, err := os.ReadFile(filepath.Join(sessionDir, name))
 		if err != nil {
 			t.Fatal(err)
