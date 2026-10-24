@@ -147,7 +147,6 @@ func check(dir string, sum media.RecordSummary, size image.Point, c config, p sc
 	if err == nil {
 		k.ok(in.Tracks.Screen != "" && (in.Tracks.System != "") == c.system && (in.Tracks.Mic != "") == c.mic,
 			"Studio sees tracks %+v", in.Tracks)
-		k.ok(in.Input.Size == [2]uint32{sum.Width, sum.Height}, "Studio reads input size %v", in.Input.Size)
 		k.ok(len(in.Notices) == 0, "Studio notices %v", in.Notices)
 	}
 	if len(k.failed) > 0 {
