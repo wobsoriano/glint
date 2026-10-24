@@ -146,7 +146,10 @@ func (w *liveWorker) pass(last bool) {
 	w.pendingSamples = 0
 	offsetMs := uint64(w.totalSamples-len(w.window)) * 1000 / WhisperSampleRate
 	windowMs := uint64(len(w.window)) * 1000 / WhisperSampleRate
-	o := runOptions{offsetMs: offsetMs, audioCtx: int32(min(windowMs/20+64, 1500))}
+	// The Rust build shortens the encoder context to the window, but on short windows that
+	// sends whisper into repetition loops that take seconds and lose the opening words; the
+	// full context costs about 0.5 s a pass with tiny.en, inside the one-second step.
+	o := runOptions{offsetMs: offsetMs}
 	_, words, err := w.engine.run(context.Background(), w.window, o, nil)
 	if err != nil {
 		return
