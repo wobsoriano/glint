@@ -81,6 +81,7 @@ func New(l Launch) *App {
 		failures: map[settings.HotkeyAction]error{},
 	}
 	a.Actions = actions.New(func() settings.Settings { return a.settings }, a.toast)
+	a.Actions.RecordingFile = studioDeliverable
 	a.acts = a.Actions
 	a.wire()
 	return a

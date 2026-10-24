@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"strings"
 
 	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
+	"github.com/wobsoriano/glint/internal/studio"
 	"github.com/wobsoriano/glint/internal/ui/record"
 )
 
@@ -57,6 +59,18 @@ func recordingPlan(after settings.AfterRecording) []step {
 		}
 	}
 	return steps
+}
+
+// studioDeliverable is the video a recording hands out, as the Rust build's
+// glint_studio::deliverable: Studio's render of its project, with the recorded sound mixed
+// in, which Studio reuses until the project changes.
+func studioDeliverable(item store.Item) (string, []string, error) {
+	s, err := studio.LoadSession(item.Dir)
+	if err != nil {
+		return "", nil, err
+	}
+	path, err := studio.Deliverable(context.Background(), s)
+	return path, s.Notices, err
 }
 
 // quit ends a recording that is running into the Library before Glint exits, as the Rust
