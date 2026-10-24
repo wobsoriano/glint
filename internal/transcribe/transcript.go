@@ -1,5 +1,6 @@
-// Package transcribe holds the transcript model and the speech-free logic built on it:
-// caption lines, filler words, silences, cut ranges and teleprompter tracking.
+// Package transcribe holds the transcript model, on-device speech recognition through the
+// whisper.cpp runtime, and the logic built on transcripts: caption lines, filler words,
+// silences, cut ranges and teleprompter tracking.
 package transcribe
 
 import (
