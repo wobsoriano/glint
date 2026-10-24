@@ -131,7 +131,6 @@ type whisperLib struct {
 	langID         func(st uintptr) int32
 	langStr        func(id int32) string
 
-	// C function pointers that forward to onProgress and onAbort.
-	progressCallback uintptr
-	abortCallback    uintptr
+	// A C function pointer that forwards to onAbort.
+	abortCallback uintptr
 }
