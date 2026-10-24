@@ -155,6 +155,20 @@
   },
   {
     "duration": null,
+    "error": "missing field `angle` at line 1 column 67",
+    "input": "{ \"design\": { \"background\": { \"Gradient\": { \"stops\": [4278190335] } } } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `stops` at line 1 column 57",
+    "input": "{ \"design\": { \"background\": { \"Gradient\": { \"angle\": 90 } } } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
     "error": "invalid length 1, expected an array of length 2 at line 1 column 41",
     "input": "{ \"design\": { \"camera\": { \"center\": [0.1] } } }",
     "kind": "project",
