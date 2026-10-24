@@ -49,10 +49,13 @@ var (
 		}
 		return 0
 	})
+	// Hidden windows are left to onShow: DWM draws a hidden window whose display affinity
+	// changes, as a bare caption, which showed the 1x1 owners of the stack and of toasts
+	// mid-screen after every settings change.
 	eachOwn = windows.NewCallback(func(hwnd, _ uintptr) uintptr {
 		var pid uint32
 		windows.GetWindowThreadProcessId(windows.HWND(hwnd), &pid)
-		if int(pid) == os.Getpid() {
+		if int(pid) == os.Getpid() && windows.IsWindowVisible(windows.HWND(hwnd)) {
 			applyAffinity(hwnd)
 		}
 		return 1
