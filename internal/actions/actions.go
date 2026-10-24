@@ -22,6 +22,7 @@ import (
 	"github.com/wobsoriano/glint/internal/ocr"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
 // SaveChoice is the user's answer to a failed save.
@@ -106,7 +107,7 @@ var errNotAScreenshot = errors.New("This works on screenshots; a recording has n
 func (a *Actions) withPixels(item store.Item, done func(error), f func(image.Image)) {
 	fail := func(err error) {
 		if done == nil {
-			a.toast(err.Error())
+			a.toast(toast.Reason(err))
 			return
 		}
 		done(err)
@@ -156,7 +157,7 @@ func (a *Actions) Copy(item store.Item) {
 	a.CopyItem(item, func(err error) {
 		switch {
 		case err != nil:
-			a.toast("Copy failed: " + err.Error())
+			a.toast("Copy failed: " + toast.Reason(err))
 		case item.Kind() == store.Recording:
 			a.toast("Copied the video file")
 		default:
@@ -190,7 +191,7 @@ func (a *Actions) CopyFiles(items []store.Item) {
 		paths[i] = it.Deliverable()
 	}
 	if err := a.writeFiles(paths...); err != nil {
-		a.toast("Copy failed: " + err.Error())
+		a.toast("Copy failed: " + toast.Reason(err))
 		return
 	}
 	a.toast(fmt.Sprintf("Copied %d file(s)", len(paths)))
@@ -214,7 +215,7 @@ func (a *Actions) copyText(img *image.RGBA, done func(error)) {
 		return func() {
 			switch text := ocr.Text(lines); {
 			case err != nil:
-				a.toast("OCR failed: " + err.Error())
+				a.toast("OCR failed: " + toast.Reason(err))
 			case strings.TrimSpace(text) == "":
 				a.toast("No text found")
 				err = ErrNoText
@@ -257,7 +258,7 @@ func (a *Actions) Compress(item store.Item, done func(error)) {
 					err = a.writeFiles(path)
 				}
 				if err != nil {
-					a.toast("Compress failed: " + err.Error())
+					a.toast("Compress failed: " + toast.Reason(err))
 				} else {
 					a.toast(fmt.Sprintf("Copied a %s JPEG", HumanBytes(uint64(size))))
 				}
@@ -387,7 +388,7 @@ func (a *Actions) ReportSave(path string, err error) {
 		a.toast("Saved " + filepath.Base(path))
 	case errors.Is(err, ErrCancelled):
 	default:
-		a.toast("Not saved: " + err.Error())
+		a.toast("Not saved: " + toast.Reason(err))
 	}
 }
 
@@ -424,7 +425,7 @@ func (a *Actions) ExportTo(items []store.Item, dir string) {
 		}
 		return func() {
 			if err != nil {
-				a.toast("Export failed: " + err.Error())
+				a.toast("Export failed: " + toast.Reason(err))
 				return
 			}
 			a.toast(fmt.Sprintf("Exported %d capture(s)", n))
@@ -443,7 +444,7 @@ func (a *Actions) Delete(dirs []string, done func(ok bool)) {
 		err := a.trash(dirs)
 		return func() {
 			if err != nil {
-				a.toast("Delete failed: " + err.Error())
+				a.toast("Delete failed: " + toast.Reason(err))
 				done(false)
 				return
 			}

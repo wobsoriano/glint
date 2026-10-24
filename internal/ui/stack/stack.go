@@ -24,6 +24,7 @@ import (
 	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
 // Host does what a card's actions ask for. Each call runs on a goroutine of its own and may
@@ -78,6 +79,7 @@ type card struct {
 	// deadline is when the card closes by itself; zero keeps it.
 	deadline    time.Time
 	status      string
+	failed      bool // status says why an action failed
 	statusUntil time.Time
 	// hushed keeps the action tips hidden from a click until the pointer leaves the card.
 	// The status a click flashes takes the buttons away, and MyGo shows a tip again for a
@@ -236,9 +238,16 @@ func (s *Stack) card(id int) *card {
 	return nil
 }
 
-func (s *Stack) flash(id int, msg string) {
+func (s *Stack) flash(id int, msg string) { s.setStatus(id, msg, false) }
+
+// fail flashes why action what failed on card id.
+func (s *Stack) fail(id int, what string, err error) {
+	s.setStatus(id, what+" failed: "+toast.Reason(err), true)
+}
+
+func (s *Stack) setStatus(id int, msg string, failed bool) {
 	if c := s.card(id); c != nil {
-		c.status, c.statusUntil = msg, s.now().Add(flashFor)
+		c.status, c.failed, c.statusUntil = msg, failed, s.now().Add(flashFor)
 		s.invalidate()
 	}
 }
@@ -277,7 +286,7 @@ func (s *Stack) run(id int, a settings.CardAction) {
 			switch {
 			case errors.Is(err, context.Canceled):
 			case err != nil:
-				s.flash(id, a.Label()+" failed: "+err.Error())
+				s.fail(id, a.Label(), err)
 			case e.removes:
 				s.remove(id)
 			case e.done != "":
@@ -293,7 +302,7 @@ func (s *Stack) run(id int, a settings.CardAction) {
 func (s *Stack) dragged(id int, r transfer.Result) {
 	switch {
 	case r.Err != nil:
-		s.flash(id, "Drag failed: "+r.Err.Error())
+		s.fail(id, "Drag", r.Err)
 	case !r.Canceled:
 		if s.prefs.DismissAfterDrag {
 			s.remove(id)
@@ -383,7 +392,7 @@ func (s *Stack) dragData(id int) transfer.Data {
 			return d
 		}
 	}
-	s.flash(id, "Drag failed: "+err.Error())
+	s.fail(id, "Drag", err)
 	return transfer.Data{}
 }
 

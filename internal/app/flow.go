@@ -56,7 +56,7 @@ func (a *App) startArea(mode overlay.Mode) {
 	}
 	shots, err := a.freeze()
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	a.picker.Open(shots, overlay.Options{
@@ -105,13 +105,13 @@ func displayAt(ds []platform.Display, p image.Point) platform.Display {
 func (a *App) captureScreen() {
 	ds, err := a.sys.displays()
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	d := displayAt(ds, a.sys.cursor())
 	img, err := a.sys.captureRect(d.Bounds)
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	a.finish(shot{image: img, dpi: d.Scale, created: time.Now()})
@@ -125,7 +125,7 @@ func (a *App) captureWindow() {
 	}
 	ds, err := a.sys.displays()
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	c := image.Pt(w.Bounds.X+w.Bounds.W/2, w.Bounds.Y+w.Bounds.H/2)
@@ -140,7 +140,7 @@ func (a *App) captureWindow() {
 		}
 		return func() {
 			if err != nil {
-				a.toast("Capture failed: " + err.Error())
+				a.toast("Capture failed: " + toast.Reason(err))
 				return
 			}
 			s.image = img
@@ -157,7 +157,7 @@ func (a *App) capturePrevious() {
 	}
 	ds, err := a.sys.displays()
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	r := platform.Rect{X: int(last[0]), Y: int(last[1]), W: int(last[2]), H: int(last[3])}
@@ -169,7 +169,7 @@ func (a *App) capturePrevious() {
 	}
 	img, err := a.sys.captureRect(r)
 	if err != nil {
-		a.toast("Capture failed: " + err.Error())
+		a.toast("Capture failed: " + toast.Reason(err))
 		return
 	}
 	a.finish(shot{image: img, dpi: d.Scale, created: time.Now()})
@@ -258,7 +258,7 @@ func (a *App) importShot(s shot, findings []redact.Finding) {
 		item, err := lib.ImportScreenshot(ns)
 		return func() {
 			if err != nil {
-				a.toast("Could not add the capture to the Library: " + err.Error())
+				a.toast("Could not add the capture to the Library: " + toast.Reason(err))
 				return
 			}
 			a.last = item.Dir
@@ -314,7 +314,7 @@ func (a *App) automate(item store.Item, img *image.RGBA, dpi float64) {
 			}
 			a.acts.CopyImage(img, func(err error) {
 				if err != nil {
-					a.toast("Copy failed: " + err.Error())
+					a.toast("Copy failed: " + toast.Reason(err))
 				} else if confirm {
 					a.toast("Copied to clipboard")
 				}
@@ -368,7 +368,7 @@ var errNoCaptures = fmt.Errorf("no captures")
 func (a *App) Edit(item store.Item) {
 	if err := a.edit(item); err != nil {
 		log.Printf("app: %v", err)
-		a.toast(err.Error())
+		a.toast(toast.Reason(err))
 	}
 }
 
@@ -405,7 +405,7 @@ func (a *App) openImages(paths []string) {
 			}
 			return func() {
 				if err != nil {
-					a.toast(err.Error())
+					a.toast(toast.Reason(err))
 					return
 				}
 				if a.Surfaces.Imported != nil {

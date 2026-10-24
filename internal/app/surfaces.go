@@ -17,6 +17,7 @@ import (
 	"github.com/wobsoriano/glint/internal/ui/quicklook"
 	"github.com/wobsoriano/glint/internal/ui/record"
 	"github.com/wobsoriano/glint/internal/ui/stack"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 	"github.com/wobsoriano/glint/internal/ui/trim"
 )
 
@@ -62,7 +63,7 @@ func (a *App) pin(img image.Image, dpi float64) {
 	p.Copied = func(err error) {
 		a.post(func() {
 			if err != nil {
-				a.toast("Copy failed: " + err.Error())
+				a.toast("Copy failed: " + toast.Reason(err))
 				return
 			}
 			a.toast("Copied to clipboard")
@@ -102,7 +103,7 @@ func (a *App) openPrefs(name string) {
 
 func (a *App) openTrimWindow(path string) {
 	if _, err := trim.Open(path, trim.Config{SaveDir: a.settings.SaveDir}); err != nil {
-		a.toast(err.Error())
+		a.toast(toast.Reason(err))
 	}
 }
 
