@@ -1,176 +1,167 @@
-# Mac port handoff
+# Glint on macOS
 
-This note is for the session that starts the macOS port of Glint. It covers the state of the
-Windows build, where the platform code sits, and the open decisions.
+Glint ships for Windows only. This page is the plan for a macOS port.
 
-## State of the Windows build
+The Go build compiles for macOS and packages `Glint.app`, but nobody has run that app yet. Most
+of what makes Glint useful is missing there. It cannot take a screenshot, record, decode or
+encode video, run OCR or transcribe. The UI, the Library, the editor's renderer and the Studio
+model are shared Go and build as they are. This page lists the gaps package by package, says
+what already works, and gives the plan for closing the gaps without cgo.
 
-- Glint runs on Windows 10 and 11. It is written in Rust with GPUI 0.2.2. Every feature in
-  `docs/parity.md` was exercised in the running app except two camera lines. The test machine
-  had no camera, and a Mac has one, so check those two lines on the Mac.
-- `cargo test --workspace` passes 169 tests on Windows, with 10 ignored because they need
-  hardware or models.
-- Read `docs/architecture.md` for the crate layout, the Library format on disk and the
-  recording session contract. Read `docs/design.md` for the design rules.
-- The evidence from the Windows test runs (screenshots, logs) is local to the Windows machine
-  and is not in the repo.
+## Build it
 
-## Progress on macOS
+Any machine builds the macOS app. No Mac, Xcode or cgo is needed:
 
-Steps 1 to 4 of the suggested first steps are done, and Studio plays macOS recordings. Everything below was checked in the running
-app on a 2x display, unless it says otherwise.
+```sh
+GOOS=darwin GOARCH=arm64 go build ./...
+GOOS=darwin GOARCH=arm64 go vet ./...
+go tool mygo build -platform darwin/universal
+```
 
-- **Build and layout.** The workspace builds on macOS (Apple silicon, Xcode clang, Homebrew
-  cmake). The Windows code sits behind per-platform backends (`crates/glint-media/src/win/`,
-  `src/sys/win/`), next to the macOS ones (`crates/glint-media/src/mac/`, `src/sys/mac/`).
-  `docs/architecture.md` describes the layout.
-- **Windows stays green.** `tools/check-windows.sh --workspace --all-targets` type-checks the
-  Windows build from the Mac with zero warnings. Run it after every change to shared code.
-- **Tests.** `cargo test --workspace` passes on macOS. Hardware tests are `#[ignore]`: run them
-  with `--ignored` on a Mac with a microphone and camera.
-- **Screen space.** `glint_media::space` (`crates/glint-media/src/mac/space.rs`) is the one place
-  that converts between macOS points and Glint pixels. Read its module doc before touching
-  coordinates.
-- **Screenshots.** Full-screen, window, area, previous-area and text capture work, with the
-  overlay, loupe, preview stack, Library, editor, clipboard and global hotkeys.
-  - On macOS 14 and later, screenshots go through ScreenCaptureKit (`glint_media::sck`). Its
-    content filter leaves Glint's windows out unless the setting includes them.
-    `NSWindow.sharingType` no longer affects captures on current macOS. macOS 13 falls back to
-    `xcap`, which includes Glint's windows.
-  - OCR runs Vision's `VNRecognizeTextRequest` on the whole image (`sys/mac/ocr.rs`).
-  - Dragging a card into other apps starts an AppKit dragging session (`sys/mac/drag.rs`).
-    `shell::drag_out` reports the end through a callback, because AppKit drags are
-    asynchronous. On Windows the callback runs when the modal OLE drag returns.
-  - The pasteboard (files and images), the Trash, the save-failed alert and the wallpaper path
-    work.
-- **Windows and chrome.** Floating windows (overlay, stack, toasts, pins, recording chrome) drop
-  AppKit's `Titled` style in `sys/mac/desktop.rs::float`, because AppKit keeps titled windows
-  below the menu bar. Custom title bars leave the traffic lights to the system
-  (`ui::SYSTEM_CAPTION_INSET`).
-- **Look.** `glint-render/src/fonts.rs` has a macOS catalog (SF Pro is the default, and variable
-  fonts use the `wght` axis). The UI font is `.SystemUIFont`. Light or dark and the accent come
-  from the system. Without Mica, window surfaces are opaque (`Appearance::backdrop`). Labels say
-  Trash and Finder.
-- **Shortcuts.** In-app shortcuts use `modifiers.secondary()` and show as ⌘ through `ui::keys`.
-  Global hotkeys keep the Windows defaults (⌃⇧2 to ⌃⇧7, ⌃⇧L), which avoid the system's
-  ⌘⇧3/4/5.
-- **Background app.** Glint runs as an accessory app (no Dock icon) with a template icon in the
-  menu bar. Its menu shows the global shortcuts as key equivalents. A Unix socket in the
-  per-user temp folder keeps one instance and forwards CLI requests (`sys/mac/ipc.rs`). Launch
-  at login writes `~/Library/LaunchAgents/com.glint.app.plist`. A window opened by a forwarded
-  CLI request stays behind the active app, because macOS 14 lets an app take focus only from
-  user input to that app. Menu bar and hotkey actions come to the front.
-- **Dead-code warnings.** The macOS build warns about shared `glint-media` helpers (`WavWriter`,
-  `copy_planes`, `take_buffer`, the BT.601/709 matrices, `LevelMeter::update`) and root items
-  that only the Windows backend uses so far. The macOS backend will use them. Don't silence the
-  warnings.
-- **Recording (step 4).** `glint-media`'s macOS backend records the screen and system audio
-  through one `SCStream` (`mac/screen.rs`) at a constant frame rate, the microphone and camera
-  through `AVCaptureSession` (`mac/audio.rs`, `mac/camera.rs`), and input through an event tap
-  (`mac/hooks.rs`). `mac/recorder.rs` mirrors the Windows recorder. Shared logic lives in
-  `audio::{Converter, ClockedWav}` and `input_recorder`, so both backends use the same pause and
-  drift rules.
-- **Studio (step 5).** MP4 decode (`mac/reader.rs`, `mac/frames.rs`) and CoreAudio playback
-  (`mac/audio_out.rs`) let Studio open and play macOS sessions.
-- **Bundle.** `tools/bundle-mac.sh` builds a signed `Glint.app` with the permission usage
-  strings. See `docs/building.md`.
-- **Next.** See the unchecked macOS lines in `docs/parity.md`: the recording picker with a
-  microphone and camera, Studio export and transcription (enable whisper-rs's Metal feature),
-  Trim & Compress, and the permission prompts from a signed bundle.
+The last command writes `build/darwin-universal/Glint.app` (29 MB, Apple silicon and Intel in
+one bundle). The disk image needs a Mac, so `mygo build` skips it elsewhere. Signing, the icon
+and the `Info.plist` keys are in `docs/building.md`.
 
-## What already works on macOS
+To list the gaps from the code, run this from the repository root:
 
-These parts have no Windows code and should compile on macOS as they are:
+```sh
+bash tools/verify/macgaps.sh
+```
 
-| Part | Notes |
+It prints every `_other.go` stub file that builds for darwin, with its functions, and every line
+in a darwin-built file that returns an unsupported error.
+
+## What is stubbed
+
+OS code lives in `_windows.go` files. Each has a twin, usually `_other.go` with
+`//go:build !windows`, that compiles on macOS and returns `errors.ErrUnsupported`
+(`platform.ErrUnsupported` in `internal/platform`) or does nothing.
+
+| Area | Package and file | Stubbed on macOS | What the user loses |
+| --- | --- | --- | --- |
+| Screen capture | `internal/platform`, `platform_other.go` | `Displays`, `CaptureRect`, `CaptureWindow`, `Windows`, `ExcludeFromCapture`, `Wallpaper`, `SetLaunchAtLogin`. `CursorPos` returns 0,0. | every screenshot, window picking, capture exclusion, the wallpaper background, launch at login |
+| OCR | `internal/ocr`, `ocr_other.go` | `Recognize` | Capture Text, Copy Text and automatic redaction |
+| Video encode | `internal/media`, `media_other.go` | `CreateVideoWriter` and every `VideoWriter` method. `AvailableCodecs` returns none. | Studio export and Trim & Compress |
+| Video and audio decode | `internal/media`, `media_other.go` | `OpenFrameReader`, `OpenAudioReader`. `DecodableCodecs` returns none. | Studio playback and timeline thumbnails, video in Quick Look and Trim & Compress |
+| Recording | `internal/media`, `recorder_other.go` | `StartRecorder` | every screen recording |
+| Audio capture | `internal/media/capture`, `audio_other.go` | `Microphones`, `DefaultOutput`, `StartTrack`, `StartMicMonitor` | microphone and system audio tracks, the level meter, the teleprompter's speech tap |
+| Audio output | `internal/media/playback`, `output_other.go` | `AudioOutput.start` | sound in Studio and Quick Look |
+| Input | `internal/media/input`, `track_other.go` | `Start`, `Track.Stop` | `input.json`, so no reconstructed cursor, click zooms or keystroke captions |
+| Transcription | `internal/transcribe`, `whisper_other.go`, `runtime_other.go` | `loadWhisper`. No whisper.cpp runtime is pinned for darwin, so `installRuntime` returns `errors.ErrUnsupported`. | transcripts, captions and the teleprompter following speech |
+| Camera | `internal/media`, `recorder_other.go`, `camera_preview_other.go` | `Cameras`, `StartCameraPreview` | the camera in the picker, the live preview, `camera.mp4` |
+| App | `internal/app`, `native_other.go` | `foregroundWindow` returns 0. `excludeOwnWindows` does nothing. | Capture Window (`Ctrl+Shift+5`) finds no front window and falls back to full screen. Glint's windows are not kept out of captures. |
+| Window placement | `internal/ui/overlay`, `pin`, `stack`, `toast`, `record` | native placement and window rects | MyGo's generic placement. `record` cannot find a window's rect. |
+
+`doubleClickTime` in `internal/app` is a fixed 500 ms, and `AllowForeground` and
+`forgetRustOpenWith` have nothing to do on macOS.
+
+## What works
+
+These parts have macOS code or need none. They compile and vet for darwin. None of them has run
+on a Mac.
+
+- **The UI.** MyGo's macOS backend draws the windows with Metal and supplies the menu bar icon,
+  menus, global shortcuts, the clipboard, dialogs, the single-instance lock and
+  `Shell.ShowItemInFolder`. The menu bar icon is a template image that macOS tints
+  (`internal/app/tray.go`).
+- **Platform wording.** The Library, Studio, Quick Look and Trim & Compress say Trash and Finder.
+  Settings shows shortcuts as macOS chords such as ⌃⇧4 (`internal/ui/prefs/accel`). The default
+  global shortcuts stay `Ctrl+Shift+2` to `Ctrl+Shift+7` and `Ctrl+Shift+L`, which leave the
+  system's ⌘⇧3, ⌘⇧4 and ⌘⇧5 alone.
+- **Files.** `internal/settings` keeps `settings.json` and `presets.json` in
+  `~/Library/Application Support/Glint` and saves to `~/Pictures/Glint`. `internal/store` reads
+  and writes the Library and moves captures to the Trash through `NSFileManager`
+  (`trash_darwin.go`), so Finder's Put Back works.
+- **Rendering.** `internal/render` has a macOS font catalog with SF Pro as the default
+  (`fonts_darwin.go`), so the editor's renders and `image.png` work.
+- **Shared logic.** `internal/redact`, the Studio project, timeline, auto zoom and frame
+  compositor in `internal/studio`, and the captions, fillers and silences in
+  `internal/transcribe` are plain Go. They work once their inputs exist.
+
+## Plan
+
+Call the macOS frameworks from Go through `github.com/ebitengine/purego`, as MyGo does. No cgo.
+`internal/store/trash_darwin.go` shows the pattern: `purego.Dlopen` the framework, then send
+Objective-C messages with `purego/objc`.
+
+For each area, add a `_darwin.go` file beside the `_windows.go` one and narrow the stub's build
+line to `//go:build !windows && !darwin`, as `internal/store/trash_other.go` does. Keep each
+package's API as it is, so `internal/studio`, `internal/app` and the UI do not change. A
+recording must still write the session package that `docs/architecture.md` describes:
+`screen.mp4` without the cursor, an optional `camera.mp4`, `mic.wav`, `system.wav` and
+`input.json` in media milliseconds.
+
+The Rust build's macOS port reached screenshots, OCR, recording and Studio playback with these
+frameworks, so they are the first choice:
+
+| Area | macOS API |
 | --- | --- |
-| `crates/glint-render` | tiny-skia compositor: styles, backgrounds, annotations, screenshot render. Except `fonts.rs`, see below. |
-| `crates/glint-studio` | Project model, timeline, auto zoom, compositor, export logic. It calls `glint-media` for decode and encode. |
-| `crates/glint-transcribe` | whisper.cpp through `whisper-rs`. Turn on the Metal feature on Apple silicon. |
-| GPUI windows and views | GPUI is native on macOS (it is Zed's UI framework). |
-| `xcap`, `global-hotkey`, `tray-icon`, `arboard` | These crates support macOS. |
-| `src/redact.rs`, `src/library.rs` (most of it), `src/prefs.rs`, `src/editor/`, `src/studio/` | Plain Rust plus GPUI, apart from the calls listed below. |
+| Screen capture, window list, capture exclusion | ScreenCaptureKit (`SCScreenshotManager`, `SCShareableContent`, an `SCContentFilter` that leaves Glint's windows out), `CGWindowListCopyWindowInfo` |
+| OCR | Vision `VNRecognizeTextRequest` |
+| Video encode | AVFoundation `AVAssetWriter`, with VideoToolbox doing the hardware encode |
+| Video and audio decode | `AVAssetReader` |
+| Recording | one `SCStream` for the screen and system audio, at a constant frame rate |
+| Audio capture | `AVCaptureSession` for the microphone. System audio comes from the `SCStream`. |
+| Audio output | an AudioToolbox `AudioQueue`. MyGo's `audio` package already drives one through purego (`audio/output_darwin.go`), to reuse or copy. |
+| Input | a `CGEventTap`, and `NSCursor` images for the cursor sprites |
+| Camera | `AVCaptureSession` and `AVCaptureDevice.DiscoverySession` |
+| Wallpaper | `NSWorkspace` `desktopImageURLForScreen:` |
+| Launch at login | MyGo's `App.SetOpenAtLogin`, which registers a login item on macOS 13 and later. Glint would then read `App.WasOpenedAtLogin` in place of `--background`. |
 
-## Windows-only code to replace
+Transcription needs a whisper.cpp library that purego can load. The release Glint pins ships one
+for Windows only, so the macOS source of that library is an open decision.
 
-The counts are `windows::` references in each file at commit 1d33f3c. The files now live in
-`crates/glint-media/src/win/` and, for the root crate, in `src/sys/win/` (only the
-Windows-specific functions moved; the shared parts stayed in `src/`). `win.rs` is now
-`desktop.rs` for its shared half and `sys/win/desktop.rs` for the rest.
+The Rust port also found these traps:
 
-### `crates/glint-media` (the media engine)
+- **Coordinates.** macOS uses points with a bottom-left origin, and each display has its own
+  scale. `internal/platform` rectangles are physical pixels of the virtual desktop with a
+  top-left origin. Convert in one place.
+- **Capture exclusion.** `NSWindow.sharingType` no longer keeps a window out of captures on
+  macOS 14 and later. Only the `SCContentFilter` does.
+- **Focus.** macOS 14 lets an app take focus only from user input to that app, so a window
+  opened by a forwarded command line stays behind the active app.
+- **Minimum version.** `mygo.json` sets macOS 13, the first with ScreenCaptureKit system audio.
+  Check for anything that needs 14 at runtime.
 
-| File | Windows API | macOS replacement |
-| --- | --- | --- |
-| `screen.rs`, `d3d.rs` | Windows.Graphics.Capture on Direct3D 11 | ScreenCaptureKit (`SCStream`), IOSurface or CVPixelBuffer frames |
-| `encoder.rs`, `mf.rs`, `writer.rs` | Media Foundation sink writer: H.264/HEVC and AAC into MP4 | AVFoundation `AVAssetWriter` (VideoToolbox does the hardware encode) |
-| `reader.rs`, `frames.rs` | Media Foundation source reader for MP4 decode and seek | `AVAssetReader` |
-| `audio.rs` | WASAPI capture: mic, plus loopback for system audio | Mic through AVFoundation or CoreAudio. System audio through ScreenCaptureKit audio (macOS 13 and later). |
-| `audio_out.rs` | WASAPI playback for the Studio preview | CoreAudio or `AVAudioEngine` |
-| `devices.rs` | Display, mic and camera enumeration | `NSScreen` or `CGDisplay`, `AVCaptureDevice.DiscoverySession` |
-| `camera.rs` | Media Foundation camera reader | `AVCaptureSession` |
-| `hooks.rs`, `keys.rs` | Low-level mouse and keyboard hooks for `input.json` | `CGEventTap`, which needs Accessibility permission |
-| `cursor.rs` | GDI cursor bitmaps for the reconstructed cursor | `NSCursor.currentSystem` image and hotspot |
-| `recorder.rs` | Ties these together | Same shape behind the new backends |
+## What needs a Mac
 
-The output contract does not change. A session package holds `screen.mp4` (no cursor),
-optionally `camera.mp4`, `mic.wav`, `system.wav`, and `input.json` in media milliseconds. Studio
-reads exactly that. Keep the public API of `glint-media` and put a per-platform backend behind
-it, so `glint-studio` and the UI stay the same.
+Compiling and packaging work anywhere. These steps do not:
 
-### Root crate (`src/`)
+- Running `Glint.app`, and every check in `docs/parity.md`'s macOS section.
+- The purego code itself. It loads system frameworks, so its tests and its proof run only on
+  macOS.
+- The permission prompts. Screen Recording, Input Monitoring, Microphone and Camera are granted
+  to the code signature, so test from a bundle signed with a stable identity
+  (`docs/building.md`).
+- The disk image `Glint <version>.dmg`, which `mygo build` makes only on macOS.
+- Displays with mixed scales.
 
-| File | Windows API | macOS replacement |
-| --- | --- | --- |
-| `shell.rs` (32 refs) | COM `IDataObject` and `IDragSourceHelper` for dragging a card into other apps, `CF_HDROP` clipboard, DWM and window styles | `NSDraggingSource` with an `NSPasteboardItem` file URL; `NSPasteboard` |
-| `win.rs` | Single-instance mutex, topmost windows, Run-key launch at login, wallpaper path, clipboard images | `NSRunningApplication` or a lock file, `NSWindow.level`, `SMAppService`, `NSWorkspace` desktop image |
-| `ipc.rs` | `WM_COPYDATA`, which forwards CLI and Open-with requests to the running instance | Apple events or `application:openURLs:`, or a Unix socket |
-| `capture.rs`, `record/target.rs`, `record/chrome.rs` | Window enumeration, DWM frame bounds, `WDA_EXCLUDEFROMCAPTURE`, monitor lookup | `CGWindowListCopyWindowInfo` or `SCShareableContent`; exclude Glint's windows through the `SCContentFilter` |
-| `ocr.rs` | Windows.Media.Ocr | Vision `VNRecognizeTextRequest` |
-| `library.rs` | Recycle Bin, reveal in Explorer | `NSWorkspace.recycle`, `activateFileViewerSelecting` |
-| `ui.rs` | Accent color and light or dark theme from the registry | `NSColor.controlAccentColor`, `NSApp.effectiveAppearance` |
-| `hotkeys.rs` | Default shortcuts are Windows chords | Default to Cmd-based chords. `global-hotkey` works on macOS. |
+## Packaging notes
 
-For Objective-C interop, use `objc2` and its framework crates (`objc2-app-kit`,
-`objc2-screen-capture-kit`, `objc2-av-foundation`, `objc2-vision`). They match the
-`windows`-crate style.
+These apply to the `Glint.app` that `go tool mygo build -platform darwin/universal` makes.
 
-## Things that will bite
 
-- **Permissions.** Screen Recording (TCC), Accessibility (event taps), Microphone and Camera
-  each need a prompt and an `Info.plist` usage string. macOS keys the grants to the code
-  signature, so a `cargo run` binary loses them on every rebuild. Build into a `.app` bundle
-  signed with a stable identity early.
-- **Coordinates.** macOS uses points with a bottom-left origin, and Retina scale is per
-  display. `input.json` and the capture code use top-left screen-master pixels, so convert in
-  exactly one place.
-- **The menu bar replaces the tray.** `tray-icon` maps to `NSStatusItem`. Set the activation
-  policy to accessory so Glint has no Dock icon while it runs in the background.
-- **Shortcut conflicts.** Cmd+Shift+3, 4 and 5 belong to the system screenshot tool. Pick other
-  defaults.
-- **The build is simpler.** whisper-rs builds with Xcode's clang and Homebrew's cmake. No
-  `LIBCLANG_PATH` file is needed.
+The app is an agent app (`LSUIElement`): it lives in the menu bar, with no Dock icon. Its
+`Info.plist` carries the usage strings that the Screen Recording, Microphone and Camera prompts
+show. Input Monitoring has no usage string; macOS shows its own text. The icon is
+`resources/darwin/Glint.icns`, made from `assets/glint-mac-1024.png`, which sits inside Apple's
+icon grid. Rerun `go run ./tools/macicon` after changing that artwork.
 
-## Decisions
+macOS grants Screen Recording, Input Monitoring, Microphone and Camera to an app's code
+signature. An app signed ad hoc, the default, asks again after each rebuild. Sign with a stable
+identity to keep the grants:
 
-1. **The look on macOS.** Glint follows macOS conventions on macOS, as it follows Windows 11
-   conventions on Windows: the system font, accent color and appearance, the menu bar in place
-   of the tray, and Cmd-based shortcuts. The layout and Glint's own visual identity stay the
-   same on both. Platform conventions are shared by every Mac app, so this does not copy
-   Screendrop or CleanShot X.
-2. **Repo layout.** One codebase with `cfg(target_os)` backends.
-3. **Minimum macOS version.** 13, the first with ScreenCaptureKit system audio. Gate anything
-   that needs 14 at runtime.
+```sh
+security find-identity -v -p codesigning
+go tool mygo build -platform darwin/arm64 -sign "Apple Development: Name (TEAMID)"
+open build/darwin-arm64/Glint.app
+```
 
-## Suggested first steps
+An app signed ad hoc and is not notarized. Gatekeeper blocks the first launch. On
+macOS 14 and earlier, users open it with right-click > Open. On macOS 15 and later, they click
+Open Anyway under System Settings > Privacy & Security after the first attempt. Either way,
+clearing the quarantine flag also works:
 
-1. Clone, then run `cargo build -p glint-render -p glint-studio -p glint-transcribe` and fix
-   whatever does not compile.
-2. Put `cfg(windows)` around the Windows modules in `glint-media` and the root crate, and add
-   stubs that return a clear "not supported on macOS yet" error, so the app launches.
-3. Implement the macOS screenshot path first (capture, preview card, editor, clipboard). It
-   exercises the most shared code for the least platform code.
-4. Then recording (ScreenCaptureKit, AVAssetWriter, event tap), then Studio playback.
-5. Keep `docs/parity.md` honest. Check a macOS line only after doing it in the running app.
-
-Promo material (`promo/`) is git-ignored and stays on the Windows machine.
+```sh
+xattr -dr com.apple.quarantine /Applications/Glint.app
+```

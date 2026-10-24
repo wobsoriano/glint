@@ -1,0 +1,1356 @@
+{
+  "camera": "camera.png",
+  "captions": [
+    {
+      "end_ms": 1800.0,
+      "start_ms": 1500.0,
+      "text": "Click"
+    },
+    {
+      "end_ms": 2200.0,
+      "start_ms": 1800.0,
+      "text": "Save"
+    },
+    {
+      "end_ms": 2350.0,
+      "start_ms": 2200.0,
+      "text": "to"
+    },
+    {
+      "end_ms": 2700.0,
+      "start_ms": 2350.0,
+      "text": "keep"
+    },
+    {
+      "end_ms": 2900.0,
+      "start_ms": 2700.0,
+      "text": "your"
+    },
+    {
+      "end_ms": 3300.0,
+      "start_ms": 2900.0,
+      "text": "work"
+    },
+    {
+      "end_ms": 4900.0,
+      "start_ms": 4600.0,
+      "text": "Then"
+    },
+    {
+      "end_ms": 5400.0,
+      "start_ms": 4900.0,
+      "text": "export"
+    },
+    {
+      "end_ms": 5600.0,
+      "start_ms": 5400.0,
+      "text": "it"
+    }
+  ],
+  "frames": [
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "wide_start",
+      "project": {
+        "aspect": "wide16x9",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        640,
+        360
+      ],
+      "t": 0.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "wide_zoom_click",
+      "project": {
+        "aspect": "wide16x9",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        640,
+        360
+      ],
+      "t": 2060.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "wide_keys_over_captions",
+      "project": {
+        "aspect": "wide16x9",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        640,
+        360
+      ],
+      "t": 3150.0
+    },
+    {
+      "camera": true,
+      "motion_blur": true,
+      "name": "wide_motion_blur",
+      "project": {
+        "aspect": "wide16x9",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        640,
+        360
+      ],
+      "t": 4000.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "vertical_fill",
+      "project": {
+        "aspect": "vertical9x16",
+        "aspect_mode": "fill",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        360,
+        640
+      ],
+      "t": 3150.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "vertical_fill_late",
+      "project": {
+        "aspect": "vertical9x16",
+        "aspect_mode": "fill",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 135.0,
+              "stops": [
+                1667691007,
+                2824206335,
+                3964180991
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        360,
+        640
+      ],
+      "t": 7000.0
+    },
+    {
+      "camera": false,
+      "motion_blur": false,
+      "name": "crop_click_ring",
+      "project": {
+        "aspect": "original",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": false,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 0.699999988079071,
+          "w": 0.6000000238418579,
+          "x": 0.10000000149011612,
+          "y": 0.15000000596046448
+        },
+        "design": {
+          "background": {
+            "Solid": 522795007
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.05000000074505806,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.10000000149011612,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "top_left"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        510,
+        360
+      ],
+      "t": 5150.0
+    },
+    {
+      "camera": false,
+      "motion_blur": false,
+      "name": "crop_keys_top_left",
+      "project": {
+        "aspect": "original",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": false,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 0.699999988079071,
+          "w": 0.6000000238418579,
+          "x": 0.10000000149011612,
+          "y": 0.15000000596046448
+        },
+        "design": {
+          "background": {
+            "Solid": 522795007
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.05000000074505806,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.10000000149011612,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "top_left"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        510,
+        360
+      ],
+      "t": 3100.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "square_blurred_raw_cursor",
+      "project": {
+        "aspect": "square",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": "Blurred",
+          "camera": {
+            "center": [
+              0.20000000298023224,
+              0.25
+            ],
+            "roundness": 0.20000000298023224,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 2.0,
+            "smoothing": 0.0,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          },
+          {
+            "auto": false,
+            "enabled": true,
+            "end_ms": 7500.0,
+            "focus": {
+              "kind": "fixed",
+              "x": 0.4000000059604645,
+              "y": 0.6499999761581421
+            },
+            "scale": 2.5,
+            "start_ms": 5500.0
+          }
+        ]
+      },
+      "size": [
+        480,
+        480
+      ],
+      "t": 1000.0
+    },
+    {
+      "camera": true,
+      "motion_blur": false,
+      "name": "square_fixed_zoom_fallback_cursor",
+      "project": {
+        "aspect": "square",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": true,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": true,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": "Blurred",
+          "camera": {
+            "center": [
+              0.20000000298023224,
+              0.25
+            ],
+            "roundness": 0.20000000298023224,
+            "size": 0.25999999046325684,
+            "visible": true
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 2.0,
+            "smoothing": 0.0,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.44999998807907104
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": true,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          },
+          {
+            "auto": false,
+            "enabled": true,
+            "end_ms": 7500.0,
+            "focus": {
+              "kind": "fixed",
+              "x": 0.4000000059604645,
+              "y": 0.6499999761581421
+            },
+            "scale": 2.5,
+            "start_ms": 5500.0
+          }
+        ]
+      },
+      "size": [
+        480,
+        480
+      ],
+      "t": 6800.0
+    },
+    {
+      "camera": false,
+      "motion_blur": false,
+      "name": "portrait_plain",
+      "project": {
+        "aspect": "portrait4x5",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": false,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": false,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": {
+            "Gradient": {
+              "angle": 90.0,
+              "stops": [
+                253765631,
+                743662847
+              ]
+            }
+          },
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": false
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": true
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.800000011920929
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": false,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        400,
+        500
+      ],
+      "t": 2060.0
+    },
+    {
+      "camera": false,
+      "motion_blur": false,
+      "name": "portrait_no_background",
+      "project": {
+        "aspect": "portrait4x5",
+        "aspect_mode": "fit",
+        "audio": {
+          "mic": {
+            "enabled": true,
+            "volume": 1.0
+          },
+          "system": {
+            "enabled": true,
+            "volume": 1.0
+          }
+        },
+        "caption_cues": [
+          {
+            "end_ms": 3300.0,
+            "start_ms": 1500.0,
+            "text": "Click Save to keep your work"
+          },
+          {
+            "end_ms": 5600.0,
+            "start_ms": 4600.0,
+            "text": "Then export it"
+          }
+        ],
+        "captions": {
+          "enabled": false,
+          "karaoke": true,
+          "position": 0.9200000166893005,
+          "size": 1.0
+        },
+        "click_highlights": false,
+        "clips": [
+          {
+            "end_ms": 8000.0,
+            "speed": 1.0,
+            "start_ms": 0.0
+          }
+        ],
+        "crop": {
+          "h": 1.0,
+          "w": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "design": {
+          "background": "None",
+          "camera": {
+            "center": [
+              0.8500000238418579,
+              0.8199999928474426
+            ],
+            "roundness": 0.5,
+            "size": 0.25999999046325684,
+            "visible": false
+          },
+          "corner_radius": 0.019999999552965164,
+          "cursor": {
+            "size": 1.0,
+            "smoothing": 0.5,
+            "visible": false
+          },
+          "padding": 0.05999999865889549,
+          "shadow": 0.800000011920929
+        },
+        "export": {
+          "codec": "h264",
+          "format": "mp4",
+          "fps": "60",
+          "motion_blur": true,
+          "quality": "high",
+          "resolution": "p1080"
+        },
+        "keystrokes": {
+          "enabled": false,
+          "position": "bottom_center"
+        },
+        "version": 1,
+        "zooms": [
+          {
+            "auto": true,
+            "enabled": true,
+            "end_ms": 7200.0,
+            "focus": {
+              "kind": "pointer"
+            },
+            "scale": 1.5,
+            "start_ms": 1700.0
+          }
+        ]
+      },
+      "size": [
+        400,
+        500
+      ],
+      "t": 2060.0
+    }
+  ],
+  "screen": "screen.png",
+  "session": "session"
+}

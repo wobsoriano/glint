@@ -1,100 +1,107 @@
 # Building Glint
 
-## Windows
+Glint is a Go app built on [MyGo](https://mygo.egoist.dev) v0.6.3. Building it needs Go 1.27 and
+nothing else: no cgo, no C compiler, no SDK. `go.mod` pins the MyGo CLI as a tool, so
+`go tool mygo` runs the right version. Glint ships for Windows only. The code also compiles for
+macOS, so the port described in `docs/mac-port.md` has a base to start from, but no macOS app is
+released.
 
-Glint builds with `cargo build` on Windows 10/11 with the Rust MSVC toolchain. Two native build
-tools are needed because `glint-transcribe` depends on `whisper-rs`, which compiles whisper.cpp
-at build time.
+## Run it
 
-### Prerequisites
+```sh
+GLINT_DATA_DIR=/tmp/glint-dev go run .
+```
 
-| Tool | Why | Where to get it |
+`GLINT_DATA_DIR` keeps a development run away from your real Library (`%APPDATA%\Glint` on
+Windows). It also gives the run a single-instance lock of its own, so it starts beside an
+installed Glint instead of handing its command line to it. `go tool mygo dev` runs the app the
+same way and rebuilds it when the code changes.
+
+## Test
+
+```sh
+go vet ./...
+go test ./...
+GOOS=darwin GOARCH=arm64 go build ./...   # keeps the macOS stubs compiling
+```
+
+Run `go test` from a signed-in desktop session. Tests that need one are marked like this:
+
+| Marking | Tests | Skipped by |
 | --- | --- | --- |
-| Rust (MSVC toolchain) | Everything | rustup |
-| Windows 10/11 SDK | `windows` crate | Visual Studio Installer, "Windows 11 SDK" |
-| cmake | `whisper-rs-sys` builds whisper.cpp with it | Visual Studio Build Tools 2022 ships one under `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin` (select "C++ CMake tools for Windows"), or install cmake from cmake.org |
-| libclang | `whisper-rs-sys` runs bindgen, which loads `libclang.dll` | See below |
+| `testing.Short()` | screen capture, playback through the speakers, slow OCR runs | `go test -short ./...` |
+| a missing device | microphone, camera, audio output, wallpaper | skipped on their own when the device is absent |
+| `GLINT_TEST_TRASH=1` | moving folders to the real Recycle Bin | skipped unless set |
+| `GLINT_MEDIA_BENCH=1` | encoder throughput | skipped unless set |
 
-#### libclang
+Some behavior is proved by commands rather than tests, because it drives the desktop, downloads
+a model or runs for minutes. Each command's doc comment gives its flags:
 
-bindgen finds libclang through the `LIBCLANG_PATH` environment variable, which must name the
-folder that contains `libclang.dll`. Two routes:
+| Command | Proves |
+| --- | --- |
+| `internal/app/cmd/glintcheck` and its `scenarios` scripts | the app's flows, driven end to end on the desktop |
+| `internal/transcribe/cmd/transcribecheck` | on-device transcription |
+| `internal/studio/cmd/exportcheck` | Studio export of a synthetic session. It checks each render with `ffprobe` (on `PATH`) and against `ComposeFrame`, and checks that its tones and flashes start where the edit puts them. |
+| `tools/packagecheck` | the built executable and the installer (see below) |
+| `tools/verify` | the checks behind `docs/parity.md`: each flow driven in the packaged app, a Rust-written Library and settings, adversarial cases, idle cost, and the macOS gap list (`macgaps.sh`). `docs/go-port/verification.md` gives the results. |
 
-1. Visual Studio Installer: add the "C++ Clang tools for Windows" component. `libclang.dll` then
-   lives under `VC\Tools\Llvm\x64\bin` of the Build Tools or Visual Studio install.
-2. The PyPI `libclang` wheel, which is a plain zip holding the DLL and needs no install:
+## Build the app
 
-   ```powershell
-   py -m pip download libclang==18.1.1 --only-binary :all: --no-deps -d $env:TEMP\libclang
-   Copy-Item $env:TEMP\libclang\libclang-18.1.1-py2.py3-none-win_amd64.whl $env:TEMP\libclang\wheel.zip
-   Expand-Archive $env:TEMP\libclang\wheel.zip $env:TEMP\libclang\whl
-   New-Item -ItemType Directory -Force $HOME\.glint-build\libclang-18.1.1
-   Copy-Item $env:TEMP\libclang\whl\libclang-18.1.1.data\platlib\clang\native\libclang.dll $HOME\.glint-build\libclang-18.1.1\
-   ```
+```sh
+go tool mygo build                              # on Windows
+go tool mygo build -platform windows/amd64      # from any machine
+```
 
-   Then `LIBCLANG_PATH` is `C:\Users\<you>\.glint-build\libclang-18.1.1`.
+`mygo.json` configures the build: the name, identifier, version and file types. The output goes
+to `build/windows-amd64/`: `Glint.exe`, `icon.png` beside it, and the installer
+`Glint Setup <version> amd64.exe`.
 
-### Telling cargo where the tools are
+The first Windows build downloads NSIS 3.13, which makes the installer, into
+`%LOCALAPPDATA%\mygo`. On macOS and Linux, install NSIS (`brew install makensis`,
+`apt install nsis`) to get the installer. Without it, `mygo build` skips the installer.
 
-`.cargo/config.toml` is git-ignored because it holds machine-specific paths. Copy the example and
-edit both paths:
+### Windows
+
+`Glint.exe` runs without a console window and carries the icon from `resources/icon.png`, the
+version information and a DPI-aware manifest. Check those with:
+
+```sh
+go run ./tools/packagecheck build/windows-amd64/Glint.exe
+```
+
+The installer installs Glint for the current user, without administrator rights, in
+`%LOCALAPPDATA%\Programs\Glint`. It adds a Start menu shortcut and an entry in Settings > Apps,
+and registers Glint under "Open with" for `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`,
+`.mp4`, `.mov` and `.m4v`, as ProgIDs `com.glint.app.<ext>`. Uninstalling removes all of it.
+`/S` installs silently and `/D=<folder>` (last on the command line) installs elsewhere.
+`tools/packagecheck/install.ps1` installs into a scratch folder, checks the files, the shortcut,
+the registry and the tray icon, uninstalls, and checks that the registry is as it was:
 
 ```powershell
-Copy-Item .cargo\config.toml.example .cargo\config.toml
+powershell -NoProfile -File tools/packagecheck/install.ps1 -Scratch $env:TEMP\glint-install
 ```
 
-The `[env]` table sets `CMAKE` (full path to `cmake.exe`) and `LIBCLANG_PATH` for every cargo
-invocation in this workspace. Setting the same two variables in your shell works too, if you
-prefer not to keep the file.
+Glint 0.1, the Rust build, registered "Open with" itself as `Glint.Image`, `Glint.Video` and
+`Applications\glint.exe`. The installed Go build removes those entries when it starts, so
+"Open with" lists one Glint.
 
-### Build and test
+A local build is not signed, so SmartScreen warns on its first run. Releases are signed in CI;
+see "Code signing" below.
 
-```powershell
-cargo build --workspace --all-targets   # expected: zero warnings
-cargo test --workspace
-cargo run --release
-```
-
-The first build compiles whisper.cpp and GPUI and takes several minutes. Later builds are
-incremental.
-
-## macOS
-
-The macOS port is in progress (see `mac-port.md`). It needs Xcode, which provides the clang
-that whisper.cpp builds with and the Metal compiler GPUI uses, and cmake from Homebrew
-(`brew install cmake`). No `.cargo/config.toml` is needed.
-
-```sh
-cargo build --workspace --all-targets
-cargo test --workspace
-```
-
-Screen Recording, Input Monitoring, Microphone and Camera access are granted to an app's code
-signature, so a plain `cargo run` binary asks again after each rebuild, and the terminal you
-run it from gets the grants. `tools/bundle-mac.sh` builds `target/debug/Glint.app` (or
-`target/release` with `--release`) with the usage strings the prompts need. It signs ad hoc
-unless `GLINT_SIGN_IDENTITY` names a certificate; sign with a stable identity to keep the
-grants across rebuilds:
-
-```sh
-security find-identity -v -p codesigning
-GLINT_SIGN_IDENTITY="Apple Development: Name (TEAMID)" tools/bundle-mac.sh
-open target/debug/Glint.app
-```
-
-To check that a change still compiles for Windows without a Windows machine:
-
-```sh
-rustup target add x86_64-pc-windows-msvc
-tools/check-windows.sh --workspace --all-targets   # expected: zero warnings
-```
+Transcription downloads the whisper.cpp 1.8.3 libraries on first use. They need the Microsoft
+Visual C++ Redistributable (x64), which most PCs have and clean Windows installs lack. Glint
+does not ship the runtime DLLs: Microsoft lets only licensed Visual Studio users redistribute
+them, and its installer keeps them updated through Windows Update. When the runtime is missing
+or too old, transcription fails with a message that links to
+<https://aka.ms/vc14/vc_redist.x64.exe>.
 
 ## Releasing
 
-The `version` in the root `Cargo.toml` names the release. The Release workflow tags it
-`v<version>` and attaches `Glint-<version>-macos-arm64.dmg` and `Glint-<version>-windows-x64.exe`.
+The `version` in `mygo.json` names the release. The Release workflow builds the installer on a
+Windows runner with `mygo build`, signs it when SignPath is set up, tags the release
+`v<version>`, and attaches `Glint-<version>-windows-x64-setup.exe`.
 
-1. Bump `version` in `Cargo.toml`, then commit and push to `master`.
+1. Bump `version` in `mygo.json`, then commit and push to `master`.
 2. Run the Release workflow from the Actions tab, or from a terminal:
 
    ```sh
@@ -106,20 +113,31 @@ The `version` in the root `Cargo.toml` names the release. The Release workflow t
 Running the workflow again for the same version replaces the files on the draft release. Once a
 release is published, the workflow refuses to run for that version until `version` is bumped.
 
-The Windows EXE links the C and C++ runtimes statically (`-C target-feature=+crt-static`), so
-it runs on PCs without the Visual C++ Redistributable. The workflow fails if the EXE still
-imports `VCRUNTIME140.dll` or `MSVCP140.dll`.
+## Code signing
 
-To build the DMG locally, run `tools/package-mac.sh`. It prints the path of the DMG under
-`target/release`.
+Releases are signed through [SignPath Foundation](https://signpath.org), which signs open-source
+projects for free. The certificate is issued to SignPath Foundation, so Windows names it as the
+publisher. Until the project is accepted, the workflow builds an unsigned installer and
+SmartScreen warns users on first run.
 
-The macOS app is signed ad hoc and is not notarized. Gatekeeper blocks the first launch. On
-macOS 14 and earlier, users open it with right-click > Open. On macOS 15 and later, they click
-Open Anyway under System Settings > Privacy & Security after the first attempt. Either way,
-clearing the quarantine flag also works:
+The workflow signs two files, each in its own signing request that an approver accepts in
+SignPath:
 
-```sh
-xattr -dr com.apple.quarantine /Applications/Glint.app
-```
+1. `Glint.exe`, as `mygo build` first makes it.
+2. The installer. The installer holds `Glint.exe` compressed, where SignPath cannot sign it, so
+   the workflow builds a second time with `tools/signswap` as `windows.signCommand`. The build
+   is reproducible, so the second `Glint.exe` has the same bytes as the first, and signswap
+   swaps in the signed copy before mygo packs the installer. The workflow then checks that
+   `Glint.exe` and the signed installer both carry a valid signature.
 
-The DMG is for Apple silicon only for now.
+To set it up once the project is accepted:
+
+1. In SignPath, add the predefined GitHub.com trusted build system to the organization and link
+   it to the Glint project. Give the project an artifact configuration whose root is a single
+   `<pe-file>` with `<authenticode-sign/>`, because the workflow uploads each file unzipped.
+2. In the GitHub repository, add the secret `SIGNPATH_API_TOKEN`, a token of a SignPath user who
+   may submit signing requests, and the variables `SIGNPATH_ORGANIZATION_ID`,
+   `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG`.
+
+The signing steps run only while `SIGNPATH_PROJECT_SLUG` is set. A request waits up to an hour
+for approval.

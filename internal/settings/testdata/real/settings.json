@@ -1,0 +1,117 @@
+{
+  "style": {
+    "background": {
+      "Gradient": {
+        "stops": [
+          1667691007,
+          2824206335,
+          3964180991
+        ],
+        "angle": 135.0
+      }
+    },
+    "padding": 64.0,
+    "inset": 0.0,
+    "auto_balance": true,
+    "radius": 12.0,
+    "shadow": 40.0,
+    "shadow_opacity": 0.45,
+    "aspect": null,
+    "align": 4,
+    "chrome": "None",
+    "chrome_title": true
+  },
+  "launch_at_login": false,
+  "include_own_windows": false,
+  "timer_seconds": 5,
+  "format": "Png",
+  "jpeg_quality": 85,
+  "save_dir": "C:\\Users\\me\\Pictures\\Glint",
+  "save_without_dialog": true,
+  "window_shadow": true,
+  "show_loupe": true,
+  "after_shot": {
+    "preview": true,
+    "copy": true,
+    "save": false,
+    "edit": false,
+    "pin": false
+  },
+  "after_recording": {
+    "preview": true,
+    "copy": false,
+    "save": false,
+    "studio": false
+  },
+  "record": {
+    "target": "Area",
+    "area": [
+      627,
+      482,
+      1792,
+      1052
+    ],
+    "camera": null,
+    "mic": null,
+    "system_audio": true,
+    "countdown": 3,
+    "teleprompter": false,
+    "script": "",
+    "prompter_lines": 3
+  },
+  "overlay": {
+    "side": "Left",
+    "auto_close_seconds": 0,
+    "dismiss_after_drag": true,
+    "layout": {
+      "corners": [
+        "dismiss",
+        "edit",
+        "pin",
+        "more"
+      ],
+      "center": [
+        "copy",
+        "save"
+      ],
+      "hidden": [
+        "save_as",
+        "compress",
+        "quick_look",
+        "copy_text",
+        "delete"
+      ]
+    }
+  },
+  "hotkeys": {
+    "area": "Ctrl+Shift+4",
+    "fullscreen": "Ctrl+Shift+3",
+    "window": "Ctrl+Shift+5",
+    "previous_area": "Ctrl+Shift+6",
+    "text": "Ctrl+Shift+2",
+    "recording": "Ctrl+Shift+7",
+    "library": "Ctrl+Shift+L"
+  },
+  "auto_redact": true,
+  "redact_style": "Blur",
+  "redact_rules": {
+    "emails": true,
+    "phones": true,
+    "credit_cards": true,
+    "secrets": true,
+    "ip_addresses": true,
+    "ids": true,
+    "urls_with_tokens": true
+  },
+  "last_area": [
+    740,
+    452,
+    1375,
+    932
+  ],
+  "library": {
+    "view": "Grid",
+    "sort": "Captured",
+    "inspector": true
+  }
+}

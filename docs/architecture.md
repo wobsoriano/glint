@@ -1,41 +1,46 @@
 # Glint architecture
 
-Glint is a screenshot, annotation and screen-recording app for Windows, with a macOS port in
-progress, written in Rust with GPUI.
-It is a cargo workspace. The UI lives in the root crate, and everything that can run without a
-window lives in a library crate so it can be tested headlessly.
+Glint is a screenshot, annotation and screen-recording app for Windows, written in Go on
+[MyGo](https://mygo.egoist.dev) v0.6.3. MyGo supplies the windows, native UI drawn on the GPU,
+the tray, global shortcuts, the clipboard and dialogs. Glint reaches Windows directly for
+everything else: screen and window capture, OCR, Media Foundation, WASAPI and input hooks. All
+of it is pure Go with no cgo. Windows APIs are called through `golang.org/x/sys/windows` and
+COM or WinRT vtables, and whisper.cpp is loaded from its release DLL.
 
-| Crate | Owns | Depends on |
+| Package | Owns | Imports MyGo |
 | --- | --- | --- |
-| `glint` (root, `src/`) | GPUI windows, tray, hotkeys, capture flow, Library UI, editors, Studio UI | all below |
-| `crates/glint-render` | tiny-skia compositor: styles, backgrounds, annotations, screenshot render | none of ours |
-| `crates/glint-media` | Media engine: screen/camera/audio/input recording, MP4 encode, MP4/WAV decode | none of ours |
-| `crates/glint-studio` | Recording project model, timeline math, auto zoom, frame compositor, export | `glint-render`, `glint-media` |
-| `crates/glint-transcribe` | On-device speech-to-text (whisper.cpp), transcript model, filler and silence detection | none of ours |
+| `main.go`, `internal/app` | start-up, single instance, tray, global shortcuts, capture flow, wiring between windows | yes |
+| `internal/ui/...` | one package per window, plus `theme` for the shared look and icons | yes |
+| `internal/actions` | copy, save, export, compress, delete | yes |
+| `internal/platform` | displays, screen and window capture, capture exclusion, wallpaper, launch at login | no |
+| `internal/ocr` | the Windows OCR engine and reading order | no |
+| `internal/settings` | `settings.json`, `presets.json`, the data directory | no |
+| `internal/store` | the Library on disk | no |
+| `internal/redact` | sensitive text found in OCR lines | no |
+| `internal/render` | CPU compositor: styles, backgrounds, effects, annotations, `EditDoc` | no |
+| `internal/media` | recording (screen, camera, audio, input), MP4 encode and decode, WAV, transcode, playback | no |
+| `internal/studio` | Studio project, timeline, auto zoom, motion, frame compositor, export | no |
+| `internal/transcribe` | whisper.cpp, transcripts, captions, fillers, silences | no |
 
-Library crates never depend on `gpui`. They expose plain Rust types, blocking functions meant for
-background threads, and `Arc<AtomicBool>` cancel flags plus progress callbacks for long jobs.
+Packages that don't import MyGo expose plain Go types and blocking functions meant for
+goroutines, with a `context.Context` for cancelling long jobs and progress callbacks. Their tests
+run without a window.
 
-## Platform backends
+Each window package names what it needs from the app as a small `Host` interface, and
+`internal/app` implements them all. `internal/app.Surfaces` is the table of functions that opens
+each window.
 
-Platform code sits behind one backend per OS, chosen with `cfg(target_os)`. The shared modules
-re-export the backend's items, so callers never name a backend.
+## Platforms
 
-| Where | Shared modules | Windows backend | macOS backend |
-| --- | --- | --- | --- |
-| `glint-media` | `src/*.rs`: codec and record option types, `Nv12Frame` conversion, transcode, WAV | `src/win/` | `src/mac/` |
-| root crate | `src/*.rs` | `src/sys/win/` | `src/sys/mac/` |
+OS code lives in `_windows.go` files, with a `_other.go` (or `_darwin.go`) twin, so every package
+builds for both Windows and macOS. On macOS the twins mostly return `errors.ErrUnsupported`.
+`docs/mac-port.md` lists what works there. Window IDs and display IDs are `int64`: `HWND` and
+`HMONITOR` on Windows, `CGWindowID` and `CGDirectDisplayID` on macOS. Rectangles in
+`internal/platform` are physical pixels of the virtual desktop. MyGo's are in DIPs.
 
-A backend supplies the same functions and types as the other, with the same signatures. In
-`glint-media` that is device enumeration, `Recorder`, `FrameReader`, `VideoReader`,
-`AudioReader`, `VideoWriter`, `AudioOutput`, `MicMonitor` and `CameraPreview`. In the root
-crate it is the `sys::<module>` functions that `shell.rs`, `desktop.rs`, `capture.rs`, `ipc.rs`,
-`ocr.rs`, `library.rs`, `ui.rs` and `record/{chrome,target}.rs` re-export. Window ids
-(`CaptureSource::Window`, `WinInfo::hwnd`) and display handles (`DisplayInfo::handle`) are
-`isize` everywhere: `HWND` and `HMONITOR` on Windows, `CGWindowID` and `CGDirectDisplayID` on
-macOS.
-
-`tools/check-windows.sh --workspace --all-targets` type-checks the Windows backend from a Mac.
+The Library, settings, presets, Studio projects and transcripts use the same files and JSON as
+the Rust build that came before, byte for byte. A Library made by either build opens in the
+other.
 
 ## Library on disk
 
@@ -67,21 +72,27 @@ Library/
 `<id>` is `YYYY-MM-DD_HH-MM-SS_xxxx` (local time plus 4 random hex chars), so directory order is
 capture order. Titles live in `meta.json`, never in the directory name.
 
-```rust
-struct CaptureMeta {
-    version: u32,            // 1
-    kind: CaptureKind,       // "screenshot" | "recording"
-    title: String,           // user-editable, defaults to "Screenshot 2026-10-14 at 14.03.22"
-    created: DateTime<Local>,
-    modified: DateTime<Local>,
-    width: u32, height: u32, // pixels of base / screen master
-    duration_ms: Option<u64>,
-    source: Option<String>,  // window title or "Display 1"
-    imported_from: Option<PathBuf>,
+`meta.json` (`store.Meta`):
+
+```json
+{
+  "version": 1,
+  "kind": "screenshot",
+  "title": "Screenshot 2026-10-14 at 14.03.22",
+  "created": "2026-10-14T14:03:22.418+02:00",
+  "modified": "2026-10-14T14:05:10.002+02:00",
+  "width": 2560,
+  "height": 1440,
+  "duration_ms": null,
+  "source": "Display 1",
+  "imported_from": null
 }
 ```
 
-## Recording session contract (`glint-media` writes, `glint-studio` reads)
+`kind` is `"screenshot"` or `"recording"`. `width` and `height` are the pixels of `base.png` or of
+the screen master. `source` is a window title or a display name.
+
+## Recording session contract (`internal/media` writes, `internal/studio` reads)
 
 All times are milliseconds of **media time**: 0 is the first recorded frame and paused spans
 are removed. All positions are pixels in the screen master's coordinate space.
@@ -101,23 +112,28 @@ are removed. All positions are pixels in the screen master's coordinate space.
 
 `pointer` rows are `[t, x, y, cursor_id]`, sampled whenever the pointer moves (at most every
 8 ms) and when the cursor shape changes. Positions may fall outside the frame. `keys` holds
-only shortcut-like presses (modifier combos, Enter, Esc, Tab, arrows, function keys) plus plain
-typing grouped by the recorder, never raw text from password fields.
+only shortcut-like presses (modifier combos, Enter, Esc, Tab, arrows, function keys), never
+plain typing, and never Glint's own global shortcuts.
+
+Audio samples and video frames are placed on the media clock by the device timestamps of the
+packets and frames, not by when they arrive. That keeps sound and picture within a frame.
 
 ## Studio project (`project.json`)
 
-Owned by `glint-studio`. Versioned with a `version` field. Clip times are in source media time.
+Owned by `internal/studio`. Versioned with a `version` field. Clip times are in source media time.
 Output time is derived by walking clips in order and dividing each clip's duration by its speed.
 
 ## Shared rendering
 
-`glint-render::style::Background` and the gradient presets are the single source of truth for
+`render.Background` and the gradient presets in `internal/render` are the single source of truth for
 backgrounds in both the screenshot editor and Studio. Studio composes recordings with the same
 shadow, corner and background code as screenshots so presets look identical in both.
 
 ## Threads
 
-GPUI owns the main thread. Capture, OCR, recording, decode, export and transcription run on
-background threads and report back through `cx.spawn` tasks or channels polled by GPUI.
+MyGo owns the main thread, and every view and window call runs there. Capture, OCR, recording,
+decode, export and transcription run on goroutines and hand results back with `Window.Update`
+or `mygo.RunOnMain`. COM and WinRT calls lock their goroutine to an OS thread with an initialized
+apartment.
 Glint's own windows call `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` unless the user
 opts in to including them.

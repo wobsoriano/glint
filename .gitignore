@@ -1,8 +1,6 @@
-﻿target/
 .audit/
 todo.md
 .claude/
-.cargo/config.toml
 
 # Promo videos and their build inputs (fonts, audio, renders) stay local
 promo/
@@ -17,3 +15,11 @@ Thumbs.db
 # Local media from manual testing
 *.mp4
 *.wav
+
+# Go build output
+/build/
+/.mygo/
+
+# Local output of the old Rust build
+/target/
+/.cargo/

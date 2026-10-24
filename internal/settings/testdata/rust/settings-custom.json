@@ -1,0 +1,119 @@
+{
+  "style": {
+    "background": {
+      "Gradient": {
+        "stops": [
+          1667691007,
+          2824206335,
+          3964180991
+        ],
+        "angle": 135.0
+      }
+    },
+    "padding": 64.0,
+    "inset": 0.0,
+    "auto_balance": true,
+    "radius": 12.0,
+    "shadow": 40.0,
+    "shadow_opacity": 0.45,
+    "aspect": null,
+    "align": 4,
+    "chrome": "None",
+    "chrome_title": true
+  },
+  "launch_at_login": true,
+  "include_own_windows": true,
+  "timer_seconds": 10,
+  "format": "Jpeg",
+  "jpeg_quality": 70,
+  "save_dir": "D:\\Shots <&> é ",
+  "save_without_dialog": false,
+  "window_shadow": false,
+  "show_loupe": false,
+  "after_shot": {
+    "preview": false,
+    "copy": false,
+    "save": true,
+    "edit": true,
+    "pin": true
+  },
+  "after_recording": {
+    "preview": false,
+    "copy": true,
+    "save": true,
+    "studio": true
+  },
+  "record": {
+    "target": "Window",
+    "area": [
+      -10,
+      20,
+      1920,
+      1080
+    ],
+    "camera": "Integrated Camera",
+    "mic": "Microphone \"USB\"",
+    "system_audio": false,
+    "countdown": 0,
+    "teleprompter": true,
+    "script": "Line one\nLine two\ttabbed",
+    "prompter_lines": 5
+  },
+  "overlay": {
+    "side": "Right",
+    "auto_close_seconds": 8,
+    "dismiss_after_drag": false,
+    "layout": {
+      "corners": [
+        null,
+        "copy",
+        "pin",
+        null
+      ],
+      "center": [
+        "edit"
+      ],
+      "hidden": [
+        "save",
+        "save_as",
+        "compress",
+        "quick_look",
+        "copy_text",
+        "delete",
+        "dismiss",
+        "more"
+      ]
+    }
+  },
+  "hotkeys": {
+    "area": "Ctrl+Alt+A",
+    "fullscreen": "Ctrl+Shift+3",
+    "window": "Ctrl+Shift+5",
+    "previous_area": "Ctrl+Shift+6",
+    "text": "Ctrl+Shift+2",
+    "recording": "Ctrl+Shift+7",
+    "library": ""
+  },
+  "auto_redact": true,
+  "redact_style": "Pixelate",
+  "redact_rules": {
+    "emails": true,
+    "phones": false,
+    "credit_cards": true,
+    "secrets": true,
+    "ip_addresses": true,
+    "ids": true,
+    "urls_with_tokens": false
+  },
+  "last_area": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "library": {
+    "view": "List",
+    "sort": "Modified",
+    "inspector": false
+  }
+}

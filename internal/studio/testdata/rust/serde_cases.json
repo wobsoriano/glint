@@ -1,0 +1,415 @@
+[
+  {
+    "duration": null,
+    "input": "{}",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"version\": 1, \"clips\": [{ \"start_ms\": 0, \"end_ms\": 5000 }], \"zooms\": [{ \"start_ms\": 100, \"end_ms\": 900 }] }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":5000.0,\"speed\":1.0}],\"zooms\":[{\"start_ms\":100.0,\"end_ms\":900.0,\"scale\":1.5,\"focus\":{\"kind\":\"pointer\"},\"enabled\":true,\"auto\":false}],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `end_ms` at line 1 column 29",
+    "input": "{ \"clips\": [{ \"start_ms\": 0 }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `start_ms` at line 1 column 40",
+    "input": "{ \"clips\": [{ \"end_ms\": 10, \"speed\": 2 }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"zooms\": [{ \"start_ms\": 1, \"end_ms\": 2, \"focus\": { \"kind\": \"fixed\", \"x\": 0.25, \"y\": 0.75 }, \"scale\": 2.5, \"enabled\": false, \"auto\": true }] }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[{\"start_ms\":1.0,\"end_ms\":2.0,\"scale\":2.5,\"focus\":{\"kind\":\"fixed\",\"x\":0.25,\"y\":0.75},\"enabled\":false,\"auto\":true}],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `y` at line 1 column 83",
+    "input": "{ \"zooms\": [{ \"start_ms\": 1, \"end_ms\": 2, \"focus\": { \"kind\": \"fixed\", \"x\": 0.25 } }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "unknown variant `other`, expected `pointer` or `fixed` at line 1 column 68",
+    "input": "{ \"zooms\": [{ \"start_ms\": 1, \"end_ms\": 2, \"focus\": { \"kind\": \"other\" } }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"zooms\": [{ \"start_ms\": 1, \"end_ms\": 2, \"focus\": { \"kind\": \"pointer\", \"x\": 0.5 } }] }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[{\"start_ms\":1.0,\"end_ms\":2.0,\"scale\":1.5,\"focus\":{\"kind\":\"pointer\"},\"enabled\":true,\"auto\":false}],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `kind` at line 1 column 53",
+    "input": "{ \"zooms\": [{ \"start_ms\": 1, \"end_ms\": 2, \"focus\": {} }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"aspect\": \"wide16x9\", \"aspect_mode\": \"fill\", \"export\": { \"fps\": \"30\", \"codec\": \"hevc\" } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"wide16x9\",\"aspect_mode\":\"fill\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"30\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"hevc\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"aspect\": \"vertical9x16\" }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"vertical9x16\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"aspect\": \"portrait4x5\" }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"portrait4x5\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "unknown variant `Wide16x9`, expected one of `original`, `wide16x9`, `vertical9x16`, `square`, `portrait4x5` at line 1 column 22",
+    "input": "{ \"aspect\": \"Wide16x9\" }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `h` at line 1 column 42",
+    "input": "{ \"crop\": { \"x\": 0.1, \"y\": 0.2, \"w\": 0.5 } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"crop\": { \"x\": 0.1, \"y\": 0.2, \"w\": 0.5, \"h\": 0.25 } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.1,\"y\":0.2,\"w\":0.5,\"h\":0.25},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"padding\": 0.1 } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.1,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"background\": \"Blurred\", \"camera\": { \"center\": [0.1, 0.2] } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":\"Blurred\",\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.1,0.2],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"background\": \"None\", \"cursor\": { \"smoothing\": 0 } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":\"None\",\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.0},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"background\": { \"Solid\": 287454207 } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Solid\":287454207},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"background\": { \"Gradient\": { \"stops\": [4278190335, 16711935], \"angle\": 90 } } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[4278190335,16711935],\"angle\":90.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"design\": { \"background\": { \"Image\": \"C:\\\\bg.png\" } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Image\":\"C:\\\\bg.png\"},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "unknown variant `Sparkles`, expected one of `None`, `Solid`, `Gradient`, `Blurred`, `Image` at line 1 column 38",
+    "input": "{ \"design\": { \"background\": \"Sparkles\" } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `angle` at line 1 column 67",
+    "input": "{ \"design\": { \"background\": { \"Gradient\": { \"stops\": [4278190335] } } } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `stops` at line 1 column 57",
+    "input": "{ \"design\": { \"background\": { \"Gradient\": { \"angle\": 90 } } } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "invalid length 1, expected an array of length 2 at line 1 column 41",
+    "input": "{ \"design\": { \"camera\": { \"center\": [0.1] } } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"caption_cues\": [{ \"start_ms\": 0, \"end_ms\": 100, \"text\": \"hi\" }], \"captions\": { \"enabled\": true, \"karaoke\": true } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":true,\"position\":0.92,\"size\":1.0,\"karaoke\":true},\"caption_cues\":[{\"start_ms\":0.0,\"end_ms\":100.0,\"text\":\"hi\"}],\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `text` at line 1 column 51",
+    "input": "{ \"caption_cues\": [{ \"start_ms\": 0, \"end_ms\": 100 }] }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"caption_cues\": [] }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"unknown_field\": 1, \"keystrokes\": { \"position\": \"top_left\" } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"top_left\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"keystrokes\": { \"enabled\": false, \"position\": \"bottom_right\" } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":false,\"position\":\"bottom_right\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "unknown variant `middle`, expected one of `top_left`, `top_center`, `top_right`, `bottom_left`, `bottom_center`, `bottom_right` at line 1 column 38",
+    "input": "{ \"keystrokes\": { \"position\": \"middle\" } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "expected value at line 1 column 22",
+    "input": "{ \"export\": { \"fps\": 60 } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "unknown variant `24`, expected `30` or `60` at line 1 column 25",
+    "input": "{ \"export\": { \"fps\": \"24\" } }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"export\": { \"resolution\": \"p2160\", \"quality\": \"low\", \"format\": \"gif\", \"motion_blur\": false } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":false,\"resolution\":\"p2160\",\"quality\":\"low\",\"codec\":\"h264\",\"format\":\"gif\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"export\": { \"resolution\": \"source\", \"quality\": \"medium\", \"codec\": \"h264\" } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"source\",\"quality\":\"medium\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"export\": { \"resolution\": \"p720\" } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p720\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"audio\": { \"mic\": { \"volume\": 0.5 }, \"system\": { \"enabled\": false } } }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":0.5},\"system\":{\"enabled\":false,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"version\": 2 }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":2,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"clips\": [] }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"click_highlights\": false }",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":false,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "error": "invalid type: string \"1\", expected u32 at line 1 column 16",
+    "input": "{ \"version\": \"1\" }",
+    "kind": "project",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "[]",
+    "kind": "project",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"clips\": [{ \"start_ms\": 3000, \"end_ms\": 9000, \"speed\": 20 }, { \"start_ms\": 0, \"end_ms\": 4000 }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":4000.0,\"speed\":1.0},{\"start_ms\":4000.0,\"end_ms\":8000.0,\"speed\":8.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "error": "project version 2 is newer than supported 1",
+    "input": "{ \"version\": 2 }",
+    "kind": "project_parse",
+    "ok": false
+  },
+  {
+    "duration": 8000.0,
+    "input": "{}",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":8000.0,\"speed\":1.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"clips\": [{ \"start_ms\": 0, \"end_ms\": 50 }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":8000.0,\"speed\":1.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"clips\": [{ \"start_ms\": -100, \"end_ms\": 3000, \"speed\": 0.1 }, { \"start_ms\": 2000, \"end_ms\": 2100 }, { \"start_ms\": 2050, \"end_ms\": 7000 }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":3000.0,\"speed\":0.25},{\"start_ms\":3000.0,\"end_ms\":7000.0,\"speed\":1.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"zooms\": [{ \"start_ms\": 5000, \"end_ms\": 6000 }, { \"start_ms\": 900, \"end_ms\": 900 }, { \"start_ms\": 1000, \"end_ms\": 2000 }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":8000.0,\"speed\":1.0}],\"zooms\":[{\"start_ms\":1000.0,\"end_ms\":2000.0,\"scale\":1.5,\"focus\":{\"kind\":\"pointer\"},\"enabled\":true,\"auto\":false},{\"start_ms\":5000.0,\"end_ms\":6000.0,\"scale\":1.5,\"focus\":{\"kind\":\"pointer\"},\"enabled\":true,\"auto\":false}],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"caption_cues\": [{ \"start_ms\": 500, \"end_ms\": 900, \"text\": \"b\" }, { \"start_ms\": 100, \"end_ms\": 300, \"text\": \"a\" }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":8000.0,\"speed\":1.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"caption_cues\":[{\"start_ms\":100.0,\"end_ms\":300.0,\"text\":\"a\"},{\"start_ms\":500.0,\"end_ms\":900.0,\"text\":\"b\"}],\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": 8000.0,
+    "input": "{ \"version\": 0, \"clips\": [{ \"start_ms\": 7950, \"end_ms\": 9000 }] }",
+    "kind": "project_parse",
+    "ok": true,
+    "output": "{\"version\":1,\"clips\":[{\"start_ms\":0.0,\"end_ms\":8000.0,\"speed\":1.0}],\"zooms\":[],\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}},\"aspect\":\"original\",\"aspect_mode\":\"fit\",\"crop\":{\"x\":0.0,\"y\":0.0,\"w\":1.0,\"h\":1.0},\"click_highlights\":true,\"keystrokes\":{\"enabled\":true,\"position\":\"bottom_center\"},\"captions\":{\"enabled\":false,\"position\":0.92,\"size\":1.0,\"karaoke\":false},\"audio\":{\"mic\":{\"enabled\":true,\"volume\":1.0},\"system\":{\"enabled\":true,\"volume\":1.0}},\"export\":{\"fps\":\"60\",\"motion_blur\":true,\"resolution\":\"p1080\",\"quality\":\"high\",\"codec\":\"h264\",\"format\":\"mp4\"}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"name\": \"A\" }",
+    "kind": "preset",
+    "ok": true,
+    "output": "{\"version\":1,\"name\":\"A\",\"design\":{\"background\":{\"Gradient\":{\"stops\":[1667691007,2824206335,3964180991],\"angle\":135.0}},\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.45,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}}}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `name` at line 1 column 16",
+    "input": "{ \"version\": 1 }",
+    "kind": "preset",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"name\": \"B\", \"version\": 3, \"design\": { \"shadow\": 0.2, \"background\": \"Blurred\" } }",
+    "kind": "preset",
+    "ok": true,
+    "output": "{\"version\":3,\"name\":\"B\",\"design\":{\"background\":\"Blurred\",\"padding\":0.06,\"corner_radius\":0.02,\"shadow\":0.2,\"cursor\":{\"visible\":true,\"size\":1.0,\"smoothing\":0.5},\"camera\":{\"visible\":true,\"center\":[0.85,0.82],\"size\":0.26,\"roundness\":0.5}}}"
+  },
+  {
+    "duration": null,
+    "input": "{ \"version\": 1, \"language\": \"en\", \"words\": [{ \"text\": \"Hi\", \"start_ms\": 0, \"end_ms\": 200, \"confidence\": 0.5 }] }",
+    "kind": "transcript",
+    "ok": true,
+    "output": "{\"version\":1,\"language\":\"en\",\"words\":[{\"text\":\"Hi\",\"start_ms\":0,\"end_ms\":200,\"confidence\":0.5}]}"
+  },
+  {
+    "duration": null,
+    "error": "missing field `language` at line 1 column 29",
+    "input": "{ \"version\": 1, \"words\": [] }",
+    "kind": "transcript",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "transcript version 2 is newer than supported 1",
+    "input": "{ \"version\": 2, \"language\": \"en\", \"words\": [] }",
+    "kind": "transcript",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "missing field `confidence` at line 1 column 90",
+    "input": "{ \"version\": 1, \"language\": \"en\", \"words\": [{ \"text\": \"Hi\", \"start_ms\": 0, \"end_ms\": 200 }] }",
+    "kind": "transcript",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "error": "invalid value: integer `-1`, expected u64 at line 1 column 74",
+    "input": "{ \"version\": 1, \"language\": \"en\", \"words\": [{ \"text\": \"Hi\", \"start_ms\": -1, \"end_ms\": 200, \"confidence\": 1 }] }",
+    "kind": "transcript",
+    "ok": false
+  },
+  {
+    "duration": null,
+    "input": "{ \"version\": 1, \"language\": \"de\", \"words\": [], \"extra\": true }",
+    "kind": "transcript",
+    "ok": true,
+    "output": "{\"version\":1,\"language\":\"de\",\"words\":[]}"
+  }
+]
