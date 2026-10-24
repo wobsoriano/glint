@@ -120,6 +120,31 @@ func TestRecognizeTwoColumns(t *testing.T) {
 	}
 }
 
+// The redaction feature finds secrets in the words Recognize returns. These are the lines
+// the Rust build's redacts_rendered_secrets test reads.
+func TestRecognizeSecrets(t *testing.T) {
+	lines := []placed{
+		{"Contact: jane.doe@example.com", 30, 70},
+		{"Key: sk_live_51HxYzAbCdEfGhIjKlMnOp", 30, 170},
+		{"Card 4242 4242 4242 4242 exp 12/29", 30, 270},
+	}
+	got, err := Recognize(render(segoe(t, 40), 1400, 360, lines))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := Text(got)
+	t.Logf("recognized:\n%s", text)
+	rows := strings.Split(text, "\n")
+	if len(rows) != 3 || rows[0] != lines[0].text || rows[2] != lines[2].text {
+		t.Fatalf("text:\n%s", text)
+	}
+	// The engine splits this token after "51" and reads Segoe UI's capital I as l.
+	fold := strings.NewReplacer(" ", "", "I", "l")
+	if fold.Replace(rows[1]) != fold.Replace(lines[1].text) {
+		t.Fatalf("key line %q", rows[1])
+	}
+}
+
 func TestRecognizeSubImageKeepsItsCoordinates(t *testing.T) {
 	face := segoe(t, 28)
 	full := render(face, 1280, 250, twoColumns)
@@ -237,9 +262,8 @@ func TestRecognizeScreen(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text := []rune(Text(lines))
-		t.Logf("screen %dx%d: %d lines; %s; starts %q", img.Rect.Dx(), img.Rect.Dy(), len(lines),
-			timeRecognize(t, img), string(text[:min(len(text), 200)]))
+		// The screen's text stays out of the log, since it can be anything the user has open.
+		t.Logf("screen %dx%d: %d lines; %s", img.Rect.Dx(), img.Rect.Dy(), len(lines), timeRecognize(t, img))
 	}
 }
 
