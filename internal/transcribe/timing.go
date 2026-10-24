@@ -87,6 +87,25 @@ func placeWords(tokens []token, samples []float32) []Word {
 	return words
 }
 
+// dropAnnotations removes whisper's notes on sounds that are not speech, such as [BLANK_AUDIO],
+// [beep] or (music), which it writes in brackets among the words when a window holds such a
+// sound.
+func dropAnnotations(tokens []token) []token {
+	var out []token
+	open, startsWord := false, false
+	for _, t := range tokens {
+		if open || strings.ContainsAny(t.text, "[(") {
+			open = !strings.ContainsAny(t.text, "])")
+			startsWord = startsWord || t.startsWord
+			continue
+		}
+		t.startsWord = t.startsWord || startsWord
+		startsWord = false
+		out = append(out, t)
+	}
+	return out
+}
+
 func letters(s string) int {
 	n := 0
 	for _, r := range s {

@@ -11,6 +11,30 @@ $win = "$((Meta $rec).title) - Glint Studio"
 $g = Start-Process "$Bin\glint.exe" -ArgumentList "--studio `"$rec`"" -PassThru -NoNewWindow -RedirectStandardError "$dir\glint3.err"
 function Project { Get-Content "$rec\project.json" | ConvertFrom-Json }
 function Summary { $p = Project; "clips: $(($p.clips | ForEach-Object { "$($_.start_ms)-$($_.end_ms)x$($_.speed)" }) -join ' '); zooms: $(@($p.zooms).Count)" }
+# The words on the transcript's first line as [left, right, selected] screen columns, read from
+# the screen because where each word sits depends on the transcribed text. A word is a run of
+# white text columns; its selection shows as a blue background.
+function Transcript-Words {
+    $bmp = New-Object Drawing.Bitmap 270, 19
+    $gr = [Drawing.Graphics]::FromImage($bmp); $gr.CopyFromScreen(1140, 266, 0, 0, $bmp.Size); $gr.Dispose()
+    $words = @(); $start = -1; $end = 0; $gap = 0
+    for ($x = 0; $x -le $bmp.Width; $x++) {
+        $ink = $false
+        for ($y = 0; $x -lt $bmp.Width -and $y -lt $bmp.Height -and -not $ink; $y++) {
+            $c = $bmp.GetPixel($x, $y)
+            $ink = (0.299 * $c.R + 0.587 * $c.G + 0.114 * $c.B) -gt 150 -and [math]::Abs([int]$c.R - [int]$c.B) -lt 60
+        }
+        if ($ink) { if ($start -lt 0) { $start = $x }; $end = $x; $gap = 0; continue }
+        if ($start -ge 0 -and (++$gap -ge 5 -or $x -eq $bmp.Width)) {
+            $blue = @($start..$end | Where-Object { $c = $bmp.GetPixel($_, 2); $c.B -gt 150 -and $c.R -lt 80 }).Count
+            $words += , @(($start + 1140), ($end + 1140), ($blue -gt 3))
+            $start = -1
+        }
+    }
+    $bmp.Dispose()
+    , $words
+}
+function Mid($word) { [int](($word[0] + $word[1]) / 2) }
 try {
     if (-not (Wait-Until { (Win $win) -ne [IntPtr]::Zero } 8000)) { throw "Studio did not open: $win" }
     Start-Sleep -Milliseconds 2000
@@ -27,10 +51,14 @@ try {
     }
     "start: $(Summary)"
     Step 'transcript: click "this", shift-click "into", Cut selection'
-    Click 1246 275 200
-    [Promo.In]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero); Click 1339 275 200; [Promo.In]::keybd_event(0x10, 0, 2, [UIntPtr]::Zero)
+    $words = Transcript-Words
+    if ($words.Count -lt 5) { throw "the transcript's first line shows $($words.Count) words" }
+    Click (Mid $words[2]) 275 200
+    [Promo.In]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero); Click (Mid $words[4]) 275 200; [Promo.In]::keybd_event(0x10, 0, 2, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 400
     Shot "$dir\13-selected-words.png"
+    $now = Transcript-Words
+    "selected words of the first line: $((0..($now.Count - 1) | Where-Object { $now[$_][2] }) -join ', ') of $($now.Count)"
     Click 1210 326 200
     Start-Sleep -Milliseconds 2000
     Shot "$dir\14-cut.png"
@@ -64,7 +92,7 @@ try {
     "data dir now: $((Get-ChildItem "$dir\data" -File).Name -join ', ')"
     Step 'export: its length follows the cuts'
     $n = @(Get-ChildItem "$dir\exports\*.mp4" -ErrorAction SilentlyContinue).Count
-    Keys 'Ctrl+E'; Start-Sleep -Milliseconds 700; Keys 'Enter'
+    Keys 'Ctrl+E'; Start-Sleep -Milliseconds 700; Shot "$dir\19-export.png"; Keys 'Enter'
     Wait-Until { @(Get-ChildItem "$dir\exports\*.mp4" -ErrorAction SilentlyContinue).Count -gt $n } 120000 | Out-Null
     Start-Sleep -Milliseconds 800
     Get-ChildItem "$dir\exports\*.mp4" | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Check probe -file $_.FullName }

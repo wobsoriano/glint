@@ -65,6 +65,18 @@ func TestTokensJoinIntoWordsAndPunctuationAloneIsNoWord(t *testing.T) {
 	}
 }
 
+func TestSoundAnnotationsAreNotWords(t *testing.T) {
+	var tokens []token
+	for i, s := range []string{" [", "BL", "ANK", "_AUDIO", "]", "hello", " (", "music", ")", ",", " world", " [", "beep", "]."} {
+		tokens = append(tokens, token{text: s, atMs: int64(500 + 100*i), p: 1, startsWord: i == 0})
+	}
+	var got []string
+	for _, w := range placeWords(dropAnnotations(tokens), speech(false)) {
+		got = append(got, w.Text)
+	}
+	eq(t, got, []string{"hello,", "world"})
+}
+
 func absDiff(a, b uint64) uint64 {
 	if a > b {
 		return a - b

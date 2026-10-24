@@ -4,13 +4,11 @@
 // start and end are within -tol of that truth, that cutting a phrase or the filler words
 // removes them and nothing of their neighbors, and that silence trims remove no word.
 //
-// Clips that show a known open bug with base.en run only with -open.
-//
 // With -wav it checks a recording of SAPI speaking -text at -rate instead (such as the
 // system.wav of tools/verify/transcribe.ps1): the truth is a fresh synthesis of the same text,
 // shifted to the recording's speech onset.
 //
-//	go run ./internal/transcribe/cmd/wordtimecheck -data <scratch dir> [-model base-en] [-open] [-wav rec.wav -text "..." -rate -1]
+//	go run ./internal/transcribe/cmd/wordtimecheck -data <scratch dir> [-model base-en] [-wav rec.wav -text "..." -rate -1]
 package main
 
 import (
@@ -43,27 +41,19 @@ type clip struct {
 	noiseDb float64
 	cuts    []string
 	fillers []string
-	// open names the known decode bug this clip shows with base.en; it runs only with -open.
-	open string
 }
 
 var pauses = []string{"1200", "Glint turns this narration into captions on the device.", "900",
 	"Cut a phrase and the video follows the words.", "1500"}
 
-// loneTimestamp is how whisper.cpp ends a window when the decode closes on a single timestamp
-// token: it takes that as the end of speech, skips the rest of the 30 s window, and stops DTW
-// there, so words after it are lost or squeezed against it.
-const loneTimestamp = "whisper.cpp ends the window on an early lone timestamp"
-
 var clips = []clip{
-	{name: "pauses", parts: pauses, cuts: []string{"this narration into", "Cut a phrase", "device"}, open: loneTimestamp + " and drops the second sentence"},
+	{name: "pauses", parts: pauses, cuts: []string{"this narration into", "Cut a phrase", "device"}},
 	{name: "pauses-noise", parts: pauses, noiseDb: -40, cuts: []string{"this narration into", "Cut a phrase", "device"}},
 	{
 		name: "fillers",
 		parts: []string{"800", "Um, so I was thinking, uh, we could, like, try this.", "700",
 			"Hmm, okay. Uh, let us start the recording.", "1000"},
 		fillers: []string{"um", "uh", "like", "hmm", "uh"},
-		open:    loneTimestamp + " 1.5 s before the last words end",
 	},
 	{name: "pauses-zira", voice: "Microsoft Zira Desktop", parts: pauses, cuts: []string{"this narration into", "Cut a phrase", "device"}},
 	{
@@ -141,7 +131,6 @@ func main() {
 	text := flag.String("text", "Glint turns this narration into captions on the device.", "what the -wav recording says")
 	rate := flag.Int("rate", -1, "SAPI rate the -wav recording was spoken at")
 	modelName := flag.String("model", string(transcribe.ModelBaseEn), "model to transcribe with")
-	open := flag.Bool("open", false, "also run the clips that show a known open bug")
 	flag.Parse()
 	if *data == "" || !slices.Contains(transcribe.AllModels, transcribe.Model(*modelName)) {
 		fmt.Fprintf(os.Stderr, "-data is required and -model is one of %v\n", transcribe.AllModels)
@@ -155,10 +144,6 @@ func main() {
 		checkRecording(model, *data, *wav, *text, *rate, *tol)
 	} else {
 		for _, c := range clips {
-			if c.open != "" && !*open {
-				fmt.Printf("\nskip %s without -open: %s\n", c.name, c.open)
-				continue
-			}
 			path := filepath.Join(*data, c.name+".wav")
 			truth, err := synthesize(path, c.voice, c.rate, c.parts)
 			if err != nil {
@@ -212,7 +197,7 @@ func checkClip(model string, c clip, pcm transcribe.Pcm, truth []span, tol uint6
 		}
 	}
 	fmt.Printf("  %-12s %-12s %11s %11s %7s %7s\n", "said", "heard", "truth", "got", "start", "end")
-	var worst uint64
+	var edges []uint64
 	matched := 0
 	for i, s := range truth {
 		h, ok := pairs[i]
@@ -231,7 +216,7 @@ func checkClip(model string, c clip, pcm transcribe.Pcm, truth []span, tol uint6
 		}
 		w := t.Words[h]
 		ds, de := signed(w.StartMs, s.start), signed(w.EndMs, end)
-		worst = max(worst, abs(ds), abs(de))
+		edges = append(edges, abs(ds), abs(de))
 		mark := ""
 		if abs(ds) > tol || abs(de) > tol {
 			mark = " <"
@@ -239,7 +224,12 @@ func checkClip(model string, c clip, pcm transcribe.Pcm, truth []span, tol uint6
 		fmt.Printf("  %-12s %-12s %5d-%-5d %5d-%-5d %+7d %+7d%s\n", said, w.Text, s.start, end, w.StartMs, w.EndMs, ds, de, mark)
 	}
 	check(matched == len(truth), "%s: %d of %d spoken words recognized (%d heard)", name, matched, len(truth), len(t.Words))
-	check(worst <= tol, "%s: every word's start and end within %d ms of the truth (worst %d ms)", name, tol, worst)
+	slices.Sort(edges)
+	var worst, median uint64
+	if len(edges) > 0 {
+		worst, median = edges[len(edges)-1], edges[len(edges)/2]
+	}
+	check(worst <= tol, "%s: every word's start and end within %d ms of the truth (worst %d ms, median %d ms)", name, tol, worst, median)
 
 	for _, phrase := range c.cuts {
 		first := find(truth, normalized(phrase))

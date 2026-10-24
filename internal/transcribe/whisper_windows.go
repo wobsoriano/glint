@@ -18,16 +18,11 @@ var (
 	// The Windows runtime keeps every callback for the life of the process, so these are made
 	// once and shared by all runs.
 	callbacksOnce sync.Once
-	progressCB    uintptr
 	abortCB       uintptr
 	logCB         uintptr
 )
 
 func makeCallbacks() {
-	progressCB = windows.NewCallback(func(_, _, percent, user uintptr) uintptr {
-		onProgress(user, int32(percent))
-		return 0
-	})
 	abortCB = windows.NewCallback(func(user uintptr) uintptr {
 		if onAbort(user) {
 			return 1
@@ -166,8 +161,7 @@ func loadWhisper(dir string) (*whisperLib, error) {
 			r, _, _ := syscall.SyscallN(pLangStr, uintptr(id))
 			return string(cBytes(r))
 		},
-		progressCallback: progressCB,
-		abortCallback:    abortCB,
+		abortCallback: abortCB,
 	}
 	loaded[dir] = l
 	return l, nil

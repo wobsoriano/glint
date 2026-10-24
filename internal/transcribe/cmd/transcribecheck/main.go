@@ -1,17 +1,14 @@
 // Command transcribecheck proves on-device transcription end to end: it synthesizes speech
 // with Windows SAPI, installs the whisper.cpp runtime and models into a scratch data dir,
-// transcribes, scores the result, measures cancel latency, follows a script in live mode,
-// and compares against the Rust engine's output when given.
+// transcribes, scores the result, measures cancel latency, and follows a script in live mode.
 //
-//	go run ./internal/transcribe/cmd/transcribecheck -data <scratch dir> [-rust rust_full.json] [-rustlive rust_live.json]
+//	go run ./internal/transcribe/cmd/transcribecheck -data <scratch dir> [-wav speech.wav]
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,8 +34,6 @@ func check(ok bool, format string, args ...any) {
 func main() {
 	data := flag.String("data", "", "scratch data dir (never the real Glint data dir)")
 	wav := flag.String("wav", "", "speech WAV; synthesized from the test sentence when empty")
-	rustFull := flag.String("rust", "", "Rust engine's transcript JSON for the same WAV")
-	rustLive := flag.String("rustlive", "", "Rust live mode's word list JSON for the same WAV")
 	flag.Parse()
 	if *data == "" {
 		fmt.Fprintln(os.Stderr, "-data is required")
@@ -79,14 +74,11 @@ func main() {
 	errs, n := wordErrors(sentence, t.Words)
 	check(errs == 0, "WER %.1f%% (%d errors over %d reference words)", 100*float64(errs)/float64(n), errs, n)
 	check(timingsSane(t.Words, durationMs), "word timings monotonic and within %d ms", durationMs)
-	if *rustFull != "" {
-		compareRust(t.Words, *rustFull)
-	}
 
 	measureCancel(base, pcm)
 
 	tiny := install(ctx, *data, transcribe.ModelTinyEn)
-	followLive(tiny, w, *rustLive)
+	followLive(tiny, w)
 
 	if failed {
 		os.Exit(1)
@@ -168,38 +160,6 @@ func timingsSane(words []transcribe.Word, durationMs uint64) bool {
 	return len(words) > 0
 }
 
-func compareRust(words []transcribe.Word, path string) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		fatal(err)
-	}
-	rust, err := transcribe.Parse(b)
-	if err != nil {
-		fatal(err)
-	}
-	same := len(rust.Words) == len(words)
-	var maxDiff uint64
-	var maxConf float64
-	for i := range min(len(rust.Words), len(words)) {
-		a, r := words[i], rust.Words[i]
-		if a.Text != r.Text {
-			same = false
-			fmt.Printf("     word %d: go %q, rust %q\n", i, a.Text, r.Text)
-		}
-		maxDiff = max(maxDiff, absDiff(a.StartMs, r.StartMs), absDiff(a.EndMs, r.EndMs))
-		maxConf = max(maxConf, math.Abs(float64(a.Confidence-r.Confidence)))
-	}
-	check(same, "words match Rust (%d go, %d rust)", len(words), len(rust.Words))
-	check(maxDiff <= 20, "max timing difference from Rust %d ms, max confidence difference %.4f", maxDiff, maxConf)
-}
-
-func absDiff(a, b uint64) uint64 {
-	if a > b {
-		return a - b
-	}
-	return b - a
-}
-
 // measureCancel transcribes three back-to-back copies of the audio, cancels mid-run, and
 // times how long Transcribe takes to return.
 func measureCancel(model string, pcm transcribe.Pcm) {
@@ -217,7 +177,7 @@ func measureCancel(model string, pcm transcribe.Pcm) {
 
 // followLive streams the WAV into live mode in real time, 100 ms at a time, and feeds the
 // words to a ScriptTracker over the test sentence.
-func followLive(model string, w *media.WavData, rustLivePath string) {
+func followLive(model string, w *media.WavData) {
 	mono := transcribe.Pcm{Samples: w.Samples, SampleRate: uint32(w.SampleRate), Channels: uint16(w.Channels)}.ToMono()
 	live, err := transcribe.StartLive(model, uint32(w.SampleRate))
 	if err != nil {
@@ -256,23 +216,6 @@ func followLive(model string, w *media.WavData, rustLivePath string) {
 	check(ok && idx == tracker.DisplayLen()-1, "tracker reached script word %d of %d", idx+1, tracker.DisplayLen())
 	errs, n := wordErrors(sentence, all)
 	fmt.Printf("     live WER %.1f%% (%d/%d)\n", 100*float64(errs)/float64(n), errs, n)
-	if rustLivePath != "" {
-		b, err := os.ReadFile(rustLivePath)
-		if err != nil {
-			fatal(err)
-		}
-		var rust []transcribe.Word
-		if err := json.Unmarshal(b, &rust); err != nil {
-			fatal(err)
-		}
-		rerrs, _ := wordErrors(sentence, rust)
-		rustTracker := transcribe.NewScriptTracker(sentence)
-		for _, word := range rust {
-			rustTracker.Feed([]string{word.Text})
-		}
-		ridx, _ := rustTracker.CurrentIndex()
-		fmt.Printf("     rust live WER %.1f%% (%d/%d), %d words, its tracker reaches word %d\n", 100*float64(rerrs)/float64(n), rerrs, n, len(rust), ridx+1)
-	}
 }
 
 func fatal(err error) {
