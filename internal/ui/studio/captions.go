@@ -525,7 +525,7 @@ func (e *editor) captionsView(c *ui.Context, pal theme.Palette) {
 					}
 					return
 				}
-				lb := ui.ButtonBase(c.Key("text")).Grow(1).MinWidth(0).Padding(0, 4).Radius(4).Label("Edit line " + fmt.Sprint(i+1)).Cursor(ui.CursorText).KeepFocus()
+				lb := ui.ButtonBase(c.Key("text")).Grow(1).MinWidth(0).Justify(ui.Start).Padding(0, 4).Radius(4).Label("Edit line " + fmt.Sprint(i+1)).Cursor(ui.CursorText).KeepFocus()
 				if lb.Hovered() {
 					lb.Background(pal.ControlHover)
 				}
