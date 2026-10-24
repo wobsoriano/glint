@@ -78,7 +78,13 @@ func (o *Overlay) Open(shots []Shot, opts Options) {
 	o.open, o.opts = true, opts
 	o.fit(shots)
 	for _, s := range o.surfaces {
-		s.show(s.shot.Display.Bounds.Contains(opts.Cursor.X, opts.Cursor.Y) || len(o.surfaces) == 1)
+		b := s.shot.Display.Bounds
+		under := b.Contains(opts.Cursor.X, opts.Cursor.Y)
+		if under {
+			// The loupe and the window under the pointer show before the pointer moves.
+			s.sel.move(opts.Cursor.Sub(image.Pt(b.X, b.Y)))
+		}
+		s.show(under || len(o.surfaces) == 1)
 	}
 }
 
@@ -175,6 +181,9 @@ type surface struct {
 	sel     *selector
 	windows []platform.Window // the windows sel indexes, in desktop pixels
 	scale   float32
+	// hovered is whether the pointer was over the window at the last build; leaving it
+	// clears the hover and the loupe.
+	hovered bool
 }
 
 func newSurface(o *Overlay, d platform.Display) *surface {
@@ -224,6 +233,7 @@ func (s *surface) load(sh Shot, all []platform.Window) {
 }
 
 func (s *surface) show(focus bool) {
+	s.hovered = false
 	prepare(s.win.NativeHandle(), s.shot.Display.Bounds)
 	if focus {
 		s.win.Show()
@@ -256,8 +266,11 @@ func (s *surface) view(c *ui.Context) {
 		s.o.decide(s, Result{Verdict: Cancel})
 	}
 	box := ui.Box(c).Fill().Cursor(ui.CursorCrosshair).Focusable().AutoFocus()
-	if !box.Hovered() {
+	if hovered := box.Hovered(); s.hovered && !hovered {
 		s.sel.leave()
+		s.hovered = false
+	} else {
+		s.hovered = hovered
 	}
 	box.HandleInput(func(ev ui.InputEvent) bool {
 		switch ev.Kind {
@@ -388,8 +401,10 @@ func (s *surface) loupe(pt *ui.Painter, r ui.Rect) {
 	pt.Shadow(whole, 8, 0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.45))
 	pt.Clip(whole, 8, func() {
 		pt.Fill(whole, ui.RGB(0, 0, 0), 0)
-		src := ui.Rect{X: float32(at.X - n/2), Y: float32(at.Y - n/2), W: n, H: n}
-		pt.ImageRegion(s.bmp, src, box, ui.ImageOptions{})
+		// At the display's edges the window of pixels stops at the edge and the outlined
+		// cell moves off centre, so every cell is a real pixel.
+		sx, sy := min(max(at.X-n/2, 0), bounds.Dx()-n), min(max(at.Y-n/2, 0), bounds.Dy()-n)
+		pt.ImageRegion(s.bmp, ui.Rect{X: float32(sx), Y: float32(sy), W: n, H: n}, box, ui.ImageOptions{})
 		cell := float32(side) / n
 		grid := ui.RGBA(0, 0, 0, 0.14)
 		for i := 1; i < n; i++ {
@@ -397,7 +412,7 @@ func (s *surface) loupe(pt *ui.Painter, r ui.Rect) {
 			pt.Line(box.X+o, box.Y, box.X+o, box.Y+side, 1, grid)
 			pt.Line(box.X, box.Y+o, box.X+side, box.Y+o, 1, grid)
 		}
-		pt.Stroke(ui.Rect{X: box.X + cell*(n/2), Y: box.Y + cell*(n/2), W: cell, H: cell}, white, 0, 1.5)
+		pt.Stroke(ui.Rect{X: box.X + cell*float32(at.X-sx), Y: box.Y + cell*float32(at.Y-sy), W: cell, H: cell}, white, 0, 1.5)
 		barRect := ui.Rect{X: box.X, Y: box.Y + side, W: side, H: bar}
 		pt.Fill(barRect, ui.RGBA(0, 0, 0, 0.85), 0)
 		c := s.shot.Image.RGBAAt(at.X, at.Y)
