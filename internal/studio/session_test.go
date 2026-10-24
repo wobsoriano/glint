@@ -47,7 +47,7 @@ func TestOpenSessionRenamesABrokenProjectAndUsesDefaults(t *testing.T) {
 	eq(t, len(s.Project.Zooms), 1)
 	eq(t, s.Project.Zooms[0].StartMs, 1_700.0)
 	eq(t, s.Project.CaptionCues, []CaptionCue{{StartMs: 100, EndMs: 900, Text: "Hello, world."}})
-	eq(t, s.Captions[1], CaptionWord{Text: "world.", StartMs: 450, EndMs: 900})
+	eq(t, s.Assets.captions[1], CaptionWord{Text: "world.", StartMs: 450, EndMs: 900})
 	eq(t, s.Tracks.Mic, filepath.Join(dir, "mic.wav"))
 	eq(t, s.Tracks.Camera, "")
 
@@ -70,7 +70,7 @@ func TestOpenSessionWithoutInputSizesItFromTheScreen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eq(t, s.Input.Size, [2]uint32{1280, 720})
+	eq(t, s.Assets.Input().Size, [2]uint32{1280, 720})
 	eq(t, len(s.Project.Zooms), 0)
 	eq(t, s.Transcript == nil, true)
 }
