@@ -167,9 +167,9 @@ func (e *editor) showFrame() {
 	e.player.Recycle(e.shown.Image)
 	e.shown = f
 	if e.cfg.OnFrame != nil {
-		if ms, audio, ok := e.player.ClockMS(); ok {
-			e.cfg.OnFrame(f.TMS, ms, audio)
-		}
+		shown := Shown{FrameMS: f.TMS}
+		shown.ClockMS, shown.Audio, shown.Playing = e.player.ClockMS()
+		e.cfg.OnFrame(shown)
 	}
 }
 

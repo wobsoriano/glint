@@ -17,9 +17,18 @@ import (
 type Config struct {
 	// SaveDir is where Export writes; empty is the source's folder.
 	SaveDir string
-	// OnFrame, when set, runs on the main thread as each played frame reaches the preview,
-	// with the clock the player follows: cmd/trimdemo measures audio and video sync with it.
-	OnFrame func(frameMS int64, clockMS float64, audio bool)
+	// OnFrame, when set, runs on the main thread as each frame reaches the preview:
+	// cmd/trimdemo checks seeking and measures audio and video sync with it.
+	OnFrame func(Shown)
+}
+
+// Shown is a frame as it reaches the preview.
+type Shown struct {
+	FrameMS int64
+	// ClockMS is the time the player's clock reads, the audio device's when Audio is set;
+	// it is 0 unless Playing.
+	ClockMS        float64
+	Playing, Audio bool
 }
 
 // Window is an open Trim & Compress window.
