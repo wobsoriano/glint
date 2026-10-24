@@ -455,6 +455,7 @@ func TestUpsertKeepsNewestFirst(t *testing.T) {
 }
 
 func TestTrashMovesCapturesToTheRecycleBin(t *testing.T) {
+	requireRealTrash(t)
 	root := t.TempDir()
 	lib := New(root)
 	keep, _ := lib.ImportScreenshot(NewScreenshot{Base: checker(8, 8), Created: at(8, 0, 0), Title: "glint store test keep"})

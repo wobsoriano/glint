@@ -41,6 +41,7 @@ func recycledPaths(t *testing.T, dir string) []string {
 }
 
 func TestTrashLandsInTheRecycleBin(t *testing.T) {
+	requireRealTrash(t)
 	lib := New(t.TempDir())
 	item, err := lib.ImportScreenshot(NewScreenshot{Base: checker(8, 8), Created: at(8, 0, 0)})
 	if err != nil {
