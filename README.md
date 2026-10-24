@@ -27,7 +27,7 @@ Glint runs entirely on your PC. It has no account, no cloud upload and no teleme
 
 | | Snipping Tool | Glint |
 | --- | --- | --- |
-| Area, window and full-screen screenshots | Yes | Yes, plus the previous area again and a self-timer |
+| Area, window and full-screen screenshots | Yes, plus freeform, and a 3, 5 or 10 s delay | Yes, plus a 3, 5 or 10 s self-timer, and capturing the previous area again |
 | Annotate | Pen, highlighter, rectangles, ovals, lines and arrows | Arrows, shapes, numbered markers, text, highlight, pixelate and blur, all editable later |
 | Styled screenshots | No | Gradient, image or wallpaper backgrounds, padding, corners, shadow, saved presets |
 | Hide sensitive text | Emails and phone numbers | Emails, phone numbers, card numbers, API keys, IP addresses and tokens, automatically |
