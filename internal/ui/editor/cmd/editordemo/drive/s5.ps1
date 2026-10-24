@@ -1,6 +1,7 @@
 . "$PSScriptRoot\common.ps1"
 $saved = Pos
-$lib = Get-ChildItem "$S\data4\Library" -Directory | Select-Object -First 1
+$lib = Get-ChildItem "$S\data4\Library" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+Copy-Item "$($lib.FullName)\edit.json" "$S\s5.before.edit.json"
 
 $d = Start-Demo "s5a" @("-data", "$S\data4")
 Start-Sleep -m 1200
@@ -8,6 +9,7 @@ WinShot "s5-reopened"
 Keys "Ctrl+Enter"
 Stop-Demo $d
 Copy-Item "$($lib.FullName)\edit.json" "$S\s5.reopen.edit.json"
+"reopen rewrote an identical edit.json: $((Get-FileHash "$S\s5.before.edit.json").Hash -eq (Get-FileHash "$S\s5.reopen.edit.json").Hash)" | Out-File "$S\s5.check.txt"
 
 $d = Start-Demo "s5b" @("-data", "$S\data4")
 Start-Sleep -m 1200
