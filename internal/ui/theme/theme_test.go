@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wobsoriano/glint/internal/ui/theme/rusticons"
 )
 
 func TestEveryIconParses(t *testing.T) {
@@ -21,26 +20,6 @@ func TestEveryIconParses(t *testing.T) {
 	}
 	if _, err := ui.ParseSVG([]byte(MarkSource(true))); err != nil {
 		t.Errorf("template mark: %v", err)
-	}
-}
-
-func TestIconsMatchRust(t *testing.T) {
-	src, err := os.ReadFile("../../../src/assets.rs")
-	if err != nil {
-		t.Skip("the Rust tree is gone:", err)
-	}
-	want := rusticons.Parse(string(src))
-	if len(want) != int(iconCount) {
-		t.Fatalf("Rust has %d icons, Go %d: run go generate ./internal/ui/theme", len(want), iconCount)
-	}
-	for i, w := range want {
-		n := IconName(i)
-		if n.String() != w.Name || iconBodies[n] != w.Body {
-			t.Errorf("icon %d is %q, Rust's is %q: run go generate ./internal/ui/theme", i, n, w.Name)
-		}
-		if got, ok := IconByName(w.Name); !ok || got != n {
-			t.Errorf("IconByName(%q) = %v, %v", w.Name, got, ok)
-		}
 	}
 }
 

@@ -1,7 +1,5 @@
 package theme
 
-//go:generate go run gen_icons.go
-
 import (
 	"sync"
 

@@ -1,6 +1,7 @@
 # Building Glint's surfaces with MyGo v0.6.3 on Windows
 
-This page records what the prototypes in `cmd/spike` showed about MyGo's native UI on Windows 11,
+The prototypes were removed once the real surfaces shipped; they are in the history at commit
+`8aa65c4` (`git show 8aa65c4:cmd/spike/<file>`). This page records what the prototypes in `cmd/spike` showed about MyGo's native UI on Windows 11,
 and how the real `internal/ui/...` packages should build each surface. Every claim below comes
 from a run of `cmd/spike` unless it says "from the source" or "not verified".
 
