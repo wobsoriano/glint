@@ -3,6 +3,7 @@ package editor
 import (
 	"errors"
 	"image"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -38,6 +39,9 @@ func (h *fakeHost) Closed()                        {}
 
 func testEditor(t *testing.T) (*Editor, *fakeHost, *ui.Tester) {
 	t.Helper()
+	if os.Getenv("GLINT_DATA_DIR") == "" {
+		t.Setenv("GLINT_DATA_DIR", t.TempDir())
+	}
 	base := image.NewRGBA(image.Rect(0, 0, 1600, 900))
 	for i := range base.Pix {
 		base.Pix[i] = uint8(i * 7)

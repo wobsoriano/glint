@@ -113,7 +113,8 @@ func Open(o Options) *Editor {
 	})
 	e = newEditor(o, func(f func()) { win.Update(f) })
 	e.win = win
-	e.gallery = sharedGallery(func() { win.Invalidate() })
+	var unsubscribe func()
+	e.gallery, unsubscribe = sharedGallery(func() { win.Invalidate() })
 	win.OnClose(func(ev *mygo.CloseEvent) {
 		e.m.commitText()
 		if e.m.dirty() {
@@ -122,6 +123,7 @@ func Open(o Options) *Editor {
 		}
 	})
 	win.OnClosed(func() {
+		unsubscribe()
 		e.cv.renderer.stop()
 		if e.host != nil {
 			go e.host.Closed()

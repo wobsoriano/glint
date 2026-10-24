@@ -30,7 +30,7 @@ type wallpaper struct {
 type gallery struct {
 	mu        sync.Mutex
 	walls     []wallpaper
-	listeners []func()
+	listeners map[*func()]bool
 }
 
 var (
@@ -38,15 +38,21 @@ var (
 	theGallery  *gallery
 )
 
-func sharedGallery(changed func()) *gallery {
+// sharedGallery calls changed as wallpapers arrive, until the returned function is called.
+func sharedGallery(changed func()) (*gallery, func()) {
 	galleryOnce.Do(func() {
-		theGallery = &gallery{}
+		theGallery = &gallery{listeners: map[*func()]bool{}}
 		go theGallery.scan()
 	})
-	theGallery.mu.Lock()
-	theGallery.listeners = append(theGallery.listeners, changed)
-	theGallery.mu.Unlock()
-	return theGallery
+	g := theGallery
+	g.mu.Lock()
+	g.listeners[&changed] = true
+	g.mu.Unlock()
+	return g, func() {
+		g.mu.Lock()
+		delete(g.listeners, &changed)
+		g.mu.Unlock()
+	}
 }
 
 func (g *gallery) list() []wallpaper {
@@ -60,7 +66,10 @@ func (g *gallery) list() []wallpaper {
 
 func (g *gallery) changed() {
 	g.mu.Lock()
-	ls := slices.Clone(g.listeners)
+	var ls []func()
+	for f := range g.listeners {
+		ls = append(ls, *f)
+	}
 	g.mu.Unlock()
 	for _, f := range ls {
 		f()
