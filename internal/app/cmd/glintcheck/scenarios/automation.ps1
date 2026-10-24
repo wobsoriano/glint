@@ -44,20 +44,26 @@ Start-Sleep -Milliseconds 700
 Shot "$dir\02-not-saved-toast.png"
 Stop-Glint $g
 
+# With no after-capture step no toast shows, so the Library window is what must be in or out
+# of the capture: its area is compared with the same area once the Library has closed.
 foreach ($include in $false, $true) {
-    Step "include_own_windows=$($include): a toast showing during Ctrl+Shift+3"
+    Step "include_own_windows=$($include): the Library showing during Ctrl+Shift+3"
     $dir = New-Run "exclude-$include" @{ include_own_windows = $include; after_shot = @{ preview = $false; copy = $false; save = $false; edit = $false; pin = $false } }
     $g = Start-Glint $dir
     Start-Process "$Bin\glint.exe" -ArgumentList '--library' -NoNewWindow -Wait
+    Wait-Until { (Win 'Glint Library') -ne [IntPtr]::Zero } 5000 | Out-Null
+    Start-Sleep -Milliseconds 800
+    $r = WinRect 'Glint Library'
+    $lib = "$($r.X + 20),$($r.Y + 60),$($r.W - 40),$($r.H - 100)"
     Check wins -pid $g.Id
     $item = Capture-Screen $dir
-    Start-Sleep -Milliseconds 2500
-    $toast = '809,958,302,50'
-    Check shot -out "$dir\after-toast.png" -rect $toast
-    "the capture's toast area against the same area once the toast is gone:"
-    & $Check cmp -a "$item\image.png" -arect $toast -b "$dir\after-toast.png" -brect '0,0,302,50'
+    Close-Win 'Glint Library'
+    Start-Sleep -Milliseconds 1200
+    Check shot -out "$dir\behind-library.png" -rect $lib
+    "the capture's Library area against the same area once the Library has closed:"
+    & $Check cmp -a "$item\image.png" -arect $lib -b "$dir\behind-library.png" -brect "0,0,$($r.W - 40),$($r.H - 100)" -maxmean 1
     $inCapture = $LASTEXITCODE -ne 0
-    "  -> the toast is in the capture: $inCapture (want $include)"
+    "  -> the Library is in the capture: $inCapture (want $include)"
     Copy-Item "$item\image.png" "$dir\capture.png"
     Stop-Glint $g
 }

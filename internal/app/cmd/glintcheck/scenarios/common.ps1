@@ -24,8 +24,10 @@ function Start-Glint([string]$dir) {
     $p
 }
 
+# Stop-Glint waits for the exit: a Glint started while the killed one still holds the
+# single-instance lock hands it its command line and exits.
 function Stop-Glint($p) {
-    if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+    if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force; $p.WaitForExit(5000) | Out-Null }
 }
 
 # The stage is a topmost window of known noise and text, so captures land on pixels that do
@@ -38,10 +40,25 @@ function Start-Stage {
 
 # The tray helpers read $IconX and $IconY, where this machine shows the icon in the taskbar's
 # overflow, and $g, the Glint process, from the scenario.
+# Chevron finds the taskbar's Show Hidden Icons button through UI Automation. Its place moves
+# when Windows adds an icon such as the microphone-in-use indicator, and a click at a fixed
+# point then lands on the icon beside it.
+function Chevron {
+    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+    $bar = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,
+        (New-Object Windows.Automation.PropertyCondition ([Windows.Automation.AutomationElement]::ClassNameProperty), 'Shell_TrayWnd'))
+    $b = if ($bar) { $bar.FindFirst([Windows.Automation.TreeScope]::Descendants,
+        (New-Object Windows.Automation.PropertyCondition ([Windows.Automation.AutomationElement]::NameProperty), 'Show Hidden Icons')) }
+    if (-not $b) { throw 'the taskbar has no Show Hidden Icons button' }
+    $r = $b.Current.BoundingRectangle
+    @([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+}
+
 function Show-Overflow {
     & $Check mark -at "$IconX,$IconY" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Click 1722 1056 300
+        $c = Chevron
+        Click $c[0] $c[1] 300
         Start-Sleep -Milliseconds 700
         & $Check mark -at "$IconX,$IconY" | Out-Null
     }
