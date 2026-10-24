@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
@@ -85,6 +86,7 @@ func exists(p string) bool {
 }
 
 // Sanitize makes a capture title usable as a file name on every platform.
+// A long title is cut to fit in maxStemBytes of UTF-8, at a whole character.
 func Sanitize(name string) string {
 	s := strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || strings.ContainsRune(`<>:"/\|?*`, r) {
@@ -92,12 +94,27 @@ func Sanitize(name string) string {
 		}
 		return r
 	}, name)
-	s = strings.TrimRight(strings.TrimSpace(s), ".")
+	s = strings.TrimSpace(s)
+	if len(s) > maxStemBytes {
+		cut := maxStemBytes
+		for !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut]
+	}
+	s = strings.TrimRightFunc(s, func(r rune) bool { return r == '.' || unicode.IsSpace(r) })
 	if s == "" {
 		return "Capture"
 	}
 	return s
 }
+
+// maxStemBytes bounds a file name made from a title. A path component may hold 255 UTF-16
+// units on NTFS and 255 bytes on APFS, and no character takes more UTF-16 units than UTF-8
+// bytes, so 150 bytes leaves room for " (n)" and the extension on both. It also keeps a
+// whole path in a usual folder under the 260 characters of MAX_PATH that other apps still
+// assume.
+const maxStemBytes = 150
 
 func HumanBytes(n uint64) string {
 	switch {
