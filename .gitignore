@@ -17,3 +17,7 @@ Thumbs.db
 # Local media from manual testing
 *.mp4
 *.wav
+
+# Go build output
+/build/
+/.mygo/

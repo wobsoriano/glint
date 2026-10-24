@@ -1,0 +1,6 @@
+{
+  "name": "Glint",
+  "identifier": "com.glint.app",
+  "version": "0.2.0",
+  "out": "build"
+}
