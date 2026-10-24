@@ -168,8 +168,8 @@ const (
 	TonePending
 )
 
-// KaraokeColor is the highlight for the word being spoken, packed as 0xRRGGBBAA.
-const KaraokeColor uint32 = 0xFFD60AFF
+// KaraokeColor is the highlight for the word being spoken.
+const KaraokeColor render.Color = 0xFFD60AFF
 
 type PlacedWord struct {
 	Text string
