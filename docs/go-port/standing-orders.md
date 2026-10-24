@@ -11,7 +11,8 @@ Read `docs/go-port/plan.md` first. These orders hold for every unit of the rewri
    darwin/arm64.
 4. Read the MyGo docs and examples of the pinned version before using an API:
    `$(go env GOMODCACHE)/github.com/egoist/mygo@v0.6.3/docs` and `.../examples`.
-   The source is beside them. Read it when the docs are silent. Do not guess at an API.
+   The API reference is https://pkg.go.dev/github.com/egoist/mygo (use the v0.6.3 version), and
+   the source is beside the docs. Read them when the guides are silent. Do not guess at an API.
 5. The Rust code under `src/` and `crates/` is the spec. Match its behavior and its on-disk
    formats: JSON field names, enum spellings, defaults, file names.
 6. Never write to `%APPDATA%\Glint`, which holds the user's real Library. Run the app with
