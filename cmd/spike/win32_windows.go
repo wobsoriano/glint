@@ -42,6 +42,8 @@ var (
 	pWindowFromPoint          = user32.NewProc("WindowFromPoint")
 	pGetAncestor              = user32.NewProc("GetAncestor")
 	pGetClassNameW            = user32.NewProc("GetClassNameW")
+	pEnumWindows              = user32.NewProc("EnumWindows")
+	pIsWindow                 = user32.NewProc("IsWindow")
 
 	pCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
 	pCreateDIBSection   = gdi32.NewProc("CreateDIBSection")

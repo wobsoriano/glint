@@ -6,7 +6,8 @@ $exe = Join-Path $env:TEMP 'glint-spike.exe'
 go -C $root build -o $exe ./cmd/spike
 if (-not $?) { exit 1 }
 $log = Join-Path $env:TEMP "glint-spike-$Mode.log"
-$p = Start-Process -FilePath $exe -ArgumentList (@('-mode', $Mode, '-auto', '-out', "$root\cmd\spike\evidence") + $Rest) -NoNewWindow -PassThru -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+$args = @('-mode', $Mode, '-auto', '-out', "$root\cmd\spike\evidence") + @($Rest | Where-Object { $_ })
+$p = Start-Process -FilePath $exe -ArgumentList $args -NoNewWindow -PassThru -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Output 'TIMEOUT' }
 Get-Content $log
 Get-Content "$log.err" | Select-Object -Last 15

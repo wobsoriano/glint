@@ -1,6 +1,5 @@
 package main
 
-func runCards()   {}
 func runProtect() {}
 func runTray()    {}
 func runEditor()  {}
