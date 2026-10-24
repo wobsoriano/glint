@@ -543,21 +543,10 @@ type shortcut struct {
 }
 
 // shortcuts asks for every key Studio takes each frame, then runs those pressed. Plain keys
-// stand down while a text field has the focus.
+// stand down while a text field has the focus, and all of them while the export overlay,
+// which is modal, shows.
 func (e *editor) shortcuts(c *ui.Context) {
 	cmd, shift := ui.Cmd, ui.Shift
-	if _, closed := e.export.(exportClosed); !closed {
-		var fire []func()
-		for _, s := range []shortcut{{0, ui.KeyEscape, e.cancelExport}, {0, ui.KeyEnter, func() { e.runJob(jobExport) }}} {
-			if c.Shortcut(s.mods, s.key) {
-				fire = append(fire, s.do)
-			}
-		}
-		for _, f := range fire {
-			f()
-		}
-		return
-	}
 	list := []shortcut{
 		{cmd, ui.KeyZ, e.undo},
 		{cmd | shift, ui.KeyZ, e.redo},
