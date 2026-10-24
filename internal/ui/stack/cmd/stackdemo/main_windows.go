@@ -341,6 +341,17 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 	gone := drive.Until(4*time.Second, func() bool { return s.Len() == 1 })
 	l.Check(gone && time.Since(t0) > 1500*time.Millisecond, "with auto close at 2 s the new card closes by itself after %.1fs, and the older card without a deadline stays", time.Since(t0).Seconds())
 
+	s.Push(shot1)
+	time.Sleep(300 * time.Millisecond)
+	g = geometryOf(s)
+	drive.MoveTo(center(g.card(0)))
+	time.Sleep(3 * time.Second)
+	l.Check(s.Len() == 2, "a card whose time is up stays while the pointer is over the stack (%d cards)", s.Len())
+	drive.MoveTo(960, 40)
+	t0 = time.Now()
+	gone = drive.Until(4*time.Second, func() bool { return s.Len() == 1 })
+	l.Check(gone && time.Since(t0) > 1500*time.Millisecond, "and closes %.1fs after the pointer leaves, the grace the Rust build gives", time.Since(t0).Seconds())
+
 	prefs.Side = settings.SideRight
 	s.SetPrefs(prefs)
 	time.Sleep(400 * time.Millisecond)
