@@ -49,8 +49,8 @@ func (l Line) Text() string {
 	return strings.Join(parts, " ")
 }
 
-// Text is lines as plain text: lines that share a row are joined by two spaces, rows by a
-// newline. Pass lines in the order Recognize returns them.
+// Text joins lines into plain text. Lines that share a row are joined by two spaces, and
+// rows by a newline. Pass lines in the order Recognize returns them.
 func Text(lines []Line) string {
 	var b strings.Builder
 	for i, l := range lines {

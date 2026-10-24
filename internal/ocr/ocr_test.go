@@ -27,7 +27,7 @@ func TestReadingOrderInterleavesColumnsRowByRow(t *testing.T) {
 		line("left one", 40, 20, 20),
 		line("footer", 40, 140, 20),
 		line("left two", 40, 60, 20),
-		// Nine pixels lower than "left one" is still its row: under half of 20.
+		// Nine pixels below "left one" is still its row, since 9 is under half of 20.
 		line("right one", 600, 29, 20),
 	}
 	sortReadingOrder(lines)

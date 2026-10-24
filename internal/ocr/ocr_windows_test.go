@@ -165,8 +165,8 @@ func TestRecognizeSubImageKeepsItsCoordinates(t *testing.T) {
 }
 
 // columnPage fills a w by h page with cols columns of lines of common words, and returns it
-// with the text Recognize must read from it. The words leave out digits next to letters:
-// at 20px the engine reads Segoe UI's "B1" as "Bl" and "A11" as "A1 1".
+// with the text Recognize must read from it. The words have no digits next to letters,
+// because at 20px the engine reads Segoe UI's "B1" as "Bl" and "A11" as "A1 1".
 func columnPage(t testing.TB, w, h int, size float64, cols int) (*image.RGBA, string) {
 	words := strings.Fields("time year people way day man thing woman life child world school " +
 		"state family student group country problem hand part place case week company system " +
@@ -347,9 +347,10 @@ func TestRecognizeDoesNotLeak(t *testing.T) {
 	after := usage()
 	t.Logf("before 200 calls: %s", before)
 	t.Logf("after 200 calls:  %s", after)
-	// Each call makes about 40 HSTRINGs and 50 COM objects for the words and lines it reads,
-	// and a 5 MB bitmap. Leaking any one of them every call grows the heaps by over 300 KB.
-	if grew := after.heap - before.heap; grew > 256<<10 {
+	// Each call reads 40 words. Not freeing their HSTRINGs grew the native heaps by 288 KB
+	// in 200 calls. The engine itself keeps about 40 bytes for each engine that has
+	// recognized an image, so 200 calls grow them by about 8 KB.
+	if grew := after.heap - before.heap; grew > 128<<10 {
 		t.Errorf("native heaps grew by %d KB", grew>>10)
 	}
 	if grew := after.private - before.private; grew > 8<<20 {
