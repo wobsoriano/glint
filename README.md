@@ -28,7 +28,7 @@ Glint runs entirely on your PC. It has no account, no cloud upload and no teleme
 | | Snipping Tool | Glint |
 | --- | --- | --- |
 | Area, window and full-screen screenshots | Yes | Yes, plus the previous area again and a self-timer |
-| Annotate | Pen, highlighter, shapes | Arrows, shapes, numbered markers, text, highlight, pixelate and blur, all editable later |
+| Annotate | Pen, highlighter, rectangles, ovals, lines and arrows | Arrows, shapes, numbered markers, text, highlight, pixelate and blur, all editable later |
 | Styled screenshots | No | Gradient, image or wallpaper backgrounds, padding, corners, shadow, saved presets |
 | Hide sensitive text | Emails and phone numbers | Emails, phone numbers, card numbers, API keys, IP addresses and tokens, automatically |
 | Copy text from the screen | Yes | Yes |
@@ -37,11 +37,11 @@ Glint runs entirely on your PC. It has no account, no cloud upload and no teleme
 | Screen recording with audio | Yes | Yes, plus camera and keyboard and mouse input on separate tracks |
 | Auto zoom that follows your clicks | No | Yes |
 | Cursor, camera bubble and keystroke captions | No | Redrawn and adjustable after recording |
-| Edit a recording | Not built in | Built-in Studio: cut, trim, speed, styled frame, export at 60 fps |
+| Edit a recording | Trim the ends, and export a GIF of up to 30 s | Built-in Studio: cut, trim, speed, styled frame, export at 60 fps |
 | Captions and transcript editing | No | On-device transcription, captions, cut by deleting words, remove filler words and silences |
 | Teleprompter | No | Scrolls with your voice |
 
-Snipping Tool's features change with Windows updates. This table describes it as of late 2026. Glint is not affiliated with Microsoft. Snipping Tool is a Microsoft product.
+Snipping Tool also does things Glint doesn't: freeform snips, QR code detection, a color picker, copying a table as a table, and Perfect Screenshot framing on Copilot+ PCs. Its features change with Windows updates, and this table describes it as of late 2026. Glint is not affiliated with Microsoft. Snipping Tool is a Microsoft product.
 
 Glint lives in the notification area and supports Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Text recognition uses the Windows OCR engine, and whisper.cpp transcribes on your PC.
 
