@@ -296,6 +296,8 @@ func run(c config) error {
 		}
 	}
 	st.rec.Store(rec)
+	traceStop := make(chan struct{})
+	go st.record(rec, traceStop)
 	if c.system && c.tones {
 		// A second loopback track whose clock never runs writes nothing, but its tap hands
 		// over every buffer as it arrives: stamping each with media time places the bursts
@@ -346,6 +348,7 @@ func run(c config) error {
 		}()
 	}
 	moved := drive(rec, plan, st, c)
+	close(traceStop)
 	if c.cancel {
 		rec.Cancel()
 		if _, err := os.Stat(pending.Dir); !errors.Is(err, os.ErrNotExist) {
@@ -464,10 +467,7 @@ type moveInfo struct {
 func drive(rec *media.Recorder, p schedule, st *stage, c config) *moveInfo {
 	start := time.Now()
 	painted := st.painted.Load()
-	stop := make(chan struct{})
-	go st.record(rec, stop)
 	defer func() {
-		close(stop)
 		st.rate = float64(st.painted.Load()-painted) / time.Since(start).Seconds()
 	}()
 	var mv *moveInfo

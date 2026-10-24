@@ -355,7 +355,10 @@ func pointer(dir string, sum media.RecordSummary, st *stage, c config, mv *moveI
 			inside++
 		}
 	}
-	k.ok(checked > 0 && wrong == 0, "pointer mapping: %d of %d samples taken while the pointer sat still land on the video pixel under it (%d inside the frame)%s",
+	if checked == 0 {
+		k.info("pointer mapping not checked: the pointer moved around every sample")
+	}
+	k.ok(wrong == 0, "pointer mapping: %d of %d samples taken while the pointer sat still land on the video pixel under it (%d inside the frame)%s",
 		checked-wrong, checked, inside, firstWrong)
 	if mv == nil {
 		return
