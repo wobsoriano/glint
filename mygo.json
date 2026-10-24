@@ -2,5 +2,20 @@
   "name": "Glint",
   "identifier": "com.glint.app",
   "version": "0.2.0",
-  "out": "build"
+  "out": "build",
+  "fileAssociations": [
+    { "ext": ["png", "jpg", "jpeg", "webp", "bmp", "gif"], "name": "Glint Image", "role": "Viewer" },
+    { "ext": ["mp4", "mov", "m4v"], "name": "Glint Video", "role": "Viewer" }
+  ],
+  "macos": {
+    "minimumSystemVersion": "13.0",
+    "infoPlist": {
+      "LSUIElement": true,
+      "CFBundleIconFile": "Glint",
+      "CFBundleDocumentTypes": [],
+      "NSScreenCaptureUsageDescription": "Glint captures the screen for screenshots and recordings.",
+      "NSMicrophoneUsageDescription": "Glint records your microphone with screen recordings when you turn it on.",
+      "NSCameraUsageDescription": "Glint records your camera with screen recordings when you turn it on."
+    }
+  }
 }

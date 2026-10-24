@@ -48,11 +48,14 @@ func loadWhisper(dir string) (*whisperLib, error) {
 	if err := verifyRuntime(dir); err != nil {
 		return nil, err
 	}
+	if err := checkVCRuntime(dir); err != nil {
+		return nil, err
+	}
 	// Search the DLL's own folder so whisper.dll finds the ggml libraries beside it.
 	h, err := windows.LoadLibraryEx(filepath.Join(dir, "whisper.dll"), 0,
 		windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
 	if err != nil {
-		return nil, fmt.Errorf("loading whisper.dll: %w", err)
+		return nil, explainLoadError(err)
 	}
 	var missing error
 	proc := func(name string) uintptr {
