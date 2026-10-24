@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
-	"strings"
 
 	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
 	"github.com/wobsoriano/glint/internal/studio"
 	"github.com/wobsoriano/glint/internal/ui/record"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
 var _ record.Host = (*App)(nil)
@@ -20,15 +20,17 @@ func (a *App) SelectRegion(kind settings.RecordTarget, display platform.Display,
 
 func (a *App) Toast(msg string) { a.toast(msg) }
 
+func (a *App) ToastAbove(msg string, gap float64) { toast.ShowAbove(msg, gap) }
+
 // RecordingFinished takes a recording now in the Library: it becomes the last capture, the
 // Library lists it, and Settings > After recording runs on it.
-func (a *App) RecordingFinished(item store.Item, warnings []string) {
+func (a *App) RecordingFinished(item store.Item, notice string) {
 	a.last = item.Dir
 	if a.Surfaces.Imported != nil {
 		a.Surfaces.Imported(item)
 	}
-	if len(warnings) > 0 {
-		a.toast(strings.Join(warnings, " · "))
+	if notice != "" {
+		a.toast(notice)
 	}
 	for _, s := range recordingPlan(a.settings.AfterRecording) {
 		switch s {

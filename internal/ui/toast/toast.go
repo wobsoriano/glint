@@ -21,16 +21,18 @@ const (
 	Life   = 2600 * time.Millisecond
 	fade   = 300 * time.Millisecond
 	height = 50
-	// bottom is the gap between the pill and the bottom of the work area, in DIPs.
+	// bottom is the usual gap between the pill and the bottom of the work area, in DIPs.
 	bottom = 24
 )
 
 // Toast is a message showing. Its methods run on the main thread.
 type Toast struct {
-	win  *mygo.Window
-	msg  string
-	gen  int // bumped by every SetText and Close, so a superseded fade stops
-	gone bool
+	win *mygo.Window
+	msg string
+	// bottom is the gap below the pill, in DIPs.
+	bottom float64
+	gen    int // bumped by every SetText and Close, so a superseded fade stops
+	gone   bool
 }
 
 var (
@@ -42,14 +44,20 @@ var (
 func Show(msg string) *Toast { return ShowFor(msg, Life) }
 
 // ShowFor shows msg for d before it fades; a negative d keeps it until Close.
-func ShowFor(msg string, d time.Duration) *Toast {
+func ShowFor(msg string, d time.Duration) *Toast { return show(msg, d, bottom) }
+
+// ShowAbove shows msg for Life with gap DIPs below it, to clear a bar at the bottom of the
+// work area.
+func ShowAbove(msg string, gap float64) *Toast { return show(msg, Life, gap) }
+
+func show(msg string, d time.Duration, gap float64) *Toast {
 	if current != nil {
 		current.Close()
 	}
 	if owner == nil || owner.IsDestroyed() {
 		owner = mygo.NewWindow(mygo.WindowOptions{Title: "Glint toasts", Width: 1, Height: 1, Frameless: true, SkipTaskbar: true, Hidden: true})
 	}
-	t := &Toast{msg: msg}
+	t := &Toast{msg: msg, bottom: gap}
 	w := width(msg)
 	t.win = mygo.NewFlyout(mygo.FlyoutOptions{Parent: owner, Width: w, Height: height, Hidden: true, Content: ui.View(t.view)})
 	t.place(w)

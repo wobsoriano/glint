@@ -1,6 +1,7 @@
 package record
 
 import (
+	"errors"
 	"image"
 	"sync"
 
@@ -11,7 +12,10 @@ import (
 	"github.com/wobsoriano/glint/internal/ui/theme"
 )
 
-const cameraSide = 200
+const (
+	cameraSide    = 200
+	cameraMissing = "Camera unavailable: recording continues without it"
+)
 
 // CameraPreview starts a live feed of the camera, calling frame from another goroutine with
 // each new picture, until stop. frame must not wait on the main thread: stop runs there and
@@ -84,6 +88,15 @@ func (f *cameraFeed) close() {
 	f.stop()
 }
 
+// cameraNotice says why the picker shows no camera bubble. A camera that is not connected
+// gets the camera chip's own words rather than its long device id.
+func cameraNotice(err error) string {
+	if errors.Is(err, media.ErrNoCamera) {
+		return cameraMissing
+	}
+	return "Camera preview unavailable: " + err.Error()
+}
+
 // showCamera shows the chosen camera in a round bubble above the bar's corner while the
 // user picks. Like the Rust build, it closes when recording starts, which opens the camera
 // for camera.mp4 instead.
@@ -95,7 +108,7 @@ func (c *Controller) showCamera() {
 	}
 	feed, err := startCameraFeed(media.CameraID(*id))
 	if err != nil {
-		c.host.Toast("Camera preview unavailable: " + err.Error())
+		c.host.ToastAbove(cameraNotice(err), abovePicker)
 		return
 	}
 	d := c.target.Display

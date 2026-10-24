@@ -39,14 +39,14 @@ func workAreaAtCursor() (rect, float64) {
 	return info.Work, float64(dx) / 96
 }
 
-// place puts the toast at the bottom centre of the work area in physical pixels: MyGo's own
-// geometry is whole DIPs and rounds negative coordinates toward zero. The second call
-// corrects the size after WM_DPICHANGED on a display of another scale.
+// place puts the toast t.bottom DIPs above the bottom centre of the work area, in physical
+// pixels: MyGo's own geometry is whole DIPs and rounds negative coordinates toward zero. The
+// second call corrects the size after WM_DPICHANGED on a display of another scale.
 func (t *Toast) place(w int) {
 	work, scale := workAreaAtCursor()
 	pw, ph := int32(float64(w)*scale), int32(float64(height)*scale)
 	x := work.Left + (work.Right-work.Left-pw)/2
-	y := work.Bottom - ph - int32(bottom*scale)
+	y := work.Bottom - ph - int32(t.bottom*scale)
 	const topmost = ^uintptr(0)
 	const noActivate = 0x0010
 	h := t.win.NativeHandle()

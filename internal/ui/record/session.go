@@ -35,11 +35,21 @@ type Host interface {
 	// capture overlay does; kind is what the user asked for. done runs on the main thread,
 	// with ok false when the user backs out. Select is one implementation.
 	SelectRegion(kind settings.RecordTarget, display platform.Display, done func(sel Selection, ok bool))
-	// RecordingFinished hands over a recording that is now in the Library, with the warnings
-	// of its tracks: the app runs Settings > After recording on it.
-	RecordingFinished(item store.Item, warnings []string)
+	// RecordingFinished hands over a recording that is now in the Library, with a notice of
+	// what went wrong with its tracks, empty when nothing did: the app shows the notice and
+	// runs Settings > After recording on the recording.
+	RecordingFinished(item store.Item, notice string)
 	Toast(msg string)
+	// ToastAbove shows msg with gap DIPs below it, clear of the picker or the bar.
+	ToastAbove(msg string, gap float64)
 }
+
+// Toasts that show while the picker or the bar does sit this far above the bottom of the
+// work area, clear of it.
+const (
+	abovePicker = pickerMargin + pickerH + 8
+	aboveBar    = barMargin + barH + 8
+)
 
 type stage int
 
@@ -416,7 +426,7 @@ func (c *Controller) begin() {
 			}
 			if w := rec.Warnings(); len(w) > 0 {
 				log.Printf("recording started with warnings: %v", w)
-				c.host.Toast(warningSummary(w))
+				c.host.ToastAbove(recordingNotice(true, w), aboveBar)
 			}
 			c.watchLive(epoch)
 		})
@@ -525,7 +535,7 @@ func (c *Controller) stop() {
 			if err != nil {
 				c.host.Toast("The recording could not be saved: " + err.Error())
 			} else if c.onQuit == nil {
-				c.host.RecordingFinished(item, warnings)
+				c.host.RecordingFinished(item, recordingNotice(false, warnings))
 			}
 			c.quitNow()
 		})

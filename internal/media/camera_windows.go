@@ -111,7 +111,7 @@ func openCamera(id CameraID) (*camera, error) {
 		a.Release()
 	}
 	if found.IsNil() {
-		return nil, fmt.Errorf("no camera with id %s", id)
+		return nil, fmt.Errorf("%w %s", ErrNoCamera, id)
 	}
 	defer found.Release()
 	c := &camera{}
