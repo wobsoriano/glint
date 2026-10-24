@@ -8,7 +8,7 @@ import (
 
 var procD3D11CreateDevice = d3d11.NewProc("D3D11CreateDevice")
 
-// D3D11_TEXTURE2D_DESC.
+// TextureDesc is D3D11_TEXTURE2D_DESC.
 type TextureDesc struct {
 	Width, Height, MipLevels, ArraySize uint32
 	Format                              uint32

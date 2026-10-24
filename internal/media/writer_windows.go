@@ -255,8 +255,8 @@ func (w *VideoWriter) WriteFrame(img *image.RGBA) error {
 // WriteBGRA appends a frame of BGRA rows, stride bytes apart, shown at at. Capture
 // sources such as cameras deliver this layout with their own clock.
 func (w *VideoWriter) WriteBGRA(px []byte, stride int, at time.Duration) error {
-	if len(px) < stride*(w.video.Height-1)+w.video.Width*4 {
-		return fmt.Errorf("BGRA frame has %d bytes, too few for %dx%d", len(px), w.video.Width, w.video.Height)
+	if stride < w.video.Width*4 || len(px) < stride*(w.video.Height-1)+w.video.Width*4 {
+		return fmt.Errorf("BGRA frame of %d bytes at stride %d does not hold %dx%d", len(px), stride, w.video.Width, w.video.Height)
 	}
 	return w.writePixels(px, stride, orderBGRA, int64(at/100), frameTime(1, w.video.FPS))
 }

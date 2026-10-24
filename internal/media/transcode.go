@@ -20,8 +20,6 @@ type TranscodeOptions struct {
 	// Trim keeps only [Trim.StartMS, Trim.EndMS) of the source when set.
 	Trim      *Span
 	DropAudio bool
-	// Software skips hardware encoders.
-	Software bool
 }
 
 // Span is a stretch of media time in milliseconds.
@@ -50,7 +48,7 @@ func Transcode(ctx context.Context, src, dst string, opts TranscodeOptions, prog
 	if span.EndMS <= span.StartMS {
 		return WriteSummary{}, fmt.Errorf("trim range %d..%d is empty", span.StartMS, span.EndMS)
 	}
-	video := VideoParams{Width: w, Height: h, FPS: fps, Bitrate: opts.Bitrate, Codec: opts.Codec, Software: opts.Software}
+	video := VideoParams{Width: w, Height: h, FPS: fps, Bitrate: opts.Bitrate, Codec: opts.Codec}
 	if video.Bitrate <= 0 {
 		video.Bitrate = RecordingBitrate(w, h, fps)
 	}
