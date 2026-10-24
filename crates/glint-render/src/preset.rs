@@ -139,6 +139,37 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "writes presets.json fixtures for the Go port into GLINT_GO_FIXTURES"]
+    fn go_fixtures() {
+        let dir = std::path::PathBuf::from(std::env::var_os("GLINT_GO_FIXTURES").expect("set GLINT_GO_FIXTURES"));
+        let mut dusk = Preset::from_doc("Dusk \u{25d0}", &EditDoc::default());
+        dusk.style.background = Background::Gradient(Gradient { stops: vec![Color::rgb(0x111111), Color::rgb(0x999999)], angle: 45.0 });
+        dusk.style.padding = 48.5;
+        dusk.effects.border = Border { enabled: true, width: 3.0, color: Color::rgb(0xABCDEF) };
+        dusk.effects.perspective = Perspective { rot_y: 18.0, ..Default::default() };
+        let mut photo = Preset::from_doc("Photo", &EditDoc::default());
+        photo.style.background = Background::Image("C:\\Users\\me\\Pictures\\beach.jpg".into());
+        save_store(&dir.join("presets.json"), &[Preset::from_doc("Plain", &EditDoc::default()), dusk, photo]).unwrap();
+        assert_eq!(load_store(&dir.join("presets.json")).unwrap().len(), 3);
+        let no_effects = r#"[{"name":"Bare","style":{}}]"#;
+        let decoded = serde_json::from_str::<Vec<Preset>>(no_effects).unwrap();
+        assert_eq!(decoded[0].effects, Effects::default());
+        std::fs::write(dir.join("presets-no-effects.json"), no_effects).unwrap();
+        assert!(serde_json::from_str::<Vec<Preset>>(r#"[{"name":"NoStyle"}]"#).is_err());
+        std::fs::write(dir.join("presets-reject-no-style.json"), r#"[{"name":"NoStyle"}]"#).unwrap();
+    }
+
+    #[test]
+    #[ignore = "reads presets.json written by the Go port from GLINT_GO_WRITTEN"]
+    fn reads_go_written_presets() {
+        let dir = std::path::PathBuf::from(std::env::var_os("GLINT_GO_WRITTEN").expect("set GLINT_GO_WRITTEN"));
+        let text = std::fs::read_to_string(dir.join("presets.json")).unwrap();
+        let presets = load_store(&dir.join("presets.json")).unwrap();
+        assert!(!presets.is_empty());
+        assert_eq!(serde_json::to_string_pretty(&presets).unwrap(), text, "presets.json round-trips byte for byte");
+    }
+
+    #[test]
     fn import_rejects_foreign_and_future_files_and_strips_paths() {
         assert!(import("").is_err());
         assert!(import("{}").is_err());

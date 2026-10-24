@@ -1,0 +1,110 @@
+{
+  "style": {
+    "background": {
+      "Gradient": {
+        "stops": [
+          1667691007,
+          2824206335,
+          3964180991
+        ],
+        "angle": 135.0
+      }
+    },
+    "padding": 64.0,
+    "inset": 0.0,
+    "auto_balance": true,
+    "radius": 12.0,
+    "shadow": 40.0,
+    "shadow_opacity": 0.45,
+    "aspect": null,
+    "align": 4,
+    "chrome": "None",
+    "chrome_title": true
+  },
+  "launch_at_login": false,
+  "include_own_windows": false,
+  "timer_seconds": 9,
+  "format": "Png",
+  "jpeg_quality": 85,
+  "save_dir": "C:\\Users\\me\\Pictures\\Glint",
+  "save_without_dialog": true,
+  "window_shadow": true,
+  "show_loupe": true,
+  "after_shot": {
+    "preview": true,
+    "copy": true,
+    "save": false,
+    "edit": false,
+    "pin": false
+  },
+  "after_recording": {
+    "preview": true,
+    "copy": false,
+    "save": false,
+    "studio": false
+  },
+  "record": {
+    "target": "Display",
+    "area": null,
+    "camera": null,
+    "mic": null,
+    "system_audio": true,
+    "countdown": 1,
+    "teleprompter": false,
+    "script": "",
+    "prompter_lines": 3
+  },
+  "overlay": {
+    "side": "Left",
+    "auto_close_seconds": 0,
+    "dismiss_after_drag": true,
+    "layout": {
+      "corners": [
+        null,
+        "copy",
+        null,
+        null
+      ],
+      "center": [
+        "save"
+      ],
+      "hidden": [
+        "save_as",
+        "compress",
+        "quick_look",
+        "copy_text",
+        "delete",
+        "pin",
+        "edit",
+        "dismiss",
+        "more"
+      ]
+    }
+  },
+  "hotkeys": {
+    "area": "Ctrl+Shift+4",
+    "fullscreen": "Ctrl+Shift+3",
+    "window": "Ctrl+Shift+5",
+    "previous_area": "Ctrl+Shift+6",
+    "text": "F1",
+    "recording": "Ctrl+Shift+7",
+    "library": "Ctrl+Shift+L"
+  },
+  "auto_redact": false,
+  "redact_style": "Blur",
+  "redact_rules": {
+    "emails": true,
+    "phones": true,
+    "credit_cards": true,
+    "secrets": true,
+    "ip_addresses": true,
+    "ids": true,
+    "urls_with_tokens": true
+  },
+  "last_area": null,
+  "library": {
+    "view": "Grid",
+    "sort": "Captured",
+    "inspector": true
+  }
+}

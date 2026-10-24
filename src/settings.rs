@@ -401,4 +401,88 @@ mod tests {
         assert_eq!(names, vec![std::ffi::OsString::from("settings.json")]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    fn env_dir(var: &str) -> PathBuf {
+        PathBuf::from(std::env::var_os(var).unwrap_or_else(|| panic!("set {var}")))
+    }
+
+    #[test]
+    #[ignore = "writes settings fixtures for the Go port into GLINT_GO_FIXTURES"]
+    fn go_fixtures() {
+        use crate::cards::CardAction;
+        let dir = env_dir("GLINT_GO_FIXTURES");
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, s: &Settings| std::fs::write(dir.join(name), serde_json::to_string_pretty(s).unwrap()).unwrap();
+        write("settings-default.json", &Settings::default());
+
+        let mut s = Settings::default();
+        s.launch_at_login = true;
+        s.include_own_windows = true;
+        s.timer_seconds = 10;
+        s.format = ExportFormat::Jpeg;
+        s.jpeg_quality = 70;
+        s.save_dir = PathBuf::from("D:\\Shots <&> \u{e9}\u{2028}");
+        s.save_without_dialog = false;
+        s.window_shadow = false;
+        s.show_loupe = false;
+        s.after_shot = AfterShot { preview: false, copy: false, save: true, edit: true, pin: true };
+        s.after_recording = AfterRecording { preview: false, copy: true, save: true, studio: true };
+        s.record = RecordPrefs {
+            target: RecordTarget::Window,
+            area: Some([-10, 20, 1920, 1080]),
+            camera: Some("Integrated Camera".into()),
+            mic: Some("Microphone \"USB\"".into()),
+            system_audio: false,
+            countdown: 0,
+            teleprompter: true,
+            script: "Line one\nLine two\ttabbed".into(),
+            prompter_lines: 5,
+        };
+        s.overlay.side = Side::Right;
+        s.overlay.auto_close_seconds = 8;
+        s.overlay.dismiss_after_drag = false;
+        s.overlay.layout.corners = [None, Some(CardAction::Copy), Some(CardAction::Pin), None];
+        s.overlay.layout.center = vec![CardAction::Edit];
+        s.overlay.layout.hidden = vec![];
+        s.overlay.layout = s.overlay.layout.normalized();
+        s.hotkeys.area = "Ctrl+Alt+A".into();
+        s.hotkeys.library = String::new();
+        s.auto_redact = true;
+        s.redact_style = RedactStyle::Pixelate;
+        s.redact_rules.phones = false;
+        s.redact_rules.urls_with_tokens = false;
+        s.last_area = Some([1, 2, 3, 4]);
+        s.library.view = LibraryView::List;
+        s.library.sort = SortKey::Modified;
+        s.library.inspector = false;
+        write("settings-custom.json", &s);
+
+        let partial = r#"{"timer_seconds": 9, "record": {"countdown": 1}, "overlay": {"layout": {"corners": [null, "copy", null, null]}}, "hotkeys": {"text": "F1"}, "not_a_field": [1, 2]}"#;
+        std::fs::write(dir.join("settings-partial.json"), partial).unwrap();
+        let decoded = Settings::load_from(&dir.join("settings-partial.json"));
+        assert_eq!(decoded.timer_seconds, 9);
+        write("settings-partial-decoded.json", &decoded);
+
+        for (name, json) in [
+            ("bad-enum", r#"{"format": "Gif"}"#),
+            ("bad-corners", r#"{"overlay": {"layout": {"corners": ["copy"]}}}"#),
+            ("bad-area", r#"{"last_area": [1, 2, 3]}"#),
+            ("bad-quality", r#"{"jpeg_quality": 300}"#),
+            ("bad-type", r#"{"timer_seconds": "5"}"#),
+        ] {
+            assert!(serde_json::from_str::<Settings>(json).is_err(), "{name} must be rejected");
+            std::fs::write(dir.join(format!("settings-reject-{name}.json")), json).unwrap();
+        }
+    }
+
+    #[test]
+    #[ignore = "reads settings.json written by the Go port from GLINT_GO_WRITTEN"]
+    fn reads_go_written_settings() {
+        let dir = env_dir("GLINT_GO_WRITTEN");
+        for name in ["settings-default.json", "settings-custom.json"] {
+            let text = std::fs::read_to_string(dir.join(name)).unwrap();
+            let s: Settings = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(serde_json::to_string_pretty(&s).unwrap(), text, "{name} round-trips byte for byte");
+        }
+    }
 }

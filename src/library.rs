@@ -505,6 +505,83 @@ mod tests {
         assert_eq!(names, ["base.png", "edit.json", "image.png", "meta.json", "thumb.png"]);
     }
 
+    fn env_dir(var: &str) -> PathBuf {
+        PathBuf::from(std::env::var_os(var).unwrap_or_else(|| panic!("set {var}")))
+    }
+
+    #[test]
+    #[ignore = "writes CaptureMeta and Library fixtures for the Go port into GLINT_GO_FIXTURES"]
+    fn go_fixtures() {
+        let dir = env_dir("GLINT_GO_FIXTURES");
+        std::fs::create_dir_all(&dir).unwrap();
+        let summer = at(14, 3, 22);
+        let winter = Local.with_ymd_and_hms(2026, 1, 5, 7, 8, 9).unwrap();
+        let cases = [
+            ("meta-whole-seconds.json", summer, 0, None, None, None),
+            ("meta-millis.json", summer, 120_000_000, Some(1_500), Some("Display 1"), None),
+            ("meta-micros.json", winter, 123_456_000, None, Some("Notes \"draft\" \u{25d0} <&>"), Some(r"C:\Users\me\Pictures\Diagram.jpg")),
+            ("meta-nanos.json", winter, 123_456_789, Some(0), None, Some("/Users/me/shot.png")),
+        ];
+        for (name, at, nanos, duration_ms, source, imported_from) in cases {
+            let created = at + chrono::Duration::nanoseconds(nanos);
+            let meta = CaptureMeta {
+                version: 1,
+                kind: if duration_ms.is_some() { CaptureKind::Recording } else { CaptureKind::Screenshot },
+                title: default_title(CaptureKind::Screenshot, &created),
+                created,
+                modified: created + chrono::Duration::milliseconds(2_500),
+                width: 1200,
+                height: 600,
+                duration_ms,
+                source: source.map(Into::into),
+                imported_from: imported_from.map(PathBuf::from),
+            };
+            std::fs::write(dir.join(name), serde_json::to_vec_pretty(&meta).unwrap()).unwrap();
+        }
+        let missing_kind = r#"{"version":1,"title":"x","created":"2026-10-14T14:03:22-07:00","modified":"2026-10-14T14:03:22-07:00","width":1,"height":1}"#;
+        assert!(serde_json::from_str::<CaptureMeta>(missing_kind).is_err());
+        std::fs::write(dir.join("meta-reject-missing-kind.json"), missing_kind).unwrap();
+        let minimal = r#"{"version":1,"kind":"screenshot","title":"x","created":"2026-10-14T14:03:22Z","modified":"2026-10-14T21:03:22.5+00:00","width":1,"height":1,"extra":true}"#;
+        let decoded: CaptureMeta = serde_json::from_str(minimal).unwrap();
+        std::fs::write(dir.join("meta-minimal.json"), minimal).unwrap();
+        std::fs::write(dir.join("meta-minimal-decoded.json"), serde_json::to_vec_pretty(&decoded).unwrap()).unwrap();
+
+        let lib_root = dir.join("Library");
+        let _ = std::fs::remove_dir_all(&lib_root);
+        let lib = Library::new(&lib_root);
+        let base = checker(40, 20);
+        let mut edited = base.clone();
+        edited.put_pixel(0, 0, image::Rgba([0, 0, 0, 255]));
+        lib.import_screenshot(&base, Some((&edited, &EditDoc::default())), at(9, 0, 0), Some("Display 1".into()), None, None).unwrap();
+        lib.import_screenshot(&base, None, at(10, 0, 0), None, Some(PathBuf::from(r"C:\Users\me\Pictures\Diagram.jpg")), Some("Diagram".into())).unwrap();
+        let pending = lib.begin_recording(at(11, 0, 0)).unwrap();
+        std::fs::write(pending.dir.join("screen.mp4"), vec![0u8; 100]).unwrap();
+        let info = RecordingInfo { width: 1280, height: 720, duration_ms: 4_250, source: "Display 1".into() };
+        lib.finish_recording(&pending, &info, Some(&checker(64, 36))).unwrap();
+    }
+
+    #[test]
+    #[ignore = "reads a Library and meta.json files written by the Go port from GLINT_GO_WRITTEN"]
+    fn reads_go_written_library() {
+        let dir = env_dir("GLINT_GO_WRITTEN");
+        let lib_root = dir.join("Library");
+        let dirs: Vec<PathBuf> = std::fs::read_dir(&lib_root).unwrap().flatten().map(|e| e.path()).collect();
+        assert!(!dirs.is_empty());
+        for d in &dirs {
+            let item = load(d).unwrap_or_else(|e| panic!("{}: {e:#}", d.display()));
+            let text = std::fs::read_to_string(d.join("meta.json")).unwrap();
+            assert_eq!(String::from_utf8(serde_json::to_vec_pretty(&item.meta).unwrap()).unwrap(), text, "{} round-trips byte for byte", d.display());
+            let thumb = image::open(item.thumb()).unwrap();
+            assert!(thumb.width().max(thumb.height()) <= THUMB_MAX);
+            if item.kind() == CaptureKind::Screenshot {
+                let (base, _) = load_edit(&item).unwrap_or_else(|e| panic!("{}: {e:#}", d.display()));
+                assert_eq!((base.width(), base.height()), (item.meta.width, item.meta.height));
+                image::open(item.deliverable()).unwrap();
+            }
+        }
+        assert_eq!(Library::new(&lib_root).scan().len(), dirs.len());
+    }
+
     #[test]
     fn item_dir_finds_the_capture_a_path_belongs_to() {
         let lib_root = || PathBuf::from(r"C:\Data\Library");

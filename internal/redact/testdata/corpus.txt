@@ -1,0 +1,40 @@
+contact me at jane.doe@example.com today
+card 4242 4242 4242 4242 exp
+card 4242 4242 4242 4241
+key sk_live_51HxYzAbCdEfGhIjKlMn here
+token ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+server 192.168.1.20 is up
+call +1 415-555-0132 now
+password: hunter2
+API key: sk_live_51 HxYzAbCdEfGhIjKlMnOpQr
+Hello world, version 1.2.3 released on 2026-10-14
+ssn 123-45-6789 on file
+IBAN GB82 WEST 1234 5698 7654 32
+mac 00:1A:2B:3C:4D:5E and 00-1a-2b-3c-4d-5e
+v6 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+see https://example.com/reset?token=abc123
+go to https://example.com/x?sig=abcdef&y=1
+https://bob:hunter22@db.example.com/x
+aws AKIAIOSFODNN7EXAMPLE
+jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N
+blob 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+build abcdefghijklmnopqrstuvwxyzabcdef
+mail bob @ example.org
+call (415) 555-0132
+call +1 23 45
+ip 256.1.1.1
+order 1234 5678 9012 3456
+Secret key:
+the auth = Zq9xW2vB7nM4kL1pR8sT3yU6aD5fG0hJ more
+slack xoxb-1234567890-abcdefghij
+gitlab glpat-abcdefghijklmnop1234
+npm npm_abcdefghijklmnopqrstuvwxyz0123456789
+shopify shpat_0123456789abcdef0123456789abcdef
+google AIzaSyA-abcdefghijklmnopqrstuvwxyz12345
+openai sk-proj_abcdefghijklmnop
+github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz
+café 4242 4242 4242 4242
+номер +7 912 345-67-89
+PASSWORD = s3cr3t value
+phone 415.555.0132 or 415 555 0132
+x 4242-4242-4242-4242 y jane@example.com z
