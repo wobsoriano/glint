@@ -114,6 +114,7 @@ func (l *Library) shortcuts(c *ui.Context) {
 	if l.renaming != nil {
 		if c.Shortcut(0, ui.KeyEscape) {
 			l.renaming = nil
+			l.focusItems()
 		}
 		return
 	}
@@ -313,6 +314,7 @@ func (l *Library) renameInput(c *ui.Context, it store.Item) bool {
 	}
 	if ui.TextInput(c.Key("rename"), &l.renaming.draft).AutoFocus().Label("Name").Submitted() {
 		l.commitRename()
+		l.focusItems()
 	}
 	return true
 }
@@ -369,12 +371,12 @@ func tileAction(c *ui.Context, p theme.Palette, icon theme.IconName, tip string)
 }
 
 var listColumns = []ui.TableColumn{
-	{Title: "", ID: "thumb", Width: 68, Fixed: true},
+	{Title: "", ID: "thumb", Width: 64, Fixed: true},
 	{Title: "Name", MinWidth: 120},
 	{Title: "Kind", Width: 90},
-	{Title: "Dimensions", Width: 100},
-	{Title: "Captured", Width: 180},
-	{Title: "Size", Width: 80, Align: ui.End},
+	{Title: "Dimensions", Width: 96},
+	{Title: "Captured", Width: 170},
+	{Title: "Size", Width: 70, Align: ui.End},
 }
 
 func (l *Library) listView(c *ui.Context, p theme.Palette, visible []store.Item) ui.Element {
