@@ -17,6 +17,8 @@ var (
 	dim       = ui.RGBA(0, 0, 0, 0.55)
 	danger    = ui.RGB(0xC4, 0x2B, 0x1C)
 	doneGreen = ui.RGB(0x34, 0xC7, 0x59)
+	// failRed is the dark theme's danger color, legible on the dimmed card.
+	failRed = ui.RGB(0xFF, 0x99, 0xA4)
 )
 
 func (s *Stack) view(c *ui.Context) {
@@ -140,7 +142,11 @@ func (s *Stack) cardView(c *ui.Context, cd *card, layout settings.CardLayout, p 
 		if cd.status != "" {
 			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Background(ui.RGBA(0, 0, 0, 0.7)).
 				Justify(ui.Center).AlignItems(ui.Center).Gap(8).Padding(8).Children(func() {
-				ui.Icon(c, theme.Icon(theme.IconCheck)).Size(16, 16).TextColor(doneGreen)
+				if cd.failed {
+					ui.Icon(c, theme.Icon(theme.IconClose)).Size(16, 16).TextColor(failRed)
+				} else {
+					ui.Icon(c, theme.Icon(theme.IconCheck)).Size(16, 16).TextColor(doneGreen)
+				}
 				ui.Text(c, cd.status).FontSize(13).TextColor(white).MaxLines(2)
 			})
 		}

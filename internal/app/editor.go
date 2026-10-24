@@ -10,6 +10,7 @@ import (
 	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/store"
 	"github.com/wobsoriano/glint/internal/ui/editor"
+	"github.com/wobsoriano/glint/internal/ui/toast"
 )
 
 var _ editor.Host = (*editorHost)(nil)
@@ -39,7 +40,7 @@ func (a *App) openEditor(item store.Item) {
 		return func() {
 			if err != nil {
 				delete(a.win.editors, item.Dir)
-				a.toast("Could not open the editor: " + err.Error())
+				a.toast("Could not open the editor: " + toast.Reason(err))
 				return
 			}
 			h := &editorHost{a: a, dir: item.Dir, item: item}

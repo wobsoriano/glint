@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/transfer"
 
@@ -31,6 +33,37 @@ func TestSanitizeMakesTitlesFileNames(t *testing.T) {
 	} {
 		if got := Sanitize(in); got != want {
 			t.Errorf("Sanitize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestLongTitlesSaveUnderABoundedName(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	for _, title := range []string{
+		strings.Repeat("a", 300),
+		strings.Repeat("界", 300),
+		strings.Repeat("👍🏽", 120),
+		strings.Repeat("word ", 29) + "word." + strings.Repeat("x", 200),
+		strings.Repeat("word ", 40),
+	} {
+		dir, first := t.TempDir(), ""
+		for n := 1; n <= 2; n++ {
+			path, err := Export(img, dir, title, settings.FormatJPEG, 90)
+			if err != nil {
+				t.Fatalf("save %d of a %d-byte title: %v", n, len(title), err)
+			}
+			name := filepath.Base(path)
+			if units := len(utf16.Encode([]rune(name))); units > 200 || len(name) > 200 {
+				t.Errorf("%q is %d UTF-16 units, %d bytes", name, units, len(name))
+			}
+			if !utf8.ValidString(name) || strings.HasSuffix(strings.TrimSuffix(name, ".jpg"), " ") {
+				t.Errorf("cut badly: %q", name)
+			}
+			if n == 1 {
+				first = name
+			} else if name == first || !strings.HasSuffix(name, " (2).jpg") {
+				t.Errorf("second save %q after %q", name, first)
+			}
 		}
 	}
 }

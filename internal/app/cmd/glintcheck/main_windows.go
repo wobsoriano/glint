@@ -16,6 +16,8 @@
 //	glintcheck edited -dir <capture>
 //	glintcheck probe -file f.mp4
 //	glintcheck encoded -dir <capture> -file f.jpg [-quality 85]
+//	glintcheck handles -pid n
+//	glintcheck sockserve [-sock path -for 10m]; glintcheck sockdial [-sock path]
 package main
 
 import (
@@ -46,7 +48,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"stage": stage, "shot": shot, "cmp": compare, "dim": dim, "clip": clip, "library": library, "wins": wins,
 		"menu": menu, "mark": mark, "stack": stackRect, "video": video, "loopback": loopback,
-		"edited": edited, "probe": probe, "encoded": encoded,
+		"edited": edited, "probe": probe, "encoded": encoded, "handles": handles, "sockserve": sockServe, "sockdial": sockDial,
 	}
 	run, ok := cmds[os.Args[1]]
 	if !ok {
