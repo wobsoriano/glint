@@ -204,9 +204,16 @@ func drain(h *host) {
 func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2 store.Item) {
 	l := drive.NewLog(*outDir)
 	defer l.Finish()
-	saved := [2]int{}
-	saved[0], saved[1] = platform.CursorPos()
-	defer drive.MoveTo(saved[0], saved[1])
+	sx, sy := platform.CursorPos()
+	defer drive.MoveTo(sx, sy)
+	// Other workers' windows have covered the stack mid-run on the shared desktop; say so
+	// when a click lands on one.
+	clickStack := func(x, y int) {
+		if w := drive.RootAt(x, y); w != s.Window().NativeHandle() {
+			l.Printf("note: %q covers the stack at (%d,%d)", drive.WindowText(w), x, y)
+		}
+		drive.Click(x, y)
+	}
 	drive.MoveTo(960, 40)
 
 	area, _ := workArea()
@@ -231,6 +238,7 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 	gx, gy := g.r.X+g.r.W-g.px(5), g.r.Y+g.px(4)
 	was, now := behind.RGBAAt(gx-corner.X, gy-corner.Y), drive.Capture(platform.Rect{X: gx, Y: gy, W: 1, H: 1}).RGBAAt(0, 0)
 	l.Check(was == now, "the stack's padding shows what is behind it (%v, before %v)", now, was)
+	l.Printf("the window under the stack's padding at (%d,%d) is %q (class of the stack's own: %v)", gx, gy, drive.WindowText(drive.RootAt(gx, gy)), drive.RootAt(gx, gy) == s.Window().NativeHandle())
 	whole := g.r
 	l.Shot("stack-left.png", platform.Rect{X: area.X, Y: whole.Y - 20, W: whole.W + 40, H: whole.H + 40})
 
@@ -251,13 +259,13 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 
 	tx, ty := center(top)
 	drain(h)
-	drive.Click(tx, ty-g.px(19))
+	clickStack(tx, ty-g.px(19))
 	l.Check(waitCall(h, "copy Demo shot two", 2*time.Second) != "", "the Copy pill in the center calls the host's Copy")
 	time.Sleep(200 * time.Millisecond)
 	l.Shot("card-copied.png", top)
 	l.Check(drive.Foreground() == other, "clicking a card leaves the other app in front")
 	time.Sleep(1500 * time.Millisecond)
-	drive.Click(tx, ty+g.px(19))
+	clickStack(tx, ty+g.px(19))
 	l.Check(waitCall(h, "save Demo shot two", 2*time.Second) != "", "the Save pill calls the host's Save")
 	time.Sleep(1500 * time.Millisecond)
 
@@ -271,12 +279,12 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 		}
 		return x, y
 	}
-	drive.Click(cornerAt(false, true))
+	clickStack(cornerAt(false, true))
 	l.Check(waitCall(h, "edit Demo shot two", 2*time.Second) != "", "the top-right corner (Edit) calls the host's Edit")
-	drive.Click(cornerAt(false, false))
+	clickStack(cornerAt(false, false))
 	time.Sleep(300 * time.Millisecond)
 	l.Shot("card-more.png", top)
-	drive.Click(top.X+top.W/2, top.Y+g.px(6+4+11))
+	clickStack(top.X+top.W/2, top.Y+g.px(6+4+11))
 	l.Check(waitCall(h, "save_as Demo shot two", 2*time.Second) != "", "More opens the overflow menu, whose first row (Save As) calls the host")
 	time.Sleep(1500 * time.Millisecond)
 
@@ -288,9 +296,9 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 	drive.MoveTo(top.X+top.W/2, top.Y+8)
 	time.Sleep(400 * time.Millisecond)
 	l.Shot("card-relayout.png", top)
-	drive.Click(tx, ty-g.px(38))
+	clickStack(tx, ty-g.px(38))
 	l.Check(waitCall(h, "quick_look Demo shot two", 2*time.Second) != "", "after Settings > Overlay moves Quick Look to the center, its first pill calls Quick Look")
-	drive.Click(cornerAt(true, true))
+	clickStack(cornerAt(true, true))
 	l.Check(waitCall(h, "copy_text Demo shot two", 2*time.Second) != "", "and the top-left corner, now Copy Text, calls Copy Text")
 	prefs.Layout = settings.DefaultCardLayout()
 	s.SetPrefs(prefs)
@@ -304,6 +312,8 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 		drive.SetWindowRect(explorer, platform.Rect{X: 760, Y: 160, W: 900, H: 600})
 		drive.SetForeground(explorer)
 		time.Sleep(800 * time.Millisecond)
+		l.Printf("before the drag: %q is under the card, %q under the drop point", drive.WindowText(drive.RootAt(top.X+g.px(30), top.Y+top.H-g.px(30))), drive.WindowText(drive.RootAt(1210, 520)))
+		l.Shot("before-drag.png", platform.Rect{X: area.X, Y: area.Y + area.H/2, W: area.W, H: area.H / 2})
 		drive.Drag(top.X+g.px(30), top.Y+top.H-g.px(30), 1210, 520, 30, 15*time.Millisecond)
 		file := filepath.Join(dest, shot2.Meta.Title+".png")
 		copied := drive.WaitFile(file, 4*time.Second)
@@ -360,12 +370,12 @@ func run(s *stack.Stack, h *host, prefs settings.OverlayPrefs, rec, shot1, shot2
 	l.Shot("stack-right.png", platform.Rect{X: area.X + area.W - g.r.W - 40, Y: g.r.Y - 20, W: g.r.W + 40, H: g.r.H + 40})
 
 	collapse := platform.Rect{X: g.r.X + g.r.W - g.px(10+26), Y: g.r.Y + g.px(10+1), W: g.px(26), H: g.px(26)}
-	drive.Click(center(collapse))
+	clickStack(center(collapse))
 	time.Sleep(400 * time.Millisecond)
 	tab := drive.WindowRect(s.Window().NativeHandle())
 	l.Check(tab.W == g.px(30) && tab.H == g.px(84) && tab.X+tab.W == area.X+area.W, "the collapse button tucks the stack into a %dx%d peek tab flush with the right edge (%+v)", g.px(30), g.px(84), tab)
 	l.Shot("peek-tab.png", platform.Rect{X: area.X + area.W - 200, Y: tab.Y - 40, W: 200, H: tab.H + 80})
-	drive.Click(center(tab))
+	clickStack(center(tab))
 	time.Sleep(400 * time.Millisecond)
 	back := drive.WindowRect(s.Window().NativeHandle())
 	l.Check(back == g.r, "clicking the tab brings the stack back (%+v)", back)
