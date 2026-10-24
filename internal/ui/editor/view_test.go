@@ -2,6 +2,7 @@ package editor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ type fakeHost struct {
 	img     *image.RGBA
 	exports []bool
 	copies  int
+	copied  *image.RGBA
+	styles  []render.Style
 }
 
 func (h *fakeHost) SaveEdit(img *image.RGBA, doc render.EditDoc) error {
@@ -33,8 +36,13 @@ func (h *fakeHost) Export(title string, _ *image.RGBA, ask bool) (string, error)
 	return title + ".png", nil
 }
 
-func (h *fakeHost) Copy(*image.RGBA) error         { h.copies++; return nil }
+func (h *fakeHost) Copy(img *image.RGBA) error {
+	h.copies++
+	h.copied = img
+	return nil
+}
 func (h *fakeHost) Pin(*image.RGBA, float32) error { return nil }
+func (h *fakeHost) SaveStyle(s render.Style) error { h.styles = append(h.styles, s); return nil }
 func (h *fakeHost) Closed()                        {}
 
 func testEditor(t *testing.T) (*Editor, *fakeHost, *ui.Tester) {
@@ -205,6 +213,35 @@ func TestFailedSaveKeepsTheEditorOpenWithTheChanges(t *testing.T) {
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	if !e.closed {
 		t.Error("Ctrl+Enter (Done) should close after saving")
+	}
+}
+
+func TestCopySavesTheEditIntoTheCaptureFirst(t *testing.T) {
+	e, host, tt := testEditor(t)
+	x, y := canvasCenter(t, tt)
+	tt.Key(0, ui.KeyA)
+	dragOn(tt, x-80, y, x+80, y-40)
+	host.saveErr = errors.New("disk full")
+	tt.Click("Copy")
+	tt.Frame()
+	if host.copies != 0 || !e.m.dirty() || e.closed || !tt.HasText("Couldn't save the edit: disk full") {
+		t.Fatalf("a failed save copied %d times, dirty %v, closed %v, texts %q", host.copies, e.m.dirty(), e.closed, tt.Texts())
+	}
+	host.saveErr = nil
+	tt.Key(ui.Cmd, ui.KeyC)
+	tt.Frame()
+	if len(host.saved) != 1 || host.copies != 1 || e.m.dirty() || e.closed {
+		t.Fatalf("Ctrl+C: saved %d, copied %d, dirty %v, closed %v", len(host.saved), host.copies, e.m.dirty(), e.closed)
+	}
+	if !sameDoc(host.saved[0], e.m.doc) || host.copied != host.img {
+		t.Error("the copy is not the image just saved")
+	}
+	want := fmt.Sprintf("Copied %d × %d image", host.img.Rect.Dx(), host.img.Rect.Dy())
+	if !tt.HasText(want) {
+		t.Errorf("no %q in %q", want, tt.Texts())
+	}
+	if len(host.exports) != 0 {
+		t.Errorf("Copy exported %v", host.exports)
 	}
 }
 

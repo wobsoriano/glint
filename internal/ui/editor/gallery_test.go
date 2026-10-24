@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/wobsoriano/glint/internal/render"
-	"github.com/wobsoriano/glint/internal/settings"
 )
 
 func writePNG(t *testing.T, path string, w, h int) {
@@ -56,16 +55,22 @@ func TestAddedBackgroundsAreCopiedUnderUniqueNames(t *testing.T) {
 	}
 }
 
-func TestSaveAsDefaultWritesTheStyleToSettings(t *testing.T) {
-	t.Setenv("GLINT_DATA_DIR", t.TempDir())
-	e, _, tt := testEditor(t)
+func TestSaveAsDefaultHandsTheStyleToTheApp(t *testing.T) {
+	e, host, tt := testEditor(t)
 	tt.SetSize(1360, 2000)
 	tt.Click("Solid")
 	if err := tt.Click("Save as default"); err != nil {
 		t.Fatal(err)
 	}
-	st := settings.Load().Style
+	if len(host.styles) != 1 {
+		t.Fatalf("styles handed over: %d", len(host.styles))
+	}
+	st := host.styles[0]
 	if _, ok := st.Background.(render.SolidBackground); !ok || st.Padding != e.m.doc.Style.Padding {
-		t.Fatalf("settings hold %+v", st)
+		t.Fatalf("the app got %+v", st)
+	}
+	tt.Frame()
+	if !tt.HasText("Saved as your default style") {
+		t.Errorf("no confirmation in %q", tt.Texts())
 	}
 }

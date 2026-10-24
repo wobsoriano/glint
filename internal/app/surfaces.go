@@ -10,10 +10,12 @@ import (
 
 	"github.com/wobsoriano/glint/internal/actions"
 	"github.com/wobsoriano/glint/internal/store"
+	"github.com/wobsoriano/glint/internal/ui/editor"
 	"github.com/wobsoriano/glint/internal/ui/library"
 	"github.com/wobsoriano/glint/internal/ui/pin"
 	"github.com/wobsoriano/glint/internal/ui/prefs"
 	"github.com/wobsoriano/glint/internal/ui/quicklook"
+	"github.com/wobsoriano/glint/internal/ui/record"
 	"github.com/wobsoriano/glint/internal/ui/stack"
 	"github.com/wobsoriano/glint/internal/ui/trim"
 )
@@ -24,6 +26,9 @@ type views struct {
 	look     *quicklook.Viewer
 	library  *library.Window
 	settings *prefs.Window
+	// editors holds the editor open for each capture directory.
+	editors  map[string]*editor.Editor
+	recorder *record.Controller
 }
 
 var (
@@ -33,18 +38,21 @@ var (
 	_ quicklook.Host = lookHost{}
 )
 
-// wire builds the surfaces this package owns. The editor, the recorder and Studio are other
-// packages' and stay nil until they exist.
+// wire builds the surfaces. Studio is another worker's and stays nil until it exists.
 func (a *App) wire() {
 	a.win.cards = stack.New(cardHost{a}, a.settings.Overlay)
 	a.win.look = quicklook.New(lookHost{a})
+	a.win.editors = map[string]*editor.Editor{}
+	a.win.recorder = record.New(a)
 	a.Surfaces = Surfaces{
-		ShowCard:    a.win.cards.Push,
-		Pin:         func(img *image.RGBA, dpi float64) { a.pin(img, dpi) },
-		Imported:    a.imported,
-		OpenLibrary: a.openLibrary,
-		OpenPrefs:   a.openPrefs,
-		OpenTrim:    a.openTrimWindow,
+		ShowCard:     a.win.cards.Push,
+		OpenEditor:   a.openEditor,
+		Pin:          func(img *image.RGBA, dpi float64) { a.pin(img, dpi) },
+		Imported:     a.imported,
+		OpenLibrary:  a.openLibrary,
+		OpenPrefs:    a.openPrefs,
+		OpenRecorder: a.win.recorder.Toggle,
+		OpenTrim:     a.openTrimWindow,
 	}
 }
 
@@ -183,11 +191,7 @@ func (h cardHost) Pin(item store.Item) error {
 		return err
 	}
 	return h.a.onMain(func(done func(error)) {
-		scale := 1.0
-		if ds, err := h.a.sys.displays(); err == nil && len(ds) > 0 {
-			scale = displayAt(ds, h.a.sys.cursor()).Scale
-		}
-		h.a.pin(img, scale)
+		h.a.pin(img, h.a.cursorScale())
 		done(nil)
 	})
 }

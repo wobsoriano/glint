@@ -89,6 +89,7 @@ func New(l Launch) *App {
 // automation is what the capture flow asks of the actions.
 type automation interface {
 	CopyImage(img image.Image, done func(error))
+	Copy(item store.Item)
 	Save(item store.Item, ask bool, done func(string, error))
 	ReportSave(path string, err error)
 	CopyTextOf(img *image.RGBA)
@@ -192,7 +193,7 @@ func (a *App) Do(cmd Command) {
 	case CmdOpenLast:
 		a.openLast()
 	case CmdQuit:
-		mygo.App.Quit()
+		a.quit(mygo.App.Quit)
 	}
 }
 

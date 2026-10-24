@@ -25,8 +25,8 @@ var ErrCanceled = errors.New("canceled")
 // own, never on the main thread, and shows the error a method returns.
 type Host interface {
 	// SaveEdit keeps the edit in the capture: edit.json, the flattened image.png and the
-	// thumbnail. Copy keeps nothing; Save, Save As and Done call it first, and when it fails
-	// the editor stays open with the changes.
+	// thumbnail. Copy, Save, Save As and Done call it first; when it fails the editor stays
+	// open with the changes and goes no further.
 	SaveEdit(img *image.RGBA, doc render.EditDoc) error
 	// Export writes a copy of the flattened image for the user, named after title: into the
 	// export folder, or where a save dialog says when ask is true (Save As). It returns the
@@ -36,6 +36,8 @@ type Host interface {
 	Copy(img *image.RGBA) error
 	// Pin shows the flattened image in a window above the others.
 	Pin(img *image.RGBA, dpi float32) error
+	// SaveStyle makes style the look of new captures, in the app's settings.
+	SaveStyle(style render.Style) error
 	// Closed tells the app the editor's window closed, by Done or by the user.
 	Closed()
 }
@@ -173,18 +175,17 @@ func (e *Editor) snapshot() render.EditDoc {
 	return e.m.doc.Clone()
 }
 
-func (e *Editor) copyImage() {
-	doc := e.snapshot()
-	e.async(func() {
-		img := e.flatten(doc)
-		err := e.host.Copy(img)
-		e.update(func() {
-			if err != nil {
-				e.toast("Copy failed: " + err.Error())
-				return
-			}
-			e.toast(fmt.Sprintf("Copied %d × %d image", img.Rect.Dx(), img.Rect.Dy()))
-		})
+// copyImage saves the edit into the capture, then copies the flattened image.
+func (e *Editor) copyImage() { e.commit(thenCopy) }
+
+func (e *Editor) copy(img *image.RGBA) {
+	err := e.host.Copy(img)
+	e.update(func() {
+		if err != nil {
+			e.toast("Copy failed: " + err.Error())
+			return
+		}
+		e.toast(fmt.Sprintf("Copied %d × %d image", img.Rect.Dx(), img.Rect.Dy()))
 	})
 }
 
@@ -203,9 +204,10 @@ const (
 	thenClose afterSave = iota
 	thenExport
 	thenExportAsk
+	thenCopy
 )
 
-// commit saves the edit into the capture, then closes the window or exports a copy.
+// commit saves the edit into the capture, then closes the window, exports a copy or copies.
 func (e *Editor) commit(then afterSave) {
 	if e.saving {
 		return
@@ -228,6 +230,8 @@ func (e *Editor) commit(then afterSave) {
 			switch then {
 			case thenClose:
 				e.close()
+			case thenCopy:
+				e.async(func() { e.copy(img) })
 			default:
 				e.async(func() { e.export(img, then == thenExportAsk) })
 			}
@@ -341,13 +345,18 @@ func (e *Editor) importPresets() {
 	})
 }
 
+// saveDefaultStyle goes through the app, which owns settings.json: a write of its own would be
+// lost at the app's next save.
 func (e *Editor) saveDefaultStyle() {
-	s := settings.Load()
-	s.Style = e.m.doc.Style
-	err := s.Save()
-	if err != nil {
-		e.toast("Couldn't save the default style: " + err.Error())
-		return
-	}
-	e.toast("Saved as your default style")
+	style := e.m.doc.Style
+	e.async(func() {
+		err := e.host.SaveStyle(style)
+		e.update(func() {
+			if err != nil {
+				e.toast("Couldn't save the default style: " + err.Error())
+				return
+			}
+			e.toast("Saved as your default style")
+		})
+	})
 }
