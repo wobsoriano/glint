@@ -90,3 +90,26 @@ func TestRemoveRustOpenWithKeepsThisExecutable(t *testing.T) {
 		t.Errorf("removed %q, the command of this Glint.exe", removed)
 	}
 }
+
+func TestInstalledAtNeedsTheInstallersCommandForThisExe(t *testing.T) {
+	root := fmt.Sprintf(`Software\GlintTestInstalled-%d`, os.Getpid())
+	t.Cleanup(func() { deleteTree(root) })
+	exe := `C:\Users\me\AppData\Local\Programs\Glint\Glint.exe`
+	if installedAt(root, exe) {
+		t.Fatal("installed with no registration")
+	}
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, root+`\com.glint.app.png\shell\open\command`, registry.SET_VALUE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Close()
+	if err := k.SetStringValue("", `"`+exe+`" "%1"`); err != nil {
+		t.Fatal(err)
+	}
+	if !installedAt(root, exe) {
+		t.Error("the installer's command for this exe should count as installed")
+	}
+	if installedAt(root, `C:\dev\glint\build\Glint.exe`) {
+		t.Error("a build elsewhere is not the installed Glint")
+	}
+}

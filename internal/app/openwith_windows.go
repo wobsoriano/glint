@@ -84,11 +84,18 @@ func commandStarts(cmd, exe string) bool {
 	return ok && strings.EqualFold(path, exe)
 }
 
+// installedAt reports whether the installer registered this exe as the open command of
+// Glint's own PNG type. IsPackaged alone is true for any built Glint.exe, installed or not.
+func installedAt(classes, exe string) bool {
+	cmd, ok := defaultValue(classes + `\com.glint.app.png\shell\open\command`)
+	return ok && commandStarts(cmd, exe)
+}
+
 // forgetRustOpenWith removes the Rust build's "Open with" entries once this Glint runs
 // installed, and tells Explorer the associations changed.
 func forgetRustOpenWith() {
 	exe, err := os.Executable()
-	if err != nil {
+	if err != nil || !installedAt(`Software\Classes`, exe) {
 		return
 	}
 	if len(removeRustOpenWith(`Software\Classes`, exe)) > 0 {
