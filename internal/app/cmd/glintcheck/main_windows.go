@@ -10,6 +10,9 @@
 //	glintcheck clip [-png out.png]
 //	glintcheck library -dir <GLINT_DATA_DIR>
 //	glintcheck wins [-pid n] [-title substring]
+//	glintcheck stack -pid n
+//	glintcheck video -out f.mp4 [-w 640 -h 360 -seconds 4 -fps 30]
+//	glintcheck loopback [-seconds 3 -min 0.01]
 package main
 
 import (
@@ -39,7 +42,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"stage": stage, "shot": shot, "cmp": compare, "dim": dim, "clip": clip, "library": library, "wins": wins,
-		"menu": menu, "mark": mark,
+		"menu": menu, "mark": mark, "stack": stackRect, "video": video, "loopback": loopback,
 	}
 	run, ok := cmds[os.Args[1]]
 	if !ok {

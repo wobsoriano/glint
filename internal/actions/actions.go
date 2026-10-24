@@ -92,16 +92,34 @@ func (a *Actions) CopyImage(img image.Image, done func(error)) {
 	})
 }
 
-func (a *Actions) withPixels(item store.Item, f func(image.Image)) {
+// report hands err to done, which may be nil.
+func report(done func(error), err error) {
+	if done != nil {
+		done(err)
+	}
+}
+
+var errNotAScreenshot = errors.New("This works on screenshots; a recording has no single image to use")
+
+// withPixels runs f with the screenshot's pixels. When they cannot be read, done gets the
+// error, or with no done a toast says why.
+func (a *Actions) withPixels(item store.Item, done func(error), f func(image.Image)) {
+	fail := func(err error) {
+		if done == nil {
+			a.toast(err.Error())
+			return
+		}
+		done(err)
+	}
 	if item.Kind() != store.Screenshot {
-		a.toast("This works on screenshots; a recording has no single image to use")
+		fail(errNotAScreenshot)
 		return
 	}
 	a.background(func() func() {
 		img, err := LoadPixels(item)
 		return func() {
 			if err != nil {
-				a.toast(err.Error())
+				fail(err)
 				return
 			}
 			f(img)
@@ -132,8 +150,24 @@ func (a *Actions) withRecordingFile(item store.Item, f func(string, error)) {
 	})
 }
 
-// Copy puts a screenshot's image, or a recording's video file, on the clipboard.
+// Copy puts a screenshot's image, or a recording's video file, on the clipboard, and says how
+// it went.
 func (a *Actions) Copy(item store.Item) {
+	a.CopyItem(item, func(err error) {
+		switch {
+		case err != nil:
+			a.toast("Copy failed: " + err.Error())
+		case item.Kind() == store.Recording:
+			a.toast("Copied the video file")
+		default:
+			a.toast("Copied to clipboard")
+		}
+	})
+}
+
+// CopyItem is Copy that reports to done alone, for a surface that shows the outcome itself,
+// such as a preview card.
+func (a *Actions) CopyItem(item store.Item, done func(error)) {
 	if item.Kind() == store.Recording {
 		a.withRecordingFile(item, func(file string, err error) {
 			if err == nil {
@@ -142,23 +176,11 @@ func (a *Actions) Copy(item store.Item) {
 			if err == nil {
 				err = a.writeFiles(file)
 			}
-			if err != nil {
-				a.toast("Copy failed: " + err.Error())
-				return
-			}
-			a.toast("Copied the video file")
+			done(err)
 		})
 		return
 	}
-	a.withPixels(item, func(img image.Image) {
-		a.CopyImage(img, func(err error) {
-			if err != nil {
-				a.toast("Copy failed: " + err.Error())
-				return
-			}
-			a.toast("Copied to clipboard")
-		})
-	})
+	a.withPixels(item, done, func(img image.Image) { a.CopyImage(img, done) })
 }
 
 // CopyFiles puts the captures' files on the clipboard, for pasting into a folder or a chat.
@@ -174,13 +196,19 @@ func (a *Actions) CopyFiles(items []store.Item) {
 	a.toast(fmt.Sprintf("Copied %d file(s)", len(paths)))
 }
 
-// CopyText recognizes the text in a screenshot and copies it.
-func (a *Actions) CopyText(item store.Item) {
-	a.withPixels(item, func(img image.Image) { a.CopyTextOf(toRGBA(img)) })
+// ErrNoText is what copying the text of an image with none reports.
+var ErrNoText = errors.New("no text found")
+
+// CopyText recognizes the text in a screenshot and copies it, as CopyTextOf. done, which may
+// be nil, gets the outcome too.
+func (a *Actions) CopyText(item store.Item, done func(error)) {
+	a.withPixels(item, done, func(img image.Image) { a.copyText(toRGBA(img), done) })
 }
 
 // CopyTextOf recognizes the text in img, copies it in reading order and says what it copied.
-func (a *Actions) CopyTextOf(img *image.RGBA) {
+func (a *Actions) CopyTextOf(img *image.RGBA) { a.copyText(img, nil) }
+
+func (a *Actions) copyText(img *image.RGBA, done func(error)) {
 	a.background(func() func() {
 		lines, err := a.recognize(img)
 		return func() {
@@ -189,10 +217,12 @@ func (a *Actions) CopyTextOf(img *image.RGBA) {
 				a.toast("OCR failed: " + err.Error())
 			case strings.TrimSpace(text) == "":
 				a.toast("No text found")
+				err = ErrNoText
 			default:
 				a.writeText(text)
 				a.toast("Copied text: " + strings.ReplaceAll(firstRunes(text, 60), "\n", " "))
 			}
+			report(done, err)
 		}
 	})
 }
@@ -207,10 +237,11 @@ func firstRunes(s string, n int) string {
 	return s
 }
 
-// Compress copies a JPEG of the screenshot, at most quality 80, as a file.
-func (a *Actions) Compress(item store.Item) {
+// Compress copies a JPEG of the screenshot, at most quality 80, as a file, and says how big it
+// is. done, which may be nil, gets the outcome too.
+func (a *Actions) Compress(item store.Item, done func(error)) {
 	quality := min(a.settings().JPEGQuality, 80)
-	a.withPixels(item, func(img image.Image) {
+	a.withPixels(item, done, func(img image.Image) {
 		a.background(func() func() {
 			dir := filepath.Join(os.TempDir(), "Glint", "Compressed")
 			path, err := Export(img, dir, item.Meta.Title, settings.FormatJPEG, quality)
@@ -227,9 +258,10 @@ func (a *Actions) Compress(item store.Item) {
 				}
 				if err != nil {
 					a.toast("Compress failed: " + err.Error())
-					return
+				} else {
+					a.toast(fmt.Sprintf("Copied a %s JPEG", HumanBytes(uint64(size))))
 				}
-				a.toast(fmt.Sprintf("Copied a %s JPEG", HumanBytes(uint64(size))))
+				report(done, err)
 			}
 		})
 	})
@@ -242,7 +274,7 @@ func (a *Actions) Save(item store.Item, ask bool, done func(string, error)) {
 		a.saveVideo(item, ask, done)
 		return
 	}
-	a.withPixels(item, func(img image.Image) { a.SaveImage(item.Meta.Title, img, ask, done) })
+	a.withPixels(item, func(err error) { done("", err) }, func(img image.Image) { a.SaveImage(item.Meta.Title, img, ask, done) })
 }
 
 // SaveImage saves img, named after title, as Save does.

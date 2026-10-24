@@ -1,9 +1,7 @@
 # Shared by the scenarios. Run one inside the desktop lock:
 #   $env:GLINT_BIN = <dir with glint.exe and glintcheck.exe>; $env:GLINT_OUT = <evidence dir>
 #   go run ./tools/desklock -- powershell -NoProfile -File internal/app/cmd/glintcheck/scenarios/area.ps1
-# GLINT_DRIVE names another copy of the driver helpers than tools/drive/drive.ps1.
-$drive = if ($env:GLINT_DRIVE) { $env:GLINT_DRIVE } else { Join-Path $PSScriptRoot '..\..\..\..\..\tools\drive\drive.ps1' }
-. $drive
+. (Join-Path $PSScriptRoot '..\..\..\..\..\tools\drive\drive.ps1')
 $Bin = $env:GLINT_BIN
 $Check = Join-Path $Bin 'glintcheck.exe'
 
@@ -38,6 +36,10 @@ function Start-Stage {
     $p
 }
 
+# The stage stays on top of normal windows; minimize it to see one, such as Quick Look.
+function Hide-Stage { [Promo.In]::ShowWindow((Win 'Glint stage'), 6) | Out-Null; Start-Sleep -Milliseconds 300 }
+function Show-Stage { [Promo.In]::ShowWindow((Win 'Glint stage'), 9) | Out-Null; Start-Sleep -Milliseconds 300 }
+
 function Check {
     & $Check @args
     "  -> exit $LASTEXITCODE"
@@ -57,3 +59,75 @@ function Probe([string]$png) {
 }
 
 function Meta([string]$item) { Get-Content "$item\meta.json" | ConvertFrom-Json }
+
+# Capture-Area drags an area with Ctrl+Shift+4 and waits for the capture to land.
+function Capture-Area([int]$x1, [int]$y1, [int]$x2, [int]$y2, [string]$keys = 'Ctrl+Shift+4') {
+    Keys $keys
+    Start-Sleep -Milliseconds 500
+    Glide $x1 $y1 300
+    Start-Sleep -Milliseconds 150
+    Down
+    Start-Sleep -Milliseconds 100
+    Glide $x2 $y2 400
+    Start-Sleep -Milliseconds 200
+    Up
+    Start-Sleep -Milliseconds 1500
+}
+
+# Stack is the preview stack's window in physical pixels, or $null when no card shows.
+function Stack($p) {
+    $r = & $Check stack -pid $p.Id 2>$null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $v = "$r" -split ','
+    [pscustomobject]@{ X = [int]$v[0]; Y = [int]$v[1]; W = [int]$v[2]; H = [int]$v[3]; K = [int]$v[2] / 244 }
+}
+
+# Card is where the stack's newest card is, and its buttons for the default layout
+# (internal/ui/stack/view.go): Copy and Save pills, Dismiss, Edit, Pin and More in the corners,
+# and the rows of the More menu.
+function Card($s) {
+    $k = $s.K
+    $x = $s.X + [int](10 * $k); $y = $s.Y + [int](50 * $k); $w = [int](224 * $k); $h = [int](148 * $k)
+    $cx = $x + [int]($w / 2); $cy = $y + [int]($h / 2)
+    $c = [int](20 * $k)
+    $rows = @{}
+    $i = 0
+    foreach ($a in 'SaveAs', 'Compress', 'QuickLook', 'CopyText', 'Delete') { $rows[$a] = $y + [int]((21 + 24 * $i) * $k); $i++ }
+    [pscustomobject]@{
+        X = $x; Y = $y; W = $w; H = $h; CX = $cx; CY = $cy
+        Copy = @($cx, ($cy - [int](19 * $k))); Save = @($cx, ($cy + [int](19 * $k)))
+        Dismiss = @(($x + $c), ($y + $c)); Edit = @(($x + $w - $c), ($y + $c))
+        Pin = @(($x + $c), ($y + $h - $c)); More = @(($x + $w - $c), ($y + $h - $c))
+        Menu = $rows
+    }
+}
+
+# Press clicks a button of a card: it hovers the card first, as a user does, so the buttons show.
+function Press($card, $at) {
+    Glide $card.CX ($card.Y + 8) 250
+    Start-Sleep -Milliseconds 250
+    Click $at[0] $at[1] 200
+}
+
+function MenuRow($card, [string]$action) {
+    Press $card $card.More
+    Start-Sleep -Milliseconds 300
+    Click $card.CX $card.Menu[$action] 200
+}
+
+function WinRect([string]$title) {
+    $h = Win $title
+    if ($h -eq [IntPtr]::Zero) { return $null }
+    $r = New-Object Promo.In+RECT
+    [Promo.In]::GetWindowRect($h, [ref]$r) | Out-Null
+    [pscustomobject]@{ X = $r.L; Y = $r.T; W = $r.R - $r.L; H = $r.B - $r.T }
+}
+
+function Wait-Until([scriptblock]$cond, [int]$ms = 4000) {
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    while ($sw.ElapsedMilliseconds -lt $ms) {
+        if (& $cond) { return $true }
+        Start-Sleep -Milliseconds 100
+    }
+    $false
+}

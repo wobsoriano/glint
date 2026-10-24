@@ -1,5 +1,5 @@
 // Package quicklook is the large preview of a capture: a screenshot at the size that fits, or
-// a recording playing (silently, until Glint has audio output). Space or Esc closes it. One
+// a recording playing with its sound. Space or Esc closes it. One
 // window serves every preview; opening another capture swaps its content.
 package quicklook
 
@@ -55,7 +55,7 @@ func (v *Viewer) Open(item store.Item) {
 		}
 		win := v.win
 		if item.Kind() == store.Recording {
-			v.player = startPlayer(item.Deliverable(), func(img *image.RGBA) {
+			v.player = startPlayer(item, func(img *image.RGBA) {
 				win.Update(func() {
 					if v.win != win {
 						return
@@ -109,6 +109,20 @@ func (v *Viewer) Frames() (n, ms int64) {
 		}
 	})
 	return n, ms
+}
+
+// Audible reports whether a recording's sound is playing on the output device now, and why
+// it plays without sound when it has some.
+func (v *Viewer) Audible() (on bool, err error) {
+	mygo.RunOnMain(func() {
+		if v.player != nil {
+			on = v.player.audible.Load()
+			if e := v.player.audioErr.Load(); e != nil {
+				err = *e
+			}
+		}
+	})
+	return on, err
 }
 
 func (v *Viewer) stopPlayer() {

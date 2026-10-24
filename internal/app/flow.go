@@ -366,16 +366,29 @@ var errNoCaptures = fmt.Errorf("no captures")
 
 // Edit opens a screenshot in the editor and a recording in Studio.
 func (a *App) Edit(item store.Item) {
-	if item.Kind() == store.Recording {
-		if a.surface("Studio", a.Surfaces.OpenStudio != nil) {
-			a.Surfaces.OpenStudio(item.Dir)
-		}
-		return
-	}
-	if a.surface("The editor", a.Surfaces.OpenEditor != nil) {
-		a.Surfaces.OpenEditor(item)
+	if err := a.edit(item); err != nil {
+		log.Printf("app: %v", err)
+		a.toast(err.Error())
 	}
 }
+
+// edit is Edit for a surface that shows the error itself.
+func (a *App) edit(item store.Item) error {
+	if item.Kind() == store.Recording {
+		if a.Surfaces.OpenStudio == nil {
+			return errNotBuilt("Studio")
+		}
+		a.Surfaces.OpenStudio(item.Dir)
+		return nil
+	}
+	if a.Surfaces.OpenEditor == nil {
+		return errNotBuilt("The editor")
+	}
+	a.Surfaces.OpenEditor(item)
+	return nil
+}
+
+func errNotBuilt(name string) error { return fmt.Errorf("%s is not available yet", name) }
 
 // openImages opens images in the editor: a capture of the Library as it is, any other image
 // as a copy imported into the Library.
