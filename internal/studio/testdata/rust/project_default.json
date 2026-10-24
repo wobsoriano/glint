@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "clips": [],
+  "zooms": [],
+  "design": {
+    "background": {
+      "Gradient": {
+        "stops": [
+          1667691007,
+          2824206335,
+          3964180991
+        ],
+        "angle": 135.0
+      }
+    },
+    "padding": 0.06,
+    "corner_radius": 0.02,
+    "shadow": 0.45,
+    "cursor": {
+      "visible": true,
+      "size": 1.0,
+      "smoothing": 0.5
+    },
+    "camera": {
+      "visible": true,
+      "center": [
+        0.85,
+        0.82
+      ],
+      "size": 0.26,
+      "roundness": 0.5
+    }
+  },
+  "aspect": "original",
+  "aspect_mode": "fit",
+  "crop": {
+    "x": 0.0,
+    "y": 0.0,
+    "w": 1.0,
+    "h": 1.0
+  },
+  "click_highlights": true,
+  "keystrokes": {
+    "enabled": true,
+    "position": "bottom_center"
+  },
+  "captions": {
+    "enabled": false,
+    "position": 0.92,
+    "size": 1.0,
+    "karaoke": false
+  },
+  "audio": {
+    "mic": {
+      "enabled": true,
+      "volume": 1.0
+    },
+    "system": {
+      "enabled": true,
+      "volume": 1.0
+    }
+  },
+  "export": {
+    "fps": "60",
+    "motion_blur": true,
+    "resolution": "p1080",
+    "quality": "high",
+    "codec": "h264",
+    "format": "mp4"
+  }
+}

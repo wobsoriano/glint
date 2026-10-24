@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "language": "en",
+  "words": [
+    {
+      "text": "Hello,",
+      "start_ms": 120,
+      "end_ms": 480,
+      "confidence": 0.9
+    },
+    {
+      "text": "world.",
+      "start_ms": 520,
+      "end_ms": 910,
+      "confidence": 0.73
+    }
+  ]
+}
