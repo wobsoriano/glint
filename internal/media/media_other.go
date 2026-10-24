@@ -36,6 +36,7 @@ func OpenFrameReader(path string) (*FrameReader, error) { return nil, unsupporte
 
 func (fr *FrameReader) Size() (width, height int)      { return 0, 0 }
 func (fr *FrameReader) FPS() float64                   { return 0 }
+func (fr *FrameReader) Hardware() bool                 { return false }
 func (fr *FrameReader) DurationMS() int64              { return 0 }
 func (fr *FrameReader) SeekMS(ms int64) error          { return unsupported("video decoding") }
 func (fr *FrameReader) NextFrame() (*Nv12Frame, error) { return nil, unsupported("video decoding") }

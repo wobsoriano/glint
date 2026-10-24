@@ -29,6 +29,20 @@ func TestWriterSoftwareEncoder(t *testing.T) {
 	checkEncoded(t, f, false)
 }
 
+// AMD's H.264 encoder doubles the bitrate at 60 fps unless the writer corrects its budget.
+func TestWriterHoldsBitrateAt60FPS(t *testing.T) {
+	needFFmpeg(t)
+	f := writeFixture(t, "1080p60.mp4", 1920, 1080, 60, 120, false, false)
+	p := ffprobe(t, f.path)
+	v := p.Streams[p.stream("video")]
+	target := float64(RecordingBitrate(1920, 1080, 60))
+	ratio := seconds(v.BitRate) / target
+	t.Logf("hardware %v, r=%s, %s bps for a %.0f bps target (%.2fx)", f.summary.Hardware, v.RFrameRate, v.BitRate, target, ratio)
+	if v.RFrameRate != "60/1" || ratio < 0.7 || ratio > 1.3 {
+		t.Errorf("60 fps file runs at %s with %.2fx its bitrate", v.RFrameRate, ratio)
+	}
+}
+
 func checkEncoded(t *testing.T, f fixture, audio bool) {
 	t.Helper()
 	if f.summary.Frames != int64(f.frames) || f.summary.DurationMS != int64(f.frames)*1000/int64(f.fps) || f.summary.Bytes == 0 {

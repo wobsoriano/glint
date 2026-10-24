@@ -21,7 +21,6 @@ const (
 	S_FALSE                  = 1
 	RPC_E_CHANGED_MODE       = HRESULT(0x80010106)
 	MF_E_INVALIDSTREAMNUMBER = HRESULT(0xC00D36B3)
-	MF_E_NO_MORE_TYPES       = HRESULT(0xC00D36B9)
 )
 
 func (h HRESULT) Error() string {
@@ -75,17 +74,10 @@ func (u Unknown) fn(i int) uintptr {
 	return *(*uintptr)(unsafe.Add(vtbl, i*int(unsafe.Sizeof(uintptr(0)))))
 }
 
-// Raw is the interface pointer, for passing to another COM call.
-func (u Unknown) Raw() uintptr { return uintptr(u.p) }
-
 func (u Unknown) Release() {
 	if u.p != nil {
 		syscall.SyscallN(u.fn(2), u.this())
 	}
-}
-
-func (u Unknown) AddRef() {
-	syscall.SyscallN(u.fn(1), u.this())
 }
 
 // QueryInterface returns the object's iid interface, which the caller releases.
@@ -151,7 +143,6 @@ func Enter() (leave func(), err error) {
 const (
 	VT_UI4 = 19
 	VT_I8  = 20
-	VT_UI8 = 21
 )
 
 // PropVariant is PROPVARIANT and VARIANT for the scalar types this package uses: a type tag

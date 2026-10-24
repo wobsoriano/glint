@@ -22,11 +22,17 @@ type FrameReader struct {
 	// starts after them.
 	planeRows int
 	skipUntil int64
+
+	d3d     *mf.Device
+	staging mf.Texture2D
+	// gpuFrames counts frames that arrived as GPU textures.
+	gpuFrames int
 }
 
 const noSkip = -1
 
-// OpenFrameReader opens path's first video track.
+// OpenFrameReader opens path's first video track. With a Direct3D 11 device the decoder
+// runs on the GPU when the codec has a hardware decoder; without one it runs in software.
 func OpenFrameReader(path string) (*FrameReader, error) {
 	if err := mf.Startup(); err != nil {
 		return nil, err
@@ -36,26 +42,48 @@ func OpenFrameReader(path string) (*FrameReader, error) {
 		return nil, err
 	}
 	defer leave()
-	attrs, err := mf.CreateAttributes(1)
+	if d3d, err := mf.CreateDevice(); err == nil {
+		if fr, err := openFrameReader(path, d3d); err == nil {
+			return fr, nil
+		}
+		d3d.Release()
+	}
+	return openFrameReader(path, nil)
+}
+
+func openFrameReader(path string, d3d *mf.Device) (*FrameReader, error) {
+	attrs, err := mf.CreateAttributes(2)
 	if err != nil {
 		return nil, err
 	}
 	defer attrs.Release()
-	// Lets the reader convert any decoder output to NV12, not just decoders that emit it.
-	if err := attrs.SetUINT32(&mf.MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1); err != nil {
+	if d3d != nil {
+		err = attrs.SetUnknown(&mf.MF_SOURCE_READER_D3D_MANAGER, d3d.Manager)
+		if err == nil {
+			err = attrs.SetUINT32(&mf.MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)
+		}
+	} else {
+		// Lets the reader convert any decoder output to NV12, not just decoders that emit it.
+		err = attrs.SetUINT32(&mf.MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1)
+	}
+	if err != nil {
 		return nil, err
 	}
 	r, err := mf.CreateSourceReader(path, attrs)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	fr := &FrameReader{r: r, skipUntil: noSkip}
+	fr := &FrameReader{r: r, skipUntil: noSkip, d3d: d3d}
 	if err := fr.init(); err != nil {
 		r.Release()
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	return fr, nil
 }
+
+// Hardware reports whether the reader has a GPU device, so Media Foundation decodes on the
+// GPU when the codec has a hardware decoder.
+func (fr *FrameReader) Hardware() bool { return fr.d3d != nil }
 
 func (fr *FrameReader) init() error {
 	r := fr.r
@@ -204,45 +232,103 @@ func (fr *FrameReader) copyOut(t int64, s mf.Sample) (*Nv12Frame, error) {
 	chromaRows := (h + 1) / 2
 	f := &Nv12Frame{TMS: t, Width: w, Height: h, Stride: stride, matrix: fr.matrix}
 	f.Data = takeBuffer(stride * (h + chromaRows))
-
-	buf, err := s.ContiguousBuffer()
+	var err error
+	if fr.d3d != nil {
+		err = fr.copyFromTexture(s, f)
+	} else {
+		err = fr.copyFromMemory(s, f)
+	}
 	if err != nil {
+		f.Release()
 		return nil, err
 	}
+	return f, nil
+}
+
+func (fr *FrameReader) copyFromTexture(s mf.Sample, f *Nv12Frame) error {
+	buf, err := s.BufferByIndex(0)
+	if err != nil {
+		return err
+	}
 	defer buf.Release()
-	var base unsafe.Pointer
-	var pitch, avail int
-	b2d, is2D := buf.As2D()
-	if is2D {
+	dxgi, ok := buf.AsDXGI()
+	if !ok {
+		// A codec without a hardware decoder decodes in software even with a device.
+		return fr.copyFromMemory(s, f)
+	}
+	defer dxgi.Release()
+	tex, err := dxgi.Texture()
+	if err != nil {
+		return err
+	}
+	defer tex.Release()
+	sub, err := dxgi.SubresourceIndex()
+	if err != nil {
+		return err
+	}
+	desc := tex.Desc()
+	if !fr.staging.IsNil() {
+		if d := fr.staging.Desc(); d.Width != desc.Width || d.Height != desc.Height {
+			fr.staging.Release()
+			fr.staging = mf.Texture2D{}
+		}
+	}
+	if fr.staging.IsNil() {
+		if fr.staging, err = fr.d3d.StagingTexture(desc); err != nil {
+			return err
+		}
+	}
+	fr.d3d.CopySubresource(fr.staging, tex, sub)
+	data, pitch, err := fr.d3d.Map(fr.staging)
+	if err != nil {
+		return err
+	}
+	defer fr.d3d.Unmap(fr.staging)
+	rows := int(desc.Height)
+	fr.gpuFrames++
+	return copyPlanes(unsafe.Slice((*byte)(data), int(pitch)*rows*3/2), int(pitch), rows, f)
+}
+
+func (fr *FrameReader) copyFromMemory(s mf.Sample, f *Nv12Frame) error {
+	buf, err := s.ContiguousBuffer()
+	if err != nil {
+		return err
+	}
+	defer buf.Release()
+	if b2d, ok := buf.As2D(); ok {
 		defer b2d.Release()
-		scan0, p, err := b2d.Lock2D()
+		scan0, pitch, err := b2d.Lock2D()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer b2d.Unlock2D()
-		base, pitch = scan0, int(p)
-		avail = pitch * fr.planeRows * 3 / 2
-	} else {
-		data, _, cur, err := buf.Lock()
-		if err != nil {
-			return nil, err
-		}
-		defer buf.Unlock()
-		base, avail = data, int(cur)
-		pitch = int(cur) * 2 / 3 / fr.planeRows
+		n := int(pitch) * fr.planeRows * 3 / 2
+		return copyPlanes(unsafe.Slice((*byte)(scan0), n), int(pitch), fr.planeRows, f)
 	}
-	if pitch < stride || avail < pitch*(fr.planeRows+chromaRows) {
-		return nil, fmt.Errorf("decoded frame has %d bytes at pitch %d, too few for %dx%d", avail, pitch, w, h)
+	data, _, cur, err := buf.Lock()
+	if err != nil {
+		return err
 	}
-	src := unsafe.Slice((*byte)(base), avail)
-	for y := 0; y < h; y++ {
-		copy(f.Data[y*stride:(y+1)*stride], src[y*pitch:])
+	defer buf.Unlock()
+	pitch := int(cur) * 2 / 3 / fr.planeRows
+	return copyPlanes(unsafe.Slice((*byte)(data), cur), pitch, fr.planeRows, f)
+}
+
+// copyPlanes copies the visible part of a decoder's NV12 buffer, whose planes are pitch
+// bytes wide and whose luma plane has rows rows, padding included.
+func copyPlanes(src []byte, pitch, rows int, f *Nv12Frame) error {
+	chromaRows := (f.Height + 1) / 2
+	if pitch < f.Stride || rows < f.Height || len(src) < pitch*(rows+chromaRows) {
+		return fmt.Errorf("decoded frame has %d bytes at pitch %d and %d rows, too few for %dx%d", len(src), pitch, rows, f.Width, f.Height)
 	}
-	chroma := src[fr.planeRows*pitch:]
+	for y := 0; y < f.Height; y++ {
+		copy(f.Data[y*f.Stride:(y+1)*f.Stride], src[y*pitch:])
+	}
+	chroma := src[rows*pitch:]
 	for y := 0; y < chromaRows; y++ {
-		copy(f.Data[(h+y)*stride:(h+y+1)*stride], chroma[y*pitch:])
+		copy(f.Data[(f.Height+y)*f.Stride:(f.Height+y+1)*f.Stride], chroma[y*pitch:])
 	}
-	return f, nil
+	return nil
 }
 
 func (fr *FrameReader) Close() {
@@ -251,9 +337,13 @@ func (fr *FrameReader) Close() {
 	}
 	if leave, err := mf.Enter(); err == nil {
 		fr.r.Release()
+		fr.staging.Release()
+		if fr.d3d != nil {
+			fr.d3d.Release()
+		}
 		leave()
 	}
-	fr.r = mf.SourceReader{}
+	fr.r, fr.staging, fr.d3d = mf.SourceReader{}, mf.Texture2D{}, nil
 }
 
 // AudioReader decodes the first audio track of an MP4 to interleaved float PCM, one decoder

@@ -52,12 +52,6 @@ func (a Attributes) GetUINT64(key *GUID) (uint64, error) {
 	return v, check("IMFAttributes::GetUINT64", r)
 }
 
-func (a Attributes) GetGUID(key *GUID) (GUID, error) {
-	var v GUID
-	r, _, _ := syscall.SyscallN(a.fn(10), a.this(), uintptr(unsafe.Pointer(key)), uintptr(unsafe.Pointer(&v)))
-	return v, check("IMFAttributes::GetGUID", r)
-}
-
 // GetString is the attribute's string value.
 func (a Attributes) GetString(key *GUID) (string, error) {
 	var p *uint16
@@ -140,12 +134,6 @@ type Sample struct{ Attributes }
 func CreateSample() (Sample, error) {
 	u, err := create("MFCreateSample", procMFCreateSample)
 	return Sample{Attributes{u}}, err
-}
-
-func (s Sample) SampleTime() (int64, error) {
-	var t int64
-	r, _, _ := syscall.SyscallN(s.fn(35), s.this(), uintptr(unsafe.Pointer(&t)))
-	return t, check("IMFSample::GetSampleTime", r)
 }
 
 func (s Sample) SetSampleTime(t int64) error {
