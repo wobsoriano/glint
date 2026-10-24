@@ -19,22 +19,6 @@ func (m *model) croppedBase() *image.RGBA {
 	return m.base.SubImage(image.Rect(int(c.X), int(c.Y), int(c.Right()), int(c.Bottom()))).(*image.RGBA)
 }
 
-func redactLines(lines []ocr.Line) []redact.Line {
-	out := make([]redact.Line, len(lines))
-	for i, l := range lines {
-		words := make([]redact.Word, len(l.Words))
-		for j, w := range l.Words {
-			words[j] = redact.Word{Text: w.Text, Rect: redact.Rect(w.Bounds)}
-		}
-		out[i] = redact.Line{Words: words, Rect: redact.Rect(l.Bounds)}
-	}
-	return out
-}
-
-var redactKinds = map[settings.RedactStyle]render.RedactStyle{
-	settings.RedactBlur: render.RedactBlur, settings.RedactPixelate: render.RedactPixelate, settings.RedactSolid: render.RedactSolid,
-}
-
 // addFindings hides what OCR found that no redaction covers yet, as one undo step, and says
 // what it hid.
 func (m *model) addFindings(findings []redact.Finding, kind render.RedactStyle) string {
@@ -97,13 +81,13 @@ func (e *Editor) smartRedact() {
 	e.toast("Scanning for sensitive info…")
 	img := e.m.croppedBase()
 	s := settings.Load()
-	kind := redactKinds[s.RedactStyle]
+	kind := s.RedactStyle
 	pad := 2 * e.m.doc.DPI
 	e.async(func() {
 		lines, err := ocr.Recognize(img)
 		var findings []redact.Finding
 		if err == nil {
-			findings = redact.Find(redactLines(lines), s.RedactRules, pad)
+			findings = redact.Find(lines, s.RedactRules, pad)
 		}
 		e.update(func() {
 			e.busy = false

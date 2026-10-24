@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"encoding/json"
 	"image"
 	"image/png"
 	"os"
@@ -65,10 +64,7 @@ func TestSaveAsDefaultWritesTheStyleToSettings(t *testing.T) {
 	if err := tt.Click("Save as default"); err != nil {
 		t.Fatal(err)
 	}
-	var st render.Style
-	if err := json.Unmarshal(settings.Load().Style, &st); err != nil {
-		t.Fatal(err)
-	}
+	st := settings.Load().Style
 	if _, ok := st.Background.(render.SolidBackground); !ok || st.Padding != e.m.doc.Style.Padding {
 		t.Fatalf("settings hold %+v", st)
 	}

@@ -4,7 +4,6 @@
 package editor
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -343,12 +342,9 @@ func (e *Editor) importPresets() {
 }
 
 func (e *Editor) saveDefaultStyle() {
-	raw, err := json.Marshal(e.m.doc.Style)
-	if err == nil {
-		s := settings.Load()
-		s.Style = raw
-		err = s.Save()
-	}
+	s := settings.Load()
+	s.Style = e.m.doc.Style
+	err := s.Save()
 	if err != nil {
 		e.toast("Couldn't save the default style: " + err.Error())
 		return

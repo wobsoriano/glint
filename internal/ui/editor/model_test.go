@@ -236,9 +236,9 @@ func TestFindingsBecomeOneUndoStepOfSelectedRedactions(t *testing.T) {
 	m := testModel(800, 600)
 	m.doc.DPI = 1.5
 	found := []redact.Finding{
-		{Kind: redact.Email, Rect: redact.Rect{X: 10, Y: 10, W: 200, H: 20}},
-		{Kind: redact.Email, Rect: redact.Rect{X: 10, Y: 40, W: 180, H: 20}},
-		{Kind: redact.Card, Rect: redact.Rect{X: 10, Y: 70, W: 220, H: 20}},
+		{Kind: redact.Email, Rect: render.R{X: 10, Y: 10, W: 200, H: 20}},
+		{Kind: redact.Email, Rect: render.R{X: 10, Y: 40, W: 180, H: 20}},
+		{Kind: redact.Card, Rect: render.R{X: 10, Y: 70, W: 220, H: 20}},
 	}
 	if msg := m.addFindings(found, render.RedactPixelate); msg != "Hid 2 emails, 1 card number; strength stays editable" {
 		t.Errorf("summary %q", msg)
