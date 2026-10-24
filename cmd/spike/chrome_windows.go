@@ -110,7 +110,7 @@ func driveChrome(a *chrome, win *mygo.Window) {
 	for _, src := range []mygo.ThemeSource{mygo.ThemeDark, mygo.ThemeLight, mygo.ThemeSystem} {
 		mygo.RunOnMain(func() { mygo.Theme.SetSource(src) })
 		time.Sleep(600 * time.Millisecond)
-		wr := frameRect(hwnd)
+		wr := clientRect(hwnd)
 		shot := captureScreen(wr)
 		savePNG(out("chrome-"+string(src)+".png"), shot)
 		cap := shot.RGBAAt(int(wr.w())-20, 15)

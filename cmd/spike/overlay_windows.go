@@ -489,6 +489,7 @@ func runForeground() {
 	mygo.App.WhenReady(func() {
 		var w *mygo.Window
 		w = mygo.NewWindow(mygo.WindowOptions{Title: "spike foreground", Width: 360, Height: 200, X: 40, Y: 40, Content: ui.View(func(c *ui.Context) {
+			c.Root().Background(ui.RGB(0, 160, 0))
 			ui.Box(c).Fill().Focusable().AutoFocus().HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind == ui.InputKeyDown {
 					logf("foreground app got key %v", ev.Key)

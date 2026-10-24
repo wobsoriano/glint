@@ -12,7 +12,8 @@ $runs = @(
     @('chrome'),
     @('video', '-fps', '30'),
     @('video', '-fps', '60'),
-    @('toast')
+    @('toast'),
+    @('outline')
 )
 $failed = 0
 foreach ($run in $runs) {

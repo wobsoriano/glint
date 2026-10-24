@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"image"
 	"os"
@@ -122,29 +123,45 @@ func (s *stack) size() (int, int) {
 }
 
 // slideOut moves the window off the left edge of the screen over d, from a goroutine.
+// slideOut moves the window off the left edge of the screen over d, in physical pixels.
 func (s *stack) slideOut(d time.Duration) (steps int, last int) {
-	x0, y := s.win.Position()
-	w, _ := s.win.Size()
+	r := windowRect(s.hwnd)
+	x0, end := int(r.Left), -int(r.w())-20
 	t0 := time.Now()
+	move := func(x int) {
+		pSetWindowPos.Call(s.hwnd, 0, uintptr(x), uintptr(r.Top), 0, 0, 0x0001|swpNoZOrder|swpNoActivate)
+	}
 	for {
 		t := float64(time.Since(t0)) / float64(d)
 		if t >= 1 {
 			break
 		}
 		ease := 1 - (1-t)*(1-t)*(1-t)
-		s.win.SetPosition(x0+int(float64(-w-20-x0)*ease), y)
+		move(x0 + int(float64(end-x0)*ease))
 		steps++
 		time.Sleep(7 * time.Millisecond)
 	}
-	s.win.SetPosition(-w-20, y)
-	last, _ = s.win.Position()
-	return steps, last
+	move(end)
+	return steps, int(windowRect(s.hwnd).Left)
 }
 
-func newStack(cards []*card, noActivate bool) *stack {
+// newStack makes the card window. -variant flyout (the default) is a flyout of a hidden owner:
+// no redirection bitmap, so the space around the cards shows what is behind, and
+// WS_EX_NOACTIVATE. window is a Frameless Transparent window, whose transparent parts are black,
+// and window-noactivate the same with WS_EX_NOACTIVATE added through NativeHandle.
+func newStack(cards []*card) *stack {
 	s := &stack{cards: cards}
 	w, h := s.size()
 	work := mygo.Screen.PrimaryDisplay().WorkArea
+	if cmp.Or(*variant, "flyout") == "flyout" {
+		owner := mygo.NewWindow(mygo.WindowOptions{Title: "Glint owner", Width: 1, Height: 1, Frameless: true, SkipTaskbar: true, Hidden: true})
+		s.win = mygo.NewFlyout(mygo.FlyoutOptions{Parent: owner, Width: w, Height: h, Hidden: true, Content: ui.View(s.view)})
+		s.hwnd = s.win.NativeHandle()
+		x, y := work.X+cardEdge-10, work.Y+work.Height-h-cardEdge+10
+		placePhysical(s.hwnd, rect{int32(x), int32(y), int32(x + w), int32(y + h)})
+		return s
+	}
+	noActivate := *variant == "window-noactivate"
 	s.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Glint cards",
 		X:             work.X + cardEdge - 10,
@@ -184,7 +201,7 @@ func runCards() {
 			cards = append(cards, &card{id: i, path: path, thumb: ui.NewBitmap(img)})
 		}
 		if !*auto {
-			s := newStack(cards, false)
+			s := newStack(cards)
 			s.win.ShowInactive()
 			return
 		}
@@ -209,11 +226,16 @@ func driveCards(cards []*card, dir string) {
 	check(&failures, other != 0, "another app has the keyboard")
 
 	var s *stack
-	mygo.RunOnMain(func() { s = newStack(cards, false); s.win.ShowInactive() })
+	pSetWindowPos.Call(other, 0, 0, 600, 600, 480, swpNoZOrder)
+	time.Sleep(500 * time.Millisecond)
+	behind := captureScreen(rect{4, 704, 6, 706}).RGBAAt(0, 0)
+	mygo.RunOnMain(func() { s = newStack(cards); s.win.ShowInactive() })
 	time.Sleep(400 * time.Millisecond)
 	check(&failures, foreground() == other, "ShowInactive leaves the other app foreground (%q)", windowText(foreground()))
 	wr := windowRect(s.hwnd)
 	logf("stack window %v exstyle %#x corner pref %d", wr, exStyle(s.hwnd), cornerPreference(s.hwnd))
+	gap := captureScreen(rect{wr.Left + 2, wr.Top + 2, wr.Left + 4, wr.Top + 4}).RGBAAt(0, 0)
+	check(&failures, gap == behind, "the space around the cards shows the app behind (%v; before the stack showed %v)", gap, behind)
 	first := image.Rect(int(wr.Left)+10, int(wr.Top)+10, int(wr.Left)+10+cardW, int(wr.Top)+10+cardH)
 	moveTo(int32(first.Max.X+150), int32(first.Min.Y-100))
 	time.Sleep(200 * time.Millisecond)
@@ -231,21 +253,8 @@ func driveCards(cards []*card, dir string) {
 	click(int32(first.Min.X+cardW/2), int32(first.Min.Y+cardH/2-19))
 	got := waitString(clicks, time.Second)
 	check(&failures, got == "Copy", "the Copy pill takes a click (%q)", got)
-	logf("after clicking the card, foreground is %q (stack %v)", windowText(foreground()), foreground() == s.hwnd)
-
-	mygo.RunOnMain(func() { s.win.Destroy() })
-	pSetForegroundWindow.Call(other)
-	time.Sleep(200 * time.Millisecond)
-	mygo.RunOnMain(func() { s = newStack(cards, true); s.win.ShowInactive() })
-	mygo.RunOnMain(func() { s.onClick = func(_ *card, what string) { clicks <- what } })
-	time.Sleep(400 * time.Millisecond)
-	wr = windowRect(s.hwnd)
-	first = image.Rect(int(wr.Left)+10, int(wr.Top)+10, int(wr.Left)+10+cardW, int(wr.Top)+10+cardH)
-	moveTo(int32(first.Min.X+cardW/2), int32(first.Min.Y+20))
-	time.Sleep(300 * time.Millisecond)
-	click(int32(first.Min.X+cardW/2), int32(first.Min.Y+cardH/2-19))
-	got = waitString(clicks, time.Second)
-	check(&failures, got == "Copy" && foreground() == other, "with WS_EX_NOACTIVATE the click lands (%q) and the other app stays foreground (%q)", got, windowText(foreground()))
+	activated := foreground() == s.hwnd
+	check(&failures, activated == (*variant == "window"), "clicking the card activates it only as a plain window (foreground %q)", windowText(foreground()))
 
 	dest := filepath.Join(dir, fmt.Sprintf("glint-drop-%d", os.Getpid()))
 	os.MkdirAll(dest, 0o755)

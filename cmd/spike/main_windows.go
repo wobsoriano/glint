@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	mode   = flag.String("mode", "overlay", "overlay, cards, protect, tray, editor, chrome, video, toast, foreground")
+	mode   = flag.String("mode", "overlay", "overlay, cards, protect, tray, editor, chrome, video, toast, outline, foreground")
 	auto   = flag.Bool("auto", false, "drive the prototype, measure, and quit")
 	outDir = flag.String("out", "cmd/spike/evidence", "where screenshots go")
 	start  = time.Now()
@@ -63,6 +63,7 @@ func main() {
 		"video":      runVideo,
 		"toast":      runToast,
 		"foreground": runForeground,
+		"outline":    runOutline,
 	}
 	run, ok := modes[*mode]
 	if !ok {

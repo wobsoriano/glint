@@ -13,18 +13,22 @@ import (
 // toast is Glint's transient message: a pill near the bottom centre of the work area that shows
 // without taking the keyboard and fades out, here by animating the window's opacity.
 type toast struct {
-	win  *mygo.Window
-	hwnd uintptr
-	msg  string
+	win   *mygo.Window
+	owner *mygo.Window
+	hwnd  uintptr
+	msg   string
 }
 
 func showToast(msg string) *toast {
 	t := &toast{msg: msg}
 	const w, h = 320, 50
 	work := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
-	t.win = mygo.NewWindow(mygo.WindowOptions{
-		Title: "Glint toast", Width: w, Height: h, X: work.X + (work.Width-w)/2, Y: work.Y + work.Height - h - 24,
-		Frameless: true, Transparent: true, AlwaysOnTop: true, SkipTaskbar: true, Hidden: true, DisableResize: true, DisableShadow: true,
+	// A flyout of a hidden owner: without a redirection bitmap the corners around the pill show
+	// what is behind, where a Transparent window shows black.
+	t.owner = mygo.NewWindow(mygo.WindowOptions{Title: "Glint owner", Width: 1, Height: 1, Frameless: true, SkipTaskbar: true, Hidden: true})
+	x, y := work.X+(work.Width-w)/2, work.Y+work.Height-h-24
+	t.win = mygo.NewFlyout(mygo.FlyoutOptions{
+		Parent: t.owner, Width: w, Height: h, Hidden: true,
 		Content: ui.View(func(c *ui.Context) {
 			p := theme.Apply(c)
 			c.Root().Background(ui.Transparent)
@@ -36,6 +40,7 @@ func showToast(msg string) *toast {
 		}),
 	})
 	t.hwnd = t.win.NativeHandle()
+	placePhysical(t.hwnd, rect{int32(x), int32(y), int32(x + w), int32(y + h)})
 	t.win.ShowInactive()
 	return t
 }
@@ -49,6 +54,7 @@ func (t *toast) fade(d time.Duration) int {
 		time.Sleep(8 * time.Millisecond)
 	}
 	t.win.Destroy()
+	t.owner.Destroy()
 	return steps
 }
 
@@ -82,6 +88,7 @@ func runToast() {
 			time.Sleep(100 * time.Millisecond)
 			after := captureScreen(r)
 			c := full.RGBAAt(int(r.w())/2, int(r.h())/2)
+			check(&failures, full.RGBAAt(1, 1) == after.RGBAAt(1, 1), "the corner outside the pill shows what is behind (%v, behind %v)", full.RGBAAt(1, 1), after.RGBAAt(1, 1))
 			m := mid.RGBAAt(int(r.w())/2, int(r.h())/2)
 			a := after.RGBAAt(int(r.w())/2, int(r.h())/2)
 			logf("toast centre pixel: shown %v, mid-fade %v, gone %v; %d opacity steps in 300 ms", c, m, a, steps)
