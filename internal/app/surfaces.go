@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"image"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -125,12 +127,36 @@ func (a *App) Copy(items []store.Item) {
 
 func (a *App) Export(items []store.Item, dir string) { a.Actions.ExportTo(items, dir) }
 
-// Reveal shows the first of the items in Explorer or Finder: MyGo selects one item a call,
-// and a window for each of many would bury the desktop.
+// Reveal shows the items in Explorer or Finder, all of them selected.
 func (a *App) Reveal(items []store.Item) {
-	if len(items) > 0 {
-		mygo.Shell.ShowItemInFolder(items[0].Dir)
+	if len(items) == 0 {
+		return
 	}
+	dirs := make([]string, len(items))
+	for i, it := range items {
+		dirs[i] = it.Dir
+	}
+	reveal(dirs)
+}
+
+type folder struct {
+	dir   string
+	paths []string
+}
+
+// byFolder groups paths by their parent folder, in the order the folders first appear.
+func byFolder(paths []string) []folder {
+	var out []folder
+	for _, p := range paths {
+		dir := filepath.Dir(p)
+		i := slices.IndexFunc(out, func(f folder) bool { return f.dir == dir })
+		if i < 0 {
+			out = append(out, folder{dir: dir})
+			i = len(out) - 1
+		}
+		out[i].paths = append(out[i].paths, p)
+	}
+	return out
 }
 
 func (a *App) Trash(items []store.Item) error {
