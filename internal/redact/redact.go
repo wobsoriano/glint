@@ -7,43 +7,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/wobsoriano/glint/internal/ocr"
+	"github.com/wobsoriano/glint/internal/render"
 	"github.com/wobsoriano/glint/internal/settings"
 )
-
-// Rect is in image pixels.
-type Rect struct{ X, Y, W, H float32 }
-
-func (r Rect) Right() float32  { return r.X + r.W }
-func (r Rect) Bottom() float32 { return r.Y + r.H }
-func (r Rect) Area() float32   { return r.W * r.H }
-
-func (r Rect) Inflate(d float32) Rect { return Rect{r.X - d, r.Y - d, r.W + 2*d, r.H + 2*d} }
-
-func (r Rect) Union(o Rect) Rect {
-	x, y := min(r.X, o.X), min(r.Y, o.Y)
-	return Rect{x, y, max(r.Right(), o.Right()) - x, max(r.Bottom(), o.Bottom()) - y}
-}
-
-// Intersect returns the overlap, false when the rectangles do not overlap.
-func (r Rect) Intersect(o Rect) (Rect, bool) {
-	x, y := max(r.X, o.X), max(r.Y, o.Y)
-	right, bottom := min(r.Right(), o.Right()), min(r.Bottom(), o.Bottom())
-	if right > x && bottom > y {
-		return Rect{x, y, right - x, bottom - y}, true
-	}
-	return Rect{}, false
-}
-
-// Word and Line are recognized text in reading order, as the OCR engine reports it.
-type Word struct {
-	Text string
-	Rect Rect
-}
-
-type Line struct {
-	Words []Word
-	Rect  Rect
-}
 
 type Kind int
 
@@ -72,9 +39,10 @@ var kindInfo = [...]struct {
 
 func (k Kind) Label() string { return kindInfo[k].label }
 
+// Finding is an area to cover, in pixels of the recognized image.
 type Finding struct {
 	Kind Kind
-	Rect Rect
+	Rect render.R
 }
 
 // rule matches one kind. group picks the part of the match to cover, and validate, when set,
@@ -163,7 +131,7 @@ func highEntropy(s string) bool {
 
 // Find returns the areas to redact for the enabled rules, each grown by pad. A hit that mostly
 // overlaps an earlier one widens it instead of stacking a second rectangle.
-func Find(lines []Line, enabled settings.RedactRules, pad float32) []Finding {
+func Find(lines []ocr.Line, enabled settings.RedactRules, pad float32) []Finding {
 	var out []Finding
 	for _, line := range lines {
 		var text strings.Builder
@@ -178,9 +146,9 @@ func Find(lines []Line, enabled settings.RedactRules, pad float32) []Finding {
 		}
 		s := text.String()
 		if enabled.Secrets && danglingLabel.MatchString(s) && len(line.Words) > 0 {
-			last := line.Words[len(line.Words)-1]
-			h := line.Rect.H
-			out = append(out, Finding{Secret, Rect{last.Rect.Right() + h*0.2, line.Rect.Y, h * 24, h}.Inflate(pad)})
+			last := render.R(line.Words[len(line.Words)-1].Bounds)
+			h := line.Bounds.H
+			out = append(out, Finding{Secret, render.R{X: last.Right() + h*0.2, Y: line.Bounds.Y, W: h * 24, H: h}.Inflate(pad)})
 		}
 		for _, r := range rules {
 			if !kindInfo[r.kind].enabled(enabled) {
@@ -191,11 +159,11 @@ func Find(lines []Line, enabled settings.RedactRules, pad float32) []Finding {
 				if start < 0 || (r.validate != nil && !r.validate(s[start:end])) {
 					continue
 				}
-				var rect Rect
+				var rect render.R
 				hit := false
 				for i, sp := range spans {
 					if sp[0] < end && sp[1] > start {
-						if wr := line.Words[i].Rect; hit {
+						if wr := render.R(line.Words[i].Bounds); hit {
 							rect = rect.Union(wr)
 						} else {
 							rect, hit = wr, true
