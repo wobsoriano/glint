@@ -1,0 +1,1 @@
+{"annotations":[{"id":1,"shape":{"type":"text","pos":{"x":1,"y":2},"text":"a","size":10,"style":"plain"},"color":255,"width":1},{"id":2,"shape":{"type":"redact","rect":{"x":0,"y":0,"w":5,"h":5},"kind":"Blur"},"color":255,"width":0}]}
