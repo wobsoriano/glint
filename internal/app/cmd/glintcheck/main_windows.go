@@ -10,6 +10,9 @@
 //	glintcheck clip [-png out.png]
 //	glintcheck library -dir <GLINT_DATA_DIR>
 //	glintcheck wins [-pid n] [-title substring]
+//	glintcheck stack -pid n
+//	glintcheck video -out f.mp4 [-w 640 -h 360 -seconds 4 -fps 30]
+//	glintcheck loopback [-seconds 3 -peak 0.05 -silent]
 package main
 
 import (
@@ -39,7 +42,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"stage": stage, "shot": shot, "cmp": compare, "dim": dim, "clip": clip, "library": library, "wins": wins,
-		"menu": menu, "mark": mark,
+		"menu": menu, "mark": mark, "stack": stackRect, "video": video, "loopback": loopback,
 	}
 	run, ok := cmds[os.Args[1]]
 	if !ok {
@@ -175,6 +178,7 @@ func compare(args []string) error {
 	ra, rb := fs.String("arect", "", "x,y,w,h of a"), fs.String("brect", "", "x,y,w,h of b")
 	tol := fs.Int("tol", 0, "largest channel difference that counts as equal")
 	maxMean := fs.Float64("maxmean", -1, "pass when the mean channel difference is at most this, for lossy files")
+	differ := fs.Bool("differ", false, "pass when the images differ, as frames of a playing video do")
 	fs.Parse(args)
 	a, err := readImage(*pa)
 	if err != nil {
@@ -218,6 +222,12 @@ func compare(args []string) error {
 	total := areaA.Dx() * areaA.Dy()
 	mean := float64(sum) / float64(3*total)
 	fmt.Printf("cmp %s%v vs %s%v: %d of %d pixels differ (tol %d, max delta %d, mean delta %.2f, first at %v)\n", filepath.Base(*pa), areaA, filepath.Base(*pb), areaB, n, total, *tol, worst, mean, first)
+	if *differ {
+		if n == 0 {
+			return fmt.Errorf("the images are the same")
+		}
+		return nil
+	}
 	if *maxMean >= 0 {
 		if mean > *maxMean {
 			return fmt.Errorf("mean delta %.2f is over %.2f", mean, *maxMean)

@@ -63,6 +63,8 @@ type App struct {
 	tray      *mygo.Tray
 	lastClick int64 // unix nanoseconds of the previous tray click
 	counting  bool  // a self-timer is running
+
+	win views
 }
 
 // New loads the settings and the Library from the data directory.
@@ -80,6 +82,7 @@ func New(l Launch) *App {
 	}
 	a.Actions = actions.New(func() settings.Settings { return a.settings }, a.toast)
 	a.acts = a.Actions
+	a.wire()
 	return a
 }
 
@@ -197,7 +200,7 @@ func (a *App) Do(cmd Command) {
 func (a *App) surface(name string, built bool) bool {
 	if !built {
 		log.Printf("app: %s is not built yet", name)
-		a.toast(name + " is not available yet")
+		a.toast(errNotBuilt(name).Error())
 	}
 	return built
 }
@@ -208,11 +211,14 @@ func (a *App) toast(msg string) { a.say(msg) }
 // then call SettingsChanged.
 func (a *App) Settings() *settings.Settings { return &a.settings }
 
-// SettingsChanged saves the settings and applies them: the shortcuts, the tray menu and
-// whether Glint's windows show in screenshots.
+// SettingsChanged saves the settings and applies them: the shortcuts, the tray menu, the
+// preview stack and whether Glint's windows show in screenshots.
 func (a *App) SettingsChanged() {
 	a.saveSettings()
 	excludeOwnWindows(a.settings.IncludeOwnWindows)
+	if a.win.cards != nil {
+		a.win.cards.SetPrefs(a.settings.Overlay)
+	}
 	if a.tray != nil {
 		a.registerHotkeys()
 		a.refreshTray()

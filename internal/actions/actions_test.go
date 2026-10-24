@@ -251,7 +251,7 @@ func TestExportToWritesTheScreenshotsInTheExportFormat(t *testing.T) {
 
 func TestCopyTextRefusesRecordings(t *testing.T) {
 	a, rec := fake(t, nil)
-	a.CopyText(store.Item{Meta: store.Meta{Kind: store.Recording}})
+	a.CopyText(store.Item{Meta: store.Meta{Kind: store.Recording}}, nil)
 	if got := rec.lastToast(); !strings.HasPrefix(got, "This works on screenshots") {
 		t.Fatalf("toast %q", got)
 	}
