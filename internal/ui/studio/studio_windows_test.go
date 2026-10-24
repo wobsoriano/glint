@@ -162,6 +162,25 @@ func TestSidebarControlsEditTheProject(t *testing.T) {
 	}
 }
 
+func TestCropToolbarTakesClicksOverThePreview(t *testing.T) {
+	e, _, _, tt, _ := testStudio(t)
+	e.enterCrop()
+	tt.Frame()
+	if err := tt.Click("3:2"); err != nil {
+		t.Fatal(err)
+	}
+	c := e.project().Crop
+	if got := c.W * float32(e.session.SourceW) / (c.H * float32(e.session.SourceH)); !near(got, 1.5) {
+		t.Errorf("crop %+v is %.3f wide per tall, want 3:2", c, got)
+	}
+	if err := tt.Click("Done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.mode.(normalMode); !ok {
+		t.Errorf("mode %T after Done", e.mode)
+	}
+}
+
 // TestSnapshot writes what the window shows to $GLINT_STUDIO_SNAPSHOT, for looking at the
 // layout without a desktop.
 func TestSnapshot(t *testing.T) {

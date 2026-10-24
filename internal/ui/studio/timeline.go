@@ -305,7 +305,7 @@ func (e *editor) tracks(c *ui.Context, pal theme.Palette) {
 	box.Cursor(cursor).HandleInput(e.tracksInput)
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		e.tracksW = r.W
-		e.paintTracks(p, r, pal, h, over)
+		p.Clip(r, 0, func() { e.paintTracks(p, r, pal, h, over) })
 	})
 }
 

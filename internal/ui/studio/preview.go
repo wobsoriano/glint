@@ -171,8 +171,21 @@ func (e *editor) layoutPreview(w, h, scale float32) {
 	e.player.setPreviewSize(uint32(math.Round(float64(lw*scale))), uint32(math.Round(float64(lh*scale))))
 }
 
+// preview is the frame, and the crop and focus toolbars and notices over it. They are the
+// frame's siblings, not its children: the frame's input handler takes every press inside it.
 func (e *editor) preview(c *ui.Context, pal theme.Palette) {
-	box := ui.Box(c.Key("preview")).Grow(1).MinHeight(120).Clip().Label("Preview")
+	ui.Box(c.Key("preview-area")).Grow(1).MinHeight(120).Clip().Children(func() {
+		e.previewFrame(c, pal)
+		e.previewToolbar(c, pal)
+		e.noticeView(c, pal)
+		if err := e.player.errText(); err != "" {
+			ui.Text(c, err).FontSize(12).TextColor(pal.Danger).MaxWidth(360).Absolute().Top(10).Right(12)
+		}
+	})
+}
+
+func (e *editor) previewFrame(c *ui.Context, pal theme.Palette) {
+	box := ui.Box(c.Key("preview")).Fill().Label("Preview")
 	cursor := ui.CursorDefault
 	if x, y, over := box.PointerPosition(); over {
 		lx, ly := x-e.frame.x, y-e.frame.y
@@ -195,13 +208,6 @@ func (e *editor) preview(c *ui.Context, pal theme.Palette) {
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		e.layoutPreview(r.W, r.H, p.Scale())
 		e.paintPreview(p, r, pal)
-	})
-	box.Children(func() {
-		e.previewToolbar(c, pal)
-		e.noticeView(c, pal)
-		if err := e.player.errText(); err != "" {
-			ui.Text(c, err).FontSize(12).TextColor(pal.Danger).MaxWidth(360).Absolute().Top(10).Right(12)
-		}
 	})
 }
 

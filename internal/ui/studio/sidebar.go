@@ -131,7 +131,9 @@ func (e *editor) backgroundTab(c *ui.Context, pal theme.Palette) {
 			})
 			if v, changed := slider(c, "hue", "Custom hue", e.hue, 0, 360, bg.Color.Hex(), pal); changed {
 				e.hue = v
-				e.edit("hue", func(p *core.Project) { p.Design.Background = render.SolidBackground{Color: render.FromHSL(v, 0.7, 0.62)} })
+				e.edit("hue", func(p *core.Project) {
+					p.Design.Background = render.SolidBackground{Color: render.FromHSL(v, 0.7, 0.62)}
+				})
 			}
 		case render.BlurredBackground:
 			hint(c, "A soft, blurred copy of the recording behind it.", pal)

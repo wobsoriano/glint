@@ -174,7 +174,9 @@ func (l *runLog) watch() {
 	}
 }
 
-func percentile(sorted []float64, p int) float64 { return sorted[min(len(sorted)*p/100, len(sorted)-1)] }
+func percentile(sorted []float64, p int) float64 {
+	return sorted[min(len(sorted)*p/100, len(sorted)-1)]
+}
 
 func (l *runLog) end() {
 	l.mu.Lock()
