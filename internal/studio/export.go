@@ -38,6 +38,9 @@ var ErrCancelled = errors.New("export cancelled")
 // finished render of the same state. progress, which may be nil, receives 0..1 on the
 // calling goroutine and reaches 1 on success. Cancelling ctx stops the render, removes the
 // partial file and returns an error wrapping ErrCancelled.
+//
+// Export reads s until it returns, so hand it a session nothing else changes meanwhile: the
+// Rust Studio exports a copy it takes on the UI thread.
 func Export(ctx context.Context, s *Session, opts ExportOptions, progress func(float64)) (string, error) {
 	if progress == nil {
 		progress = func(float64) {}
