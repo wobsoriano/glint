@@ -40,8 +40,9 @@ a model or runs for minutes. Each command's doc comment gives its flags:
 | --- | --- |
 | `internal/app/cmd/glintcheck` and its `scenarios` scripts | the app's flows, driven end to end on the desktop |
 | `internal/transcribe/cmd/transcribecheck` | on-device transcription |
-| `internal/studio/cmd/exportcheck` | Studio export, against the Rust build's frames |
+| `internal/studio/cmd/exportcheck` | Studio export of a synthetic session. It checks each render with `ffprobe` (on `PATH`) and against `ComposeFrame`, and checks that its tones and flashes start where the edit puts them. |
 | `tools/packagecheck` | the built executable and the installer (see below) |
+| `tools/verify` | the checks behind `docs/parity.md`: each flow driven in the packaged app, a Rust-written Library and settings, adversarial cases, idle cost, and the macOS gap list (`macgaps.sh`). `docs/go-port/verification.md` gives the results. |
 
 ## Build the app
 
