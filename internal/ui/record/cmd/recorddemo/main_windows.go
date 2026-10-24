@@ -6,6 +6,9 @@
 //
 //	go build -o %TEMP%\recorddemo.exe ./internal/ui/record/cmd/recorddemo
 //	go run ./tools/desklock -- %TEMP%\recorddemo.exe -auto
+//
+// -follow checks that the teleprompter follows narration. With GLINT_DATA_DIR set to a
+// scratch dir, run -prepare once outside the lock, then -follow inside it.
 package main
 
 import (
@@ -30,6 +33,9 @@ var (
 	auto    = flag.Bool("auto", false, "drive the recording UI, check it and quit")
 	animate = flag.Bool("animate", false, "run as the animated app that gets recorded")
 	outDir  = flag.String("out", filepath.Join(os.TempDir(), "glint-recorddemo-evidence"), "where screenshots go")
+	prepare = flag.Bool("prepare", false, "speak the script into GLINT_DATA_DIR/narration.wav and install the speech model there, then quit")
+	follow  = flag.Bool("follow", false, "record with the teleprompter following narration.wav (after -prepare), check it and quit")
+	cam     = flag.Bool("camera", false, "check the camera bubble with the first camera, or with a camera that is gone, and quit")
 )
 
 // host is the app around the recording UI: settings in GLINT_DATA_DIR, the Library there,
@@ -89,6 +95,12 @@ func (h *host) lastFinished() store.Item {
 
 func main() {
 	flag.Parse()
+	if *prepare {
+		if err := prepareFollow(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *animate {
 		runAnimate()
 	} else {
@@ -109,6 +121,14 @@ func main() {
 			}
 			if *auto {
 				go run(h, ctl)
+				return
+			}
+			if *follow {
+				go runFollow(h, ctl)
+				return
+			}
+			if *cam {
+				go runCamera(h, ctl)
 				return
 			}
 			ctl.Toggle()
