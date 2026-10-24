@@ -1,8 +1,27 @@
 # Glint
 
-**A free, open-source Snipping Tool alternative for Windows 10 and 11.** Snipping Tool captures your screen. Glint makes it look good.
+A free, open-source Snipping Tool alternative for Windows 10 and 11.
 
-Glint does what Snipping Tool does (area, window and full-screen screenshots, screen recording with audio, copying text out of the screen) and adds what you would otherwise reach for another app to do: styled screenshots, a Library you can reopen and re-edit, and a recording studio with auto zoom, captions and editing by transcript. Everything runs on your PC. Glint has no accounts and no cloud upload.
+[Download for Windows](https://github.com/wobsoriano/glint/releases/latest)
+
+### Screenshots
+
+[![Screenshots demo: capture an area and a window, annotate and style in the editor, auto-redact, copy text, pin, and browse the Library](docs/media/screenshots-demo.jpg)](docs/media/screenshots-demo.mp4)
+
+### Screen recording
+
+[![Screen recording demo: record the screen, then style it, cut words from the transcript, export, and trim and compress in Studio](docs/media/recording-demo.jpg)](docs/media/recording-demo.mp4)
+
+## Why not just use Snipping Tool?
+
+Snipping Tool is fine for a quick screenshot, and it records the screen too. Its job ends at the capture. Glint covers what comes after:
+
+- A screenshot you share usually needs arrows, a label and a background. Glint does all of that in one editor, and you can reopen the capture next week and still move the arrows.
+- Screenshots of real work leak emails, API keys and card numbers. Glint finds them and hides them before you share.
+- A raw screen recording is hard to follow. Glint zooms in where you click, redraws the cursor larger, adds captions from an on-device transcript, and cuts the video when you delete words from that transcript.
+- Every screenshot and recording lands in a searchable Library instead of a folder of files named `Screenshot (214).png`.
+
+Glint runs entirely on your PC. It has no account, no cloud upload and no telemetry, and it is MIT licensed.
 
 ## Glint vs. Snipping Tool
 
@@ -24,11 +43,11 @@ Glint does what Snipping Tool does (area, window and full-screen screenshots, sc
 
 Snipping Tool's features change with Windows updates. This table describes it as of late 2026. Glint is not affiliated with Microsoft. Snipping Tool is a Microsoft product.
 
-Glint runs in the notification area and runs on Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally.
+Glint lives in the notification area and supports Windows only for now. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Text recognition uses the Windows OCR engine, and whisper.cpp transcribes on your PC.
 
 ## Install
 
-Download `Glint-<version>-windows-x64-setup.exe` from [Releases](https://github.com/wobsoriano/glint/releases) and run it. The installer needs no administrator rights: it installs Glint for your user in `%LOCALAPPDATA%\Programs\Glint`, and Settings > Apps uninstalls it.
+Download `Glint-<version>-windows-x64-setup.exe` from [Releases](https://github.com/wobsoriano/glint/releases) and run it. The installer needs no administrator rights. It installs Glint for your user in `%LOCALAPPDATA%\Programs\Glint`, and Settings > Apps uninstalls it.
 
 Releases are not code-signed yet, so Windows SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**. See [Code signing policy](#code-signing-policy).
 
@@ -176,7 +195,7 @@ Only `internal/app`, `internal/actions` and `internal/ui/...` import MyGo, so th
 go test ./...
 ```
 
-Run them from a signed-in desktop session: some tests capture the screen or play sound. `go test -short ./...` skips those. `docs/building.md` lists the other markings.
+Run them from a signed-in desktop session, because some tests capture the screen or play sound. `go test -short ./...` skips those. `docs/building.md` lists the other markings.
 
 ## Privacy
 
