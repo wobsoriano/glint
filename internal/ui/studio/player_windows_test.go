@@ -130,3 +130,33 @@ func TestPlayerComposesTheFrameAtEachSeekAndPlaysOnTheClock(t *testing.T) {
 	}
 	t.Logf("%d frames in 2 s, output %.0f..%.0f ms", len(times), times[0], times[len(times)-1])
 }
+
+func TestPlayerShowsTheLastFrameAtTheEndOfACutTimeline(t *testing.T) {
+	s := silentSession(t)
+	s.Project.Clips = []core.Clip{{StartMs: 0, EndMs: 2_000, Speed: 1}, {StartMs: 5_000, EndMs: s.SourceDurationMs, Speed: 1}}
+	frames := make(chan struct{}, 64)
+	p, err := newPlayer(s, func() {
+		select {
+		case frames <- struct{}{}:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.close()
+	p.setPreviewSize(640, 640)
+	duration := s.Project.DurationMs()
+	for _, at := range []float64{duration, 1_000, duration} {
+		p.seek(at)
+		f := waitFrame(t, p, frames, func(f shownFrame) bool { return f.outputMs == at })
+		core.RecycleFrame(f.img)
+	}
+	p.seek(duration - 500)
+	p.play()
+	f := waitFrame(t, p, frames, func(f shownFrame) bool { return f.outputMs == duration })
+	core.RecycleFrame(f.img)
+	if e := p.errText(); e != "" {
+		t.Errorf("player error at the end of the timeline: %s", e)
+	}
+}
