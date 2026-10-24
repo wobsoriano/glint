@@ -8,7 +8,7 @@ import (
 )
 
 // testdata/serde_f32.json is what serde_json wrote for each f32, from
-// cargo run -p glint-studio --example go_compose -- f32 internal/render/testdata/serde_f32.json
+// (in a checkout of f1d58d2, the last Rust commit) cargo run -p glint-studio --example go_compose -- f32 internal/render/testdata/serde_f32.json
 func TestF32SpelledAsSerdeSpellsIt(t *testing.T) {
 	data, err := os.ReadFile("testdata/serde_f32.json")
 	if err != nil {

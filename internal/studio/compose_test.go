@@ -17,7 +17,7 @@ import (
 )
 
 // testdata/compose holds frames the Rust compositor drew from a synthetic session, written by
-// cargo run --release -p glint-studio --example go_compose -- synthetic internal/studio/testdata/compose
+// (in a checkout of f1d58d2, the last Rust commit) cargo run --release -p glint-studio --example go_compose -- synthetic internal/studio/testdata/compose
 type composeManifest struct {
 	Session  string        `json:"session"`
 	Screen   string        `json:"screen"`
@@ -207,7 +207,7 @@ func TestComposeMatchesRustOnSyntheticSession(t *testing.T) {
 // Library sessions. They hold the user's screen, so they stay out of the repository:
 //
 //	ffmpeg -ss 2 -i <copy>/screen.mp4 -frames:v 1 <scratch>/screen.png
-//	cargo run --release -p glint-studio --example go_compose -- real <copy> <scratch>/screen.png - <out>
+//	(in a checkout of f1d58d2, the last Rust commit) cargo run --release -p glint-studio --example go_compose -- real <copy> <scratch>/screen.png - <out>
 //	GLINT_COMPOSE_REAL=<out>[;<out>...] go test ./internal/studio -run RealSessions -v
 func TestComposeMatchesRustOnRealSessions(t *testing.T) {
 	dirs := filepath.SplitList(os.Getenv("GLINT_COMPOSE_REAL"))

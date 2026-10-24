@@ -11,7 +11,7 @@ import (
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
 
-// The fixtures under testdata/rust come from `cargo run -p glint-studio --example go_fixtures`.
+// The fixtures under testdata/rust come from the Rust build at commit f1d58d2, `cargo run -p glint-studio --example go_fixtures`.
 
 func eq[T any](t *testing.T, got, want T) {
 	t.Helper()

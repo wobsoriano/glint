@@ -14,7 +14,7 @@ import (
 // build for real recordings. Make the dumps from copies of Library sessions, never the
 // Library itself:
 //
-//	cargo run -p glint-studio --example go_fixtures -- <out> <copy>/*.glintrec
+//	(in a checkout of f1d58d2, the last Rust commit) cargo run -p glint-studio --example go_fixtures -- <out> <copy>/*.glintrec
 //	GLINT_STUDIO_PARITY=<out> go test ./internal/studio -run TestRustParity -v
 func TestRustParity(t *testing.T) {
 	out := os.Getenv("GLINT_STUDIO_PARITY")

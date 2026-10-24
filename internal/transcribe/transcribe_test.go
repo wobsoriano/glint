@@ -36,7 +36,7 @@ func TestSaveThenLoadRoundTrips(t *testing.T) {
 }
 
 // testdata/transcript.json is Transcript::save output from
-// `cargo run -p glint-studio --example go_fixtures`.
+// the Rust build at commit f1d58d2, `cargo run -p glint-studio --example go_fixtures`.
 func TestRustTranscriptRoundTrips(t *testing.T) {
 	want, err := os.ReadFile(filepath.Join("testdata", "transcript.json"))
 	if err != nil {

@@ -61,7 +61,7 @@ func TestPaletteMapsFlatColoursToTheirNearestEntry(t *testing.T) {
 // testdata/rust/palette.json is the palette the Rust exporter trains on two compositor
 // frames, written by
 //
-//	cargo run --release -p glint-studio --example go_export -- palette internal/studio/testdata/compose/wide_zoom_click.png internal/studio/testdata/compose/portrait_plain.png > internal/studio/testdata/rust/palette.json
+//	(in a checkout of f1d58d2, the last Rust commit) cargo run --release -p glint-studio --example go_export -- palette internal/studio/testdata/compose/wide_zoom_click.png internal/studio/testdata/compose/portrait_plain.png > internal/studio/testdata/rust/palette.json
 func TestPaletteMatchesRust(t *testing.T) {
 	var want struct {
 		RGB    []int  `json:"rgb"`
