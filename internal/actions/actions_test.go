@@ -24,10 +24,10 @@ import (
 func TestSanitizeMakesTitlesFileNames(t *testing.T) {
 	for in, want := range map[string]string{
 		`Screenshot 2026-10-14 at 14.03.22`: `Screenshot 2026-10-14 at 14.03.22`,
-		`a<b>c:d"e/f\g|h?i*j`:                `a_b_c_d_e_f_g_h_i_j`,
-		"  tab\there.. ":                     "tab_here",
-		"...":                                "Capture",
-		"":                                   "Capture",
+		`a<b>c:d"e/f\g|h?i*j`:               `a_b_c_d_e_f_g_h_i_j`,
+		"  tab\there.. ":                    "tab_here",
+		"...":                               "Capture",
+		"":                                  "Capture",
 	} {
 		if got := Sanitize(in); got != want {
 			t.Errorf("Sanitize(%q) = %q, want %q", in, got, want)
