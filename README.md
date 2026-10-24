@@ -1,6 +1,6 @@
 # Glint
 
-Glint is a screenshot, annotation and screen-recording app for Windows 10 and 11. It is written in Rust with [GPUI](https://crates.io/crates/gpui), the GPU-rendered UI framework from the Zed editor. Everything runs on your PC: text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally. Glint has no accounts and no cloud upload.
+Glint is a screenshot, annotation and screen-recording app for Windows 10 and 11. It is written in Go with [MyGo](https://mygo.egoist.dev), whose native UI draws on the GPU. Everything runs on your PC: text recognition uses the Windows OCR engine, and transcription runs whisper.cpp locally. Glint has no accounts and no cloud upload.
 
 Glint runs in the notification area. Every screenshot and recording goes into the Library, a folder of captures that you can search, reopen and edit again later.
 
@@ -32,7 +32,7 @@ Glint runs in the notification area. Every screenshot and recording goes into th
 - Quick Look opens on double-click or Space.
 - Select several items with Ctrl-click, Shift-click or Ctrl+A, then copy, export, show them in Explorer, or move them to the Recycle Bin.
 - Press Enter to rename a capture.
-- Glint registers **Open with Glint** for images and videos. An image opens in the editor as an imported copy. A video opens in Trim & Compress.
+- The installer registers **Open with Glint** for images and videos. An image opens in the editor as an imported copy. A video opens in Trim & Compress.
 
 ### Annotation editor
 
@@ -103,21 +103,16 @@ Only one Glint runs at a time. A second `glint.exe` sends its arguments to the r
 
 ## Build
 
-You need:
-
-- Rust with the MSVC toolchain (`x86_64-pc-windows-msvc`).
-- Visual Studio 2022 Build Tools with the C++ workload.
-- The Windows 10 or 11 SDK.
-- CMake and `libclang.dll`. The `glint-transcribe` crate builds whisper.cpp with CMake and generates its bindings with libclang.
-
-`docs/building.md` lists the exact versions and tells you how to point the build at CMake and libclang. Then build and run:
+You need Go 1.27 or later and nothing else: no cgo, no C compiler, no Windows SDK.
 
 ```
-cargo build --release
-target\release\glint.exe
+go run .                    # run from source
+go tool mygo build          # build Glint.exe and the installer into build/windows-amd64/
 ```
 
-Glint does not need ffmpeg.
+`docs/building.md` covers tests, packaging, the macOS build and releases. Glint does not need ffmpeg.
+
+Transcription downloads whisper.cpp 1.8.3 and its model the first time you use it. whisper.cpp needs the [Visual C++ runtime](https://aka.ms/vc14/vc_redist.x64.exe), which most Windows PCs already have. Glint tells you if it is missing.
 
 ## Data locations
 
@@ -126,34 +121,34 @@ Glint does not need ffmpeg.
 | `%APPDATA%\Glint\settings.json` | Settings |
 | `%APPDATA%\Glint\Library\` | One folder per capture. See `docs/architecture.md` for the format. |
 | `%APPDATA%\Glint\presets.json` | Editor presets |
-| `%APPDATA%\Glint\models\` | Downloaded whisper models |
+| `%APPDATA%\Glint\models\` | Downloaded whisper models and the whisper.cpp runtime |
 | `%USERPROFILE%\Pictures\Glint\` | Default export folder |
 
 Set `GLINT_DATA_DIR` to use another folder in place of `%APPDATA%\Glint`.
 
-## Crate layout
+## Code layout
 
-| Crate | Contents |
+| Package | Contents |
 | --- | --- |
-| `glint` (`src/`) | GPUI windows, tray, global shortcuts, capture flow, preview cards, Library, editor, recording UI, Studio UI, Trim & Compress |
-| `crates/glint-render` | CPU compositor for styles, backgrounds and annotations, shared by the editor and Studio |
-| `crates/glint-media` | Screen, camera, audio and input recording, MP4 encoding and decoding |
-| `crates/glint-studio` | Studio project model, timeline, auto zoom, frame compositor and export |
-| `crates/glint-transcribe` | whisper.cpp transcription, captions, filler words and silence detection |
+| `main.go`, `internal/app` | Start-up, single instance, tray, global shortcuts, the capture flow, and the wiring between windows |
+| `internal/ui/...` | One package per window: `overlay`, `stack` (preview cards), `editor`, `pin`, `quicklook`, `library`, `prefs`, `record`, `studio`, `trim`, `toast`, plus `theme` |
+| `internal/actions` | Copy, save, export, compress and delete, shared by every window |
+| `internal/platform`, `internal/ocr` | Screen and window capture, capture exclusion, launch at login; the Windows OCR engine |
+| `internal/settings`, `internal/store`, `internal/redact` | `settings.json` and presets, the Library on disk, sensitive-text detection |
+| `internal/render` | CPU compositor for styles, backgrounds and annotations, shared by the editor and Studio |
+| `internal/media` | Screen, camera, audio and input recording; MP4 encoding and decoding; audio playback |
+| `internal/studio` | Studio project model, timeline, auto zoom, frame compositor and export |
+| `internal/transcribe` | whisper.cpp transcription, captions, filler words and silence detection |
 
-The library crates do not depend on GPUI, so their tests run without a window. `docs/architecture.md` describes the on-disk formats and the contracts between crates. `docs/parity.md` is the feature checklist with evidence for each item.
+Only `internal/app`, `internal/actions` and `internal/ui/...` import MyGo, so the other packages' tests run without a window. `docs/architecture.md` describes the on-disk formats. `docs/parity.md` is the feature checklist with evidence for each item.
 
 ## Tests
 
 ```
-cargo test --workspace
+go test ./...
 ```
 
-Some tests need hardware or a desktop session, or download models. They are marked `#[ignore]`. To run them:
-
-```
-cargo test --workspace --release -- --ignored
-```
+Run them from a signed-in desktop session: some tests capture the screen or play sound. `go test -short ./...` skips those. `docs/building.md` lists the other markings.
 
 ## Inspired by
 
