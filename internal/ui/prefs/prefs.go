@@ -40,14 +40,13 @@ var panes = []struct {
 
 var isMac = runtime.GOOS == "darwin"
 
-// Version is the app's version, which the About pane shows.
-var Version = "dev"
-
 // Prefs is the Settings window's state. Build it with New and show View in a window; Open
 // does both. All methods run on the main thread.
 type Prefs struct {
 	host Host
 	Pane Pane
+	// version is what the About pane shows, empty for a build mygo did not package.
+	version string
 	// pickFolder asks for a folder and openPath opens one in Explorer or Finder; nil leaves
 	// those buttons out.
 	pickFolder func() (string, bool)
@@ -67,8 +66,8 @@ type note struct {
 }
 
 // New makes the Settings window's state, showing pane first.
-func New(host Host, pane Pane, pickFolder func() (string, bool), openPath func(string)) *Prefs {
-	return &Prefs{host: host, Pane: pane, pickFolder: pickFolder, openPath: openPath}
+func New(host Host, pane Pane, version string, pickFolder func() (string, bool), openPath func(string)) *Prefs {
+	return &Prefs{host: host, Pane: pane, version: version, pickFolder: pickFolder, openPath: openPath}
 }
 
 func (p *Prefs) s() *settings.Settings { return p.host.Settings() }
@@ -338,13 +337,20 @@ func (p *Prefs) privacy(c *ui.Context, pal theme.Palette) {
 	})
 }
 
+func versionText(v string) string {
+	if v == "" {
+		return "Development build"
+	}
+	return "Version " + v
+}
+
 func (p *Prefs) about(c *ui.Context, pal theme.Palette) {
 	group(c, pal, "GLINT", func() {
 		ui.Row(c).Gap(16).Children(func() {
 			ui.Image(c, theme.Mark(false)).Size(56, 56)
 			ui.Column(c).Gap(4).Children(func() {
 				ui.Text(c, "Glint").FontSize(theme.Subtitle).FontWeight(theme.Semibold)
-				ui.Text(c, "Version "+Version).TextColor(pal.Muted)
+				ui.Text(c, versionText(p.version)).TextColor(pal.Muted)
 			})
 		})
 		noteText(c, pal, "Screenshots, recordings and their edits stay on this computer.")

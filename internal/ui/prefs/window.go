@@ -26,7 +26,7 @@ func Open(host Host, pane Pane) *Window {
 		_ = os.MkdirAll(path, 0o755)
 		_ = mygo.Shell.OpenPath(path)
 	}
-	w := &Window{Prefs: New(host, pane, pick, open)}
+	w := &Window{Prefs: New(host, pane, mygo.App.Version(), pick, open)}
 	w.win = mygo.NewWindow(mygo.WindowOptions{
 		Title: "Glint Settings", Width: 860, Height: 640, MinWidth: 720, MinHeight: 520,
 		TitleBarStyle: mygo.TitleBarHidden, Vibrancy: mygo.VibrancyMica,

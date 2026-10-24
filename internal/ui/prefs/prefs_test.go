@@ -43,7 +43,7 @@ func (h *fakeHost) ResumeHotkeys()                          { h.resumed++ }
 func open(t *testing.T, pane Pane) (*Prefs, *fakeHost, *ui.Tester) {
 	t.Helper()
 	h := &fakeHost{s: settings.Default()}
-	p := New(h, pane, nil, nil)
+	p := New(h, pane, "0.2.0", nil, nil)
 	return p, h, ui.NewTester(p.View, 860, 900)
 }
 
@@ -62,7 +62,7 @@ func TestEveryPaneRenders(t *testing.T) {
 		{"Overlay", "Dismiss a card after dragging it out"},
 		{"Shortcuts", "Capture previous area"},
 		{"Privacy", "URLs with tokens"},
-		{"About", "Version dev"},
+		{"About", "Version 0.2.0"},
 		{"General", "Include Glint windows in screenshots"},
 	} {
 		must(t, tt.Click(c.pane))
