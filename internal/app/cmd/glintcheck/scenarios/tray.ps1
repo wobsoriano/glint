@@ -51,6 +51,16 @@ try {
     "items: $($items.Count); $($m.width)x$($m.height)"
     Copy-Item "$($items[-1].FullName)\image.png" "$dir\03-menu-fullscreen-capture.png"
 
+    Step 'Capture Area from the menu freezes the screen without the menu, then Enter takes it'
+    Choose 1
+    Start-Sleep -Milliseconds 700
+    Shot "$dir\02b-menu-area-overlay.png"
+    Keys 'Enter'
+    Start-Sleep -Milliseconds 1500
+    $items = Items $dir
+    "items: $($items.Count)"
+    Copy-Item "$($items[-1].FullName)\image.png" "$dir\03b-menu-area-capture.png"
+
     Step "Self-Timer ($Timer s) counts down in a toast, then captures"
     Choose 6
     $chosen = Get-Date
