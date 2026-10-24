@@ -108,22 +108,23 @@ func TestWrapsWordsGreedilyAndKeepsLongWordsWhole(t *testing.T) {
 }
 
 func TestTheWheelMovesThePrompterByWholeLinesWithinTheScript(t *testing.T) {
-	pr := &prompter{lines: make([]span, 5), visible: 2}
+	pr := newPrompter("", 2, nil)
+	pr.lines = make([]span, 5)
 	pr.scroll(prompterLineH / 2)
-	if pr.top != 0 {
-		t.Fatalf("half a line stays put, top %d", pr.top)
+	if pr.first() != 0 {
+		t.Fatalf("half a line stays put, first line %d", pr.first())
 	}
 	pr.scroll(prompterLineH / 2)
-	if pr.top != 1 {
-		t.Fatalf("a whole line moves one, top %d", pr.top)
+	if pr.first() != 1 {
+		t.Fatalf("a whole line moves one, first line %d", pr.first())
 	}
 	pr.scroll(prompterLineH * 10)
-	if pr.top != 3 {
-		t.Fatalf("never past the last full page, top %d", pr.top)
+	if pr.first() != 3 {
+		t.Fatalf("never past the last full page, first line %d", pr.first())
 	}
 	pr.scroll(-prompterLineH * 10)
-	if pr.top != 0 {
-		t.Fatalf("never above the first line, top %d", pr.top)
+	if pr.first() != 0 {
+		t.Fatalf("never above the first line, first line %d", pr.first())
 	}
 }
 
