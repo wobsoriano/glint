@@ -33,13 +33,13 @@ func (a *CardAction) UnmarshalJSON(b []byte) (err error) {
 	return err
 }
 
-func (a CardAction) Label() string {
-	return map[CardAction]string{
-		CardCopy: "Copy", CardSave: "Save", CardSaveAs: "Save As", CardCompress: "Compress",
-		CardPin: "Pin", CardQuickLook: "Quick Look", CardEdit: "Edit", CardCopyText: "Copy Text",
-		CardDelete: "Delete", CardDismiss: "Dismiss", CardMore: "More",
-	}[a]
+var cardLabels = map[CardAction]string{
+	CardCopy: "Copy", CardSave: "Save", CardSaveAs: "Save As", CardCompress: "Compress",
+	CardPin: "Pin", CardQuickLook: "Quick Look", CardEdit: "Edit", CardCopyText: "Copy Text",
+	CardDelete: "Delete", CardDismiss: "Dismiss", CardMore: "More",
 }
+
+func (a CardAction) Label() string { return cardLabels[a] }
 
 // Corner indexes CardLayout.Corners.
 type Corner int

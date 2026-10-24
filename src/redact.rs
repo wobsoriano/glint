@@ -244,6 +244,29 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "reads GLINT_GO_FIXTURES/corpus.txt and writes redact-findings.json for the Go port"]
+    fn go_fixtures() {
+        let dir = std::path::PathBuf::from(std::env::var_os("GLINT_GO_FIXTURES").expect("set GLINT_GO_FIXTURES"));
+        let corpus = std::fs::read_to_string(dir.join("corpus.txt")).unwrap();
+        let lines: Vec<Line> = corpus
+            .lines()
+            .enumerate()
+            .map(|(n, text)| {
+                let mut l = line(text);
+                let dy = n as f32 * 30.0;
+                l.rect.y += dy;
+                l.words.iter_mut().for_each(|w| w.rect.y += dy);
+                l
+            })
+            .collect();
+        let found: Vec<serde_json::Value> = find(&lines, &RedactRules::default(), 2.0)
+            .iter()
+            .map(|f| serde_json::json!({ "kind": format!("{:?}", f.kind), "rect": [f.rect.x, f.rect.y, f.rect.w, f.rect.h] }))
+            .collect();
+        std::fs::write(dir.join("redact-findings.json"), serde_json::to_string_pretty(&found).unwrap()).unwrap();
+    }
+
+    #[test]
     fn ignores_plain_text() {
         assert!(kinds("Hello world, version 1.2.3 released on 2026-10-14").is_empty());
         assert!(kinds("card 4242 4242 4242 4241").is_empty());
