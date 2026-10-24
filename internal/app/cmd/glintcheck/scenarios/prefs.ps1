@@ -45,8 +45,19 @@ try {
     $before = Stack $g
     "stack before: $($before.X),$($before.Y)"
     Click 154 230 200
+    # The stack's hidden owner window sits mid-screen; a settings change once drew it there as
+    # a bare caption. Its spot must look the same before and after the change.
+    $owner = & $Check wins -pid $g.Id | Select-String 'rect=\((-?\d+),(-?\d+) (\d+)x(\d+)\) "Glint stack"' | ForEach-Object { $_.Matches[0].Groups[1..4].Value -join ',' }
+    Glide 1500 880 200
+    Start-Sleep -Milliseconds 300
+    Check shot -out "$dir\04-owner-before.png" -rect $owner | Out-Null
     Click 858 172 200
     Start-Sleep -Milliseconds 500
+    Glide 1500 880 200
+    Start-Sleep -Milliseconds 800
+    Check shot -out "$dir\04-owner-after.png" -rect $owner | Out-Null
+    "the stack's owner at $owner stays undrawn:"
+    Check cmp -a "$dir\04-owner-before.png" -b "$dir\04-owner-after.png"
     $moved = Stack $g
     "settings.json overlay.side: $((Saved).overlay.side); stack now: $($moved.X),$($moved.Y) $($moved.W)x$($moved.H)"
     Capture-Area 1000 300 1400 600 'Ctrl+Alt+K'
