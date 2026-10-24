@@ -277,6 +277,23 @@ stubs compiled on darwin. Each one returns `ErrUnsupported` or does nothing:
 The checked lines in the macOS section of `docs/parity.md` describe the Rust build. For the Go
 build every one of them is a gap.
 
+## Fixed since this report
+
+| # | Fix | Proof |
+| --- | --- | --- |
+| 1 | Rust "Open with" entries are removed only when the installer registered this exe (`installedAt`). | `TestInstalledAtNeedsTheInstallersCommandForThisExe` |
+| 2 | DTW word timings, placed on the audio (`internal/transcribe/timing.go`). | `internal/transcribe/cmd/wordtimecheck` |
+| 3 | About shows `mygo.App.Version()`. | `scenarios/fixapp.ps1` |
+| 4 | `Sanitize` caps file names at 150 bytes; the title stays whole in `meta.json`. | `internal/actions` tests, `fixapp.ps1` |
+| 5 | Show in Explorer selects every item, one `SHOpenFolderAndSelectItems` call per folder. | `fixapp.ps1` |
+| 6 | Toasts and cards lead with the reason and the base name (`toast.Reason`); a failed card shows a red cross. | `internal/ui/toast`, `internal/ui/stack` tests |
+| 8 | Not a Library leak: handles are flat over 45 hotkey cycles. Second-instance hand-offs add one handle per Go thread, once. See mygo-findings.md. | `scenarios/libleak.ps1`, `sockhandles.ps1` |
+| 9, 10 | The bar widens for the delete question; device toasts sit above the picker and bar and name each device once. | `scenarios/recordedges.ps1` |
+| 11 | Orphaned staging folders are recovered when playable, else moved to the Recycle Bin, at startup. | `internal/store` tests, `recordedges.ps1` |
+| 13 | Bitrate floors scale with quality; estimates are within 1% of the written file. | `internal/ui/trim`, `internal/studio` tests |
+
+Bugs 7, 12 and 14 are unchanged.
+
 ## Bugs, by priority
 
 | # | Severity | Bug | Repro | Suspected package |
