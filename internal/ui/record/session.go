@@ -77,6 +77,7 @@ type Controller struct {
 	picker                                  *picker
 	guide, countdown, bar, prompter, camera *mygo.Window
 	barView                                 *bar
+	prompt                                  *prompter
 	controls                                map[control]ui.Rect
 }
 
@@ -350,8 +351,24 @@ func (c *Controller) begin() {
 		c.end()
 		return
 	}
-	if p.Teleprompter && strings.TrimSpace(p.Script) != "" {
-		c.showPrompter(target, p.Script, int(min(max(p.PrompterLines, 1), 6)))
+	prompting := p.Teleprompter && strings.TrimSpace(p.Script) != ""
+	testWAV := os.Getenv("GLINT_TELEPROMPTER_WAV")
+	var tap chan []float32
+	var follow *follower
+	v := voiceFor(prompting, p.Mic != nil, testWAV)
+	if v != noVoice {
+		tap = make(chan []float32, audioQueue)
+		follow = startFollower(p.Script, tap, dataDirSpeech(settings.DataDir()))
+		if v == wavVoice {
+			go func() {
+				if err := feedWAV(follow.ctx, testWAV, tap); err != nil {
+					log.Printf("teleprompter test audio: %v", err)
+				}
+			}()
+		}
+	}
+	if prompting {
+		c.showPrompter(target, newPrompter(p.Script, int(min(max(p.PrompterLines, 1), 6)), follow))
 	}
 	opts := media.RecordOptions{
 		Source:      target.Source(),
@@ -364,6 +381,9 @@ func (c *Controller) begin() {
 	if p.Mic != nil {
 		id := capture.DeviceID(*p.Mic)
 		opts.Mic = &id
+		if v == micVoice {
+			opts.MicTap = tap
+		}
 	}
 	if p.Camera != nil {
 		id := media.CameraID(*p.Camera)
