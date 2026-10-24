@@ -90,7 +90,7 @@ func (a *App) registerHotkeys() {
 			continue
 		}
 		if err := a.bind(action, accel); err != nil {
-			a.failures[action] = err.Error()
+			a.failures[action] = err
 			log.Printf("app: shortcut %s for %s: %v", accel, action.Label(), err)
 		}
 	}
@@ -116,20 +116,15 @@ func (a *App) SuspendHotkeys() {
 // ResumeHotkeys binds the shortcuts again after SuspendHotkeys.
 func (a *App) ResumeHotkeys() { a.registerHotkeys() }
 
-// HotkeyFailures says which shortcuts could not be registered, and why.
-func (a *App) HotkeyFailures() map[settings.HotkeyAction]string {
-	out := make(map[settings.HotkeyAction]string, len(a.failures))
-	for k, v := range a.failures {
-		out[k] = v
-	}
-	return out
-}
+// HotkeyError is why the action's shortcut did not register, nil when it did.
+func (a *App) HotkeyError(action settings.HotkeyAction) error { return a.failures[action] }
 
-// Rebind gives action the shortcut accel, keeping the old one when accel cannot be
-// registered, and saves the settings.
-func (a *App) Rebind(action settings.HotkeyAction, accel string) error {
-	for other, bound := range a.hotkeys {
-		if other != action && strings.EqualFold(bound, accel) {
+// RebindHotkey registers accel for action in place of its current shortcut, keeping the old
+// one when accel cannot be registered. The caller stores accel in the settings and calls
+// SettingsChanged, as the Settings window does.
+func (a *App) RebindHotkey(action settings.HotkeyAction, accel string) error {
+	for _, other := range settings.HotkeyActions {
+		if other != action && strings.EqualFold(*a.settings.Hotkeys.Binding(other), accel) {
 			return fmt.Errorf("%s is already used for “%s”", accel, other.Label())
 		}
 	}
@@ -148,8 +143,5 @@ func (a *App) Rebind(action settings.HotkeyAction, accel string) error {
 		return fmt.Errorf("%s could not be registered, another app probably uses it (%v)", accel, err)
 	}
 	delete(a.failures, action)
-	*a.settings.Hotkeys.Binding(action) = accel
-	a.saveSettings()
-	a.refreshTray()
 	return nil
 }

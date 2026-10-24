@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo"
 
 	"github.com/wobsoriano/glint/internal/actions"
+	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/settings"
 	"github.com/wobsoriano/glint/internal/store"
 	"github.com/wobsoriano/glint/internal/ui/overlay"
@@ -58,7 +59,7 @@ type App struct {
 	last string
 
 	hotkeys   map[settings.HotkeyAction]string // what is registered now
-	failures  map[settings.HotkeyAction]string
+	failures  map[settings.HotkeyAction]error
 	tray      *mygo.Tray
 	lastClick int64 // unix nanoseconds of the previous tray click
 	counting  bool  // a self-timer is running
@@ -75,9 +76,9 @@ func New(l Launch) *App {
 		say:      func(msg string) { toast.Show(msg) },
 		post:     mygo.RunOnMain,
 		hotkeys:  map[settings.HotkeyAction]string{},
-		failures: map[settings.HotkeyAction]string{},
+		failures: map[settings.HotkeyAction]error{},
 	}
-	a.Actions = actions.New(a.Settings, a.toast)
+	a.Actions = actions.New(func() settings.Settings { return a.settings }, a.toast)
 	a.acts = a.Actions
 	return a
 }
@@ -203,20 +204,42 @@ func (a *App) surface(name string, built bool) bool {
 
 func (a *App) toast(msg string) { a.say(msg) }
 
-// Settings returns the settings in effect.
-func (a *App) Settings() settings.Settings { return a.settings }
+// Settings is the app's one settings value. Windows change it in place on the main thread,
+// then call SettingsChanged.
+func (a *App) Settings() *settings.Settings { return &a.settings }
 
-// SetSettings saves s and applies what changed: shortcuts, the tray menu and whether Glint's
-// windows show in screenshots. Launch at login is the Settings window's to apply.
-func (a *App) SetSettings(s settings.Settings) error {
-	a.settings = s
-	err := s.Save()
-	excludeOwnWindows(s.IncludeOwnWindows)
+// SettingsChanged saves the settings and applies them: the shortcuts, the tray menu and
+// whether Glint's windows show in screenshots.
+func (a *App) SettingsChanged() {
+	a.saveSettings()
+	excludeOwnWindows(a.settings.IncludeOwnWindows)
 	if a.tray != nil {
 		a.registerHotkeys()
 		a.refreshTray()
 	}
-	return err
+}
+
+// SetLaunchAtLogin registers Glint to start in the tray at login, or stops it.
+func (a *App) SetLaunchAtLogin(on bool) error {
+	return platform.SetLaunchAtLogin(on, []string{"--background"})
+}
+
+// Capture starts a capture as the action's global shortcut does.
+func (a *App) Capture(action settings.HotkeyAction) { a.Do(hotkeyCommands[action]) }
+
+// OpenFiles opens images in the editor and videos in Trim & Compress.
+func (a *App) OpenFiles(paths []string) {
+	var images []string
+	for _, p := range paths {
+		if IsVideo(p) {
+			a.openTrim(p)
+		} else {
+			images = append(images, p)
+		}
+	}
+	if len(images) > 0 {
+		a.openImages(images)
+	}
 }
 
 // Library is the Library on disk.

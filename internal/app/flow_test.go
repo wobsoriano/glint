@@ -139,7 +139,7 @@ func newHarness(t *testing.T, change func(*settings.Settings)) *harness {
 		picker:   h.picker,
 		acts:     h.acts,
 		hotkeys:  map[settings.HotkeyAction]string{},
-		failures: map[settings.HotkeyAction]string{},
+		failures: map[settings.HotkeyAction]error{},
 	}
 	h.say = func(m string) { h.mu.Lock(); h.toasts = append(h.toasts, m); h.mu.Unlock() }
 	var main sync.Mutex

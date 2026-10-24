@@ -1,7 +1,9 @@
 # Shared by the scenarios. Run one inside the desktop lock:
 #   $env:GLINT_BIN = <dir with glint.exe and glintcheck.exe>; $env:GLINT_OUT = <evidence dir>
 #   go run ./tools/desklock -- powershell -NoProfile -File internal/app/cmd/glintcheck/scenarios/area.ps1
-. 'C:\Users\wobsoriano\Documents\dev\glint\promo\real\lib.ps1'
+# GLINT_DRIVE names another copy of the driver helpers than tools/drive/drive.ps1.
+$drive = if ($env:GLINT_DRIVE) { $env:GLINT_DRIVE } else { Join-Path $PSScriptRoot '..\..\..\..\..\tools\drive\drive.ps1' }
+. $drive
 $Bin = $env:GLINT_BIN
 $Check = Join-Path $Bin 'glintcheck.exe'
 

@@ -221,6 +221,34 @@ func TestDeleteSaysWhereTheCapturesWent(t *testing.T) {
 	}
 }
 
+func TestExportToWritesTheScreenshotsInTheExportFormat(t *testing.T) {
+	a, rec := fake(t, func(s *settings.Settings) { s.Format = settings.FormatJPEG })
+	lib := store.New(t.TempDir())
+	var items []store.Item
+	for i, title := range []string{"First", "Second"} {
+		it, err := lib.ImportScreenshot(store.NewScreenshot{Base: swatch(20+i, 10, color.RGBA{200, 10, 10, 255}), Created: time.Now().Add(time.Duration(i) * time.Second), Title: title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		items = append(items, it)
+	}
+	items = append(items, store.Item{Meta: store.Meta{Kind: store.Recording, Title: "Talk"}})
+	dir := t.TempDir()
+	a.ExportTo(items, dir)
+	if got := rec.waitToast(t); got != "Exported 2 capture(s)" {
+		t.Fatalf("toast %q", got)
+	}
+	for _, name := range []string{"First.jpg", "Second.jpg"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := jpeg.Decode(bytes.NewReader(data)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestCopyTextRefusesRecordings(t *testing.T) {
 	a, rec := fake(t, nil)
 	a.CopyText(store.Item{Meta: store.Meta{Kind: store.Recording}})

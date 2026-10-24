@@ -366,14 +366,15 @@ func (a *App) openLast() {
 				a.toast("No captures yet")
 				return
 			}
-			a.edit(item)
+			a.Edit(item)
 		}
 	})
 }
 
 var errNoCaptures = fmt.Errorf("no captures")
 
-func (a *App) edit(item store.Item) {
+// Edit opens a screenshot in the editor and a recording in Studio.
+func (a *App) Edit(item store.Item) {
 	if item.Kind() == store.Recording {
 		if a.surface("Studio", a.Surfaces.OpenStudio != nil) {
 			a.Surfaces.OpenStudio(item.Dir)
@@ -406,7 +407,7 @@ func (a *App) openImages(paths []string) {
 				if a.Surfaces.Imported != nil {
 					a.Surfaces.Imported(item)
 				}
-				a.edit(item)
+				a.Edit(item)
 			}
 		})
 	}

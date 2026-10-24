@@ -363,12 +363,20 @@ func (a *Actions) ReportSave(path string, err error) {
 
 // ExportToFolder asks for a folder and writes every screenshot among items into it.
 func (a *Actions) ExportToFolder(items []store.Item) {
-	s := a.settings()
 	a.background(func() func() {
 		dir := a.askFolder("Export Here")
 		if dir == "" {
 			return func() {}
 		}
+		return func() { a.ExportTo(items, dir) }
+	})
+}
+
+// ExportTo writes every screenshot among items into dir in the export format of the
+// settings, and says how it went.
+func (a *Actions) ExportTo(items []store.Item, dir string) {
+	s := a.settings()
+	a.background(func() func() {
 		n := 0
 		var err error
 		for _, it := range items {
