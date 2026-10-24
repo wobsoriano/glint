@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/wobsoriano/glint/internal/media"
 	"github.com/wobsoriano/glint/internal/media/input"
 	"github.com/wobsoriano/glint/internal/transcribe"
 )
@@ -87,6 +88,23 @@ func OpenSession(dir string, sourceW, sourceH uint32, sourceDurationMs float64) 
 		s.Project.CaptionCues = CaptionCues(*s.Transcript)
 	}
 	return s, nil
+}
+
+// LoadSession is OpenSession with the screen master's size and duration read from
+// screen.mp4.
+func LoadSession(dir string) (*Session, error) {
+	tracks, err := findTracks(dir)
+	if err != nil {
+		return nil, err
+	}
+	r, err := media.OpenFrameReader(tracks.Screen)
+	if err != nil {
+		return nil, err
+	}
+	w, h := r.Size()
+	duration := r.DurationMS()
+	r.Close()
+	return OpenSession(dir, uint32(w), uint32(h), float64(duration))
 }
 
 func (s *Session) SaveProject() error { return s.Project.Save(s.Dir) }
