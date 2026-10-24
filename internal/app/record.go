@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/wobsoriano/glint/internal/platform"
 	"github.com/wobsoriano/glint/internal/settings"
@@ -46,6 +47,27 @@ func (a *App) RecordingFinished(item store.Item, notice string) {
 			}
 		}
 	}
+}
+
+// recoverRecordings puts the recordings an earlier Glint stopped but never finished into the
+// Library and clears the rest of what it left, then tells the user what came back.
+func (a *App) recoverRecordings(orphans []store.PendingRecording) {
+	saved := record.Recover(a.library, orphans)
+	if len(saved) == 0 {
+		return
+	}
+	a.post(func() {
+		for _, item := range saved {
+			if a.Surfaces.Imported != nil {
+				a.Surfaces.Imported(item)
+			}
+		}
+		if len(saved) == 1 {
+			a.toast("Recovered a recording Glint did not finish")
+		} else {
+			a.toast(fmt.Sprintf("Recovered %d recordings Glint did not finish", len(saved)))
+		}
+	})
 }
 
 // recordingPlan is the order of the Rust build's record::automate: copy the video, save it,
