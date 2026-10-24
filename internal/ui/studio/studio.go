@@ -60,6 +60,8 @@ type Shown struct {
 	// Audio is set; it is 0 unless Playing.
 	ClockMs        float64
 	Playing, Audio bool
+	// ComposeMs is how long decoding and composing the frame took.
+	ComposeMs float64
 }
 
 // OpenWith is Open with options for tools.

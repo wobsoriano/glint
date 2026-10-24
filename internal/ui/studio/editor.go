@@ -423,7 +423,7 @@ func (e *editor) showFrame() {
 	}
 	e.shown = f
 	if e.opts.OnFrame != nil {
-		s := Shown{OutputMs: f.outputMs}
+		s := Shown{OutputMs: f.outputMs, ComposeMs: f.composeMs}
 		s.ClockMs, s.Audio, s.Playing = e.player.clockMs()
 		e.opts.OnFrame(s)
 	}

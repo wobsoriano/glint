@@ -60,6 +60,8 @@ type shownFrame struct {
 	outputMs float64
 	// clockMs is what the playback clock read as the frame was composed; NaN while paused.
 	clockMs float64
+	// composeMs is how long decoding and composing the frame took.
+	composeMs float64
 }
 
 // newPlayer opens the session's video tracks and starts composing. It fails when the screen
@@ -324,7 +326,13 @@ func (e *engine) run() {
 			e.haveRendered = true
 			continue
 		}
-		nextDue = time.Now().Add(frameInterval)
+		// Frames keep a fixed cadence: each is due one interval after the last was due, so
+		// the sleep's overshoot does not add up and slow playback below 60 frames a second.
+		began := time.Now()
+		nextDue = nextDue.Add(frameInterval)
+		if nextDue.Before(began) || nextDue.Sub(began) > frameInterval {
+			nextDue = began.Add(frameInterval)
+		}
 		clock := math.NaN()
 		if e.current != nil {
 			clock = e.position
@@ -334,7 +342,7 @@ func (e *engine) run() {
 		case err != nil:
 			p.setErr(err.Error())
 		default:
-			p.frames.put(shownFrame{img: img, outputMs: e.position, clockMs: clock})
+			p.frames.put(shownFrame{img: img, outputMs: e.position, clockMs: clock, composeMs: float64(time.Since(began).Microseconds()) / 1000})
 			if p.onFrame != nil {
 				p.onFrame()
 			}

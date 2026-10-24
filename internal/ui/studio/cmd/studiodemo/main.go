@@ -138,6 +138,7 @@ func run(dir string) {
 type runLog struct {
 	mu      sync.Mutex
 	drift   []float64
+	compose []float64
 	at      []time.Time
 	audio   bool
 	first   studio.Shown
@@ -158,6 +159,7 @@ func (l *runLog) shown(s studio.Shown) {
 		l.first = s
 	}
 	l.drift = append(l.drift, s.OutputMs-s.ClockMs)
+	l.compose = append(l.compose, s.ComposeMs)
 	l.at = append(l.at, now)
 	l.audio = s.Audio
 	l.last, l.lastAt = s, now
@@ -182,7 +184,7 @@ func (l *runLog) end() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.drift) < 2 {
-		l.drift, l.at = nil, nil
+		l.drift, l.compose, l.at = nil, nil, nil
 		return
 	}
 	abs := make([]float64, len(l.drift))
@@ -197,10 +199,12 @@ func (l *runLog) end() {
 		gaps = append(gaps, float64(l.at[i].Sub(l.at[i-1]).Microseconds())/1000)
 	}
 	slices.Sort(gaps)
+	slices.Sort(l.compose)
 	wall := l.at[len(l.at)-1].Sub(l.at[0]).Seconds()
-	fmt.Printf("%s run: %d frames from %.0f to %.0f ms in %.2f s = %.1f frames/s, audio clock %v; frame time minus clock: mean %.1f ms, p50 %.1f, p95 %.1f, worst %.1f ms; frame gaps p50 %.1f, p95 %.1f, max %.1f ms\n",
+	fmt.Printf("%s run: %d frames from %.0f to %.0f ms in %.2f s = %.1f frames/s, audio clock %v; frame time minus clock: mean %.1f ms, p50 %.1f, p95 %.1f, worst %.1f ms; frame gaps p50 %.1f, p95 %.1f, max %.1f ms; compose p50 %.1f, p95 %.1f, max %.1f ms\n",
 		time.Now().Format("15:04:05.000"), len(l.drift), l.first.OutputMs, l.last.OutputMs, wall, float64(len(l.drift)-1)/wall, l.audio,
 		sum/float64(len(l.drift)), percentile(abs, 50), percentile(abs, 95), abs[len(abs)-1],
-		percentile(gaps, 50), percentile(gaps, 95), gaps[len(gaps)-1])
-	l.drift, l.at = nil, nil
+		percentile(gaps, 50), percentile(gaps, 95), gaps[len(gaps)-1],
+		percentile(l.compose, 50), percentile(l.compose, 95), l.compose[len(l.compose)-1])
+	l.drift, l.compose, l.at = nil, nil, nil
 }
