@@ -113,6 +113,9 @@ func (s *Stack) cardView(c *ui.Context, cd *card, layout settings.CardLayout, p 
 		s.run(id, settings.CardEdit)
 	}
 	menuOpen := s.menu == id
+	if !box.Hovered() {
+		cd.hushed = false
+	}
 	reveal := (box.Hovered() || menuOpen) && cd.status == ""
 	slots := SlotsFor(layout, cd.recording())
 	box.Children(func() {
@@ -129,7 +132,7 @@ func (s *Stack) cardView(c *ui.Context, cd *card, layout settings.CardLayout, p 
 			})
 		}
 		if reveal {
-			s.actions(c, id, slots)
+			s.actions(c, id, slots, cd.hushed)
 		}
 		if menuOpen {
 			s.moreMenu(c, id, slots.Menu, p)
@@ -144,12 +147,21 @@ func (s *Stack) cardView(c *ui.Context, cd *card, layout settings.CardLayout, p 
 	})
 }
 
-func (s *Stack) actions(c *ui.Context, id int, slots Slots) {
+// tip gives b the action's tooltip, or only its description while the card is hushed.
+func tip(b ui.Element, a settings.CardAction, hushed bool) ui.Element {
+	if hushed {
+		return b.Description(help[a])
+	}
+	return b.Tooltip(help[a])
+}
+
+func (s *Stack) actions(c *ui.Context, id int, slots Slots, hushed bool) {
 	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Background(dim).PassThrough()
 	ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().Gap(6).PassThrough().Children(func() {
 		for _, a := range slots.Center {
 			b := ui.ButtonBase(c.Key("c-"+string(a))).Width(112).Height(32).Radius(theme.RadiusPill).Center().
-				Background(chip).Border(1, chipEdge).Tooltip(help[a])
+				Background(chip).Border(1, chipEdge)
+			tip(b, a, hushed)
 			if b.Hovered() {
 				b.Background(theme.For(c).Accent)
 			}
@@ -170,7 +182,8 @@ func (s *Stack) actions(c *ui.Context, id int, slots Slots) {
 			continue
 		}
 		b := ui.ButtonBase(c.Key("k-"+string(a))).Absolute().Size(28, 28).Radius(14).Center().
-			Background(chip).Border(1, chipEdge).Tooltip(help[a])
+			Background(chip).Border(1, chipEdge)
+		tip(b, a, hushed)
 		switch corner {
 		case settings.TopLeft:
 			b.Top(6).Left(6)
